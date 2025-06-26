@@ -263,7 +263,7 @@ class MeshOptimizationBenchmark:
         return deformer_ops
 
     @timing_decorator
-    def fbx_export_test(self, meshes):
+    def fbx_export_test(self, meshes, keep_file=True, file_suffix=""):
         """Test FBX export performance - THE KEY OPERATION that benefits from optimization."""
         try:
             # Find transform objects with meshes for export
@@ -275,7 +275,7 @@ class MeshOptimizationBenchmark:
                         export_objects.update(transforms)
 
             if not export_objects:
-                return 0
+                return {"size": 0, "path": None}
 
             # Get hierarchy roots for export (simulating extract_fbx_animation.py)
             export_roots = []
@@ -293,10 +293,13 @@ class MeshOptimizationBenchmark:
             export_roots = list(set(export_roots))[:5]
 
             if not export_roots:
-                return len(meshes)
+                return {"size": len(meshes), "path": None}
 
             # Setup FBX export
-            temp_fbx = "benchmark_animation_temp.fbx"
+            if keep_file:
+                temp_fbx = f"benchmark_animation_export{file_suffix}.fbx"
+            else:
+                temp_fbx = "benchmark_animation_temp.fbx"
 
             # Load FBX plugin if needed
             if not cmds.pluginInfo("fbxmaya", query=True, loaded=True):
@@ -304,7 +307,7 @@ class MeshOptimizationBenchmark:
                     cmds.loadPlugin("fbxmaya")
                 except:
                     print("FBX plugin not available, skipping FBX export test")
-                    return len(meshes)
+                    return {"size": len(meshes), "path": None}
 
             # Select objects for export
             cmds.select(export_roots, replace=True)
@@ -330,20 +333,25 @@ class MeshOptimizationBenchmark:
             # Export FBX (this is where optimization makes the biggest difference)
             mel.eval(f'FBXExport -f "{temp_fbx}" -s')
 
-            # Get file size
+            # Get file size and path
             file_size = 0
+            file_path = None
             if os.path.exists(temp_fbx):
                 file_size = os.path.getsize(temp_fbx)
-                try:
-                    os.remove(temp_fbx)
-                except:
-                    pass
+                file_path = os.path.abspath(temp_fbx)
+                
+                if not keep_file:
+                    try:
+                        os.remove(temp_fbx)
+                        file_path = None
+                    except:
+                        pass
 
-            return file_size
+            return {"size": file_size, "path": file_path}
 
         except Exception as e:
             print(f"FBX export test failed: {e}")
-            return 0
+            return {"size": 0, "path": None}
 
     @timing_decorator
     def scene_save_test(self):
@@ -409,7 +417,8 @@ class MeshOptimizationBenchmark:
         print(f"Deformer evaluation: {deformer_time:.4f}s ({deformer_ops} deformer operations)")
 
         # THE KEY TEST: FBX Export Performance
-        fbx_size, fbx_time = self.fbx_export_test(meshes)
+        fbx_result, fbx_time = self.fbx_export_test(meshes, keep_file=False)
+        fbx_size = fbx_result["size"]
         print(f"🎯 FBX EXPORT: {fbx_time:.4f}s (size: {fbx_size:,} bytes) - KEY METRIC")
 
         scene_size, scene_time = self.scene_save_test()
@@ -437,7 +446,8 @@ class MeshOptimizationBenchmark:
         print(f"Deformer evaluation: {deformer_time_opt:.4f}s ({deformer_ops_opt} operations)")
 
         # THE KEY TEST: Optimized FBX Export Performance
-        fbx_size_opt, fbx_time_opt = self.fbx_export_test(meshes)
+        fbx_result_opt, fbx_time_opt = self.fbx_export_test(meshes, keep_file=False)
+        fbx_size_opt = fbx_result_opt["size"]
         print(f"🎯 FBX EXPORT: {fbx_time_opt:.4f}s (size: {fbx_size_opt:,} bytes) - KEY METRIC")
 
         scene_size_opt, scene_time_opt = self.scene_save_test()
@@ -451,6 +461,23 @@ class MeshOptimizationBenchmark:
         self.optimizer.restore_meshes(optimization_data)
         restore_time = time.time() - restore_start
         print(f"Restoration completed in {restore_time:.4f}s")
+
+        # === FINAL FBX EXPORT FOR USER ===
+        print("\n" + "-"*50)
+        print("CREATING FINAL FBX EXPORT FOR USER")
+        print("-"*50)
+        
+        # Export final FBX with optimized settings for user to import
+        final_fbx_result, final_fbx_time = self.fbx_export_test(meshes, file_suffix="_final")
+        final_fbx_path = final_fbx_result["path"]
+        final_fbx_size = final_fbx_result["size"]
+        
+        if final_fbx_path:
+            print(f"✅ Final FBX exported in {final_fbx_time:.4f}s")
+            print(f"📁 FBX File: {final_fbx_path}")
+            print(f"📦 File Size: {final_fbx_size:,} bytes")
+        else:
+            print("❌ Failed to create final FBX export")
 
         # === PERFORMANCE RESULTS ===
         print("\n" + "="*80)
@@ -517,6 +544,17 @@ class MeshOptimizationBenchmark:
         print(f"\n🎖️  ASSESSMENT: {assessment}")
         print(f"FBX export is the key bottleneck - {fbx_speedup:.2f}x speedup achieved")
 
+        # === FBX FILE FOR IMPORT ===
+        if final_fbx_path:
+            print("\n" + "="*80)
+            print("📦 FBX FILE READY FOR IMPORT")
+            print("="*80)
+            print(f"📁 Path: {final_fbx_path}")
+            print(f"📦 Size: {final_fbx_size:,} bytes")
+            print(f"⏱️  Export Time: {final_fbx_time:.4f}s")
+            print("\n💡 You can now import this FBX file into any 3D application!")
+            print("   The file contains your optimized animation data.")
+
         # Store results
         self.results = {
             "mesh_count": mesh_stats["count"],
@@ -527,7 +565,9 @@ class MeshOptimizationBenchmark:
             "overall_speedup": overall_speedup,
             "net_speedup": net_speedup,
             "optimization_time": opt_time,
-            "restoration_time": restore_time
+            "restoration_time": restore_time,
+            "final_fbx_path": final_fbx_path,
+            "final_fbx_size": final_fbx_size
         }
 
         print("\n" + "="*80)
@@ -584,13 +624,20 @@ def create_benchmark_ui():
             if results:
                 fbx_speedup = results.get('fbx_speedup', 1.0)
                 size_reduction = results.get('fbx_size_reduction', 0.0)
+                final_fbx_path = results.get('final_fbx_path', '')
+                
+                # Create message with FBX path info
+                fbx_info = ""
+                if final_fbx_path:
+                    fbx_filename = os.path.basename(final_fbx_path)
+                    fbx_info = f"\n📁 FBX Created: {fbx_filename}\n📍 Ready for import!"
 
                 message = f"""🚀 AYON Animation Pipeline Benchmark Complete!
 
 Meshes tested: {results['mesh_count']} ({results['vertex_count']:,} vertices)
 🎯 FBX Export Speedup: {fbx_speedup:.2f}x
 📦 FBX Size Reduction: {size_reduction:.1f}%
-⚡ Overall Pipeline Speedup: {results['overall_speedup']:.2f}x
+⚡ Overall Pipeline Speedup: {results['overall_speedup']:.2f}x{fbx_info}
 
 This shows the real-world performance improvement
 animators will experience during cache publishing!
