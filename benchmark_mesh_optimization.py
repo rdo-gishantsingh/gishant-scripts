@@ -295,11 +295,12 @@ class MeshOptimizationBenchmark:
             if not export_roots:
                 return {"size": len(meshes), "path": None}
 
-            # Setup FBX export
+            # Setup FBX export with absolute path
+            workspace_path = cmds.workspace(query=True, rootDirectory=True)
             if keep_file:
-                temp_fbx = f"benchmark_animation_export{file_suffix}.fbx"
+                temp_fbx = os.path.join(workspace_path, f"benchmark_animation_export{file_suffix}.fbx")
             else:
-                temp_fbx = "benchmark_animation_temp.fbx"
+                temp_fbx = os.path.join(workspace_path, "benchmark_animation_temp.fbx")
 
             # Load FBX plugin if needed
             if not cmds.pluginInfo("fbxmaya", query=True, loaded=True):
@@ -329,9 +330,25 @@ class MeshOptimizationBenchmark:
             mel.eval('FBXExportConstraints -v false')
             mel.eval('FBXExportCameras -v false')
             mel.eval('FBXExportLights -v false')
+            
+            # Set FBX version to ensure compatibility
+            mel.eval('FBXExportFileVersion -v FBX202000')
+            
+            # Ensure directory exists
+            fbx_dir = os.path.dirname(temp_fbx)
+            if not os.path.exists(fbx_dir):
+                os.makedirs(fbx_dir)
 
             # Export FBX (this is where optimization makes the biggest difference)
+            print(f"Exporting FBX to: {temp_fbx}")
             mel.eval(f'FBXExport -f "{temp_fbx}" -s')
+            
+            # Verify export was successful
+            if not os.path.exists(temp_fbx):
+                raise RuntimeError(f"FBX export failed - file not created: {temp_fbx}")
+            
+            if os.path.getsize(temp_fbx) == 0:
+                raise RuntimeError(f"FBX export failed - empty file created: {temp_fbx}")
 
             # Get file size and path
             file_size = 0
@@ -476,6 +493,14 @@ class MeshOptimizationBenchmark:
             print(f"✅ Final FBX exported in {final_fbx_time:.4f}s")
             print(f"📁 FBX File: {final_fbx_path}")
             print(f"📦 File Size: {final_fbx_size:,} bytes")
+            
+            # Verify file exists and is readable
+            if os.path.exists(final_fbx_path):
+                print(f"✅ File verified: {final_fbx_path}")
+                print(f"🔧 To import in Maya: File > Import > {final_fbx_path}")
+                print(f"💡 Make sure FBX plugin is loaded: Window > Settings/Preferences > Plug-in Manager > fbxmaya.mll")
+            else:
+                print(f"❌ Warning: File not found at {final_fbx_path}")
         else:
             print("❌ Failed to create final FBX export")
 
