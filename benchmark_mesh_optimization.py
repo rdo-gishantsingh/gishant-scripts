@@ -4,10 +4,19 @@ Maya Mesh Optimization Benchmark Script
 This script benchmarks mesh optimization for animation caches by simulating
 the complete AYON animation pipeline including FBX export performance.
 
+IMPORTANT: This benchmark matches AYON's animation.fbx export behavior:
+- Exports ONLY the animated skeleton (joints/bones), NOT geometry
+- Mesh optimization still provides performance benefits even though meshes
+  aren't exported, because the meshes affect scene evaluation during export
+- The FBX export settings match extract_fbx_animation.py exactly
+
 Usage:
 1. Run this script in Maya's Script Editor
-2. Select a rig or character set in the outliner
+2. Select a rig or character set in the outliner (with bound meshes)
 3. Click "Run Benchmark" to test optimization performance
+
+The benchmark shows real-world performance gains animators will experience
+when publishing animation caches through AYON with mesh optimization enabled.
 """
 
 import os
@@ -264,39 +273,66 @@ class MeshOptimizationBenchmark:
 
     @timing_decorator
     def fbx_export_test(self, meshes, keep_file=True, file_suffix=""):
-        """Test FBX export performance - THE KEY OPERATION that benefits from optimization."""
+        """Test FBX export performance - matching AYON's animation skeleton export."""
         try:
-            # Find transform objects with meshes for export
-            export_objects = set()
+            # AYON exports the animated skeleton, not geometry!
+            # We need to find joints/bones, not meshes
+            # However, meshes still affect performance during export even if not included
+
+            # Find skeleton hierarchy from the meshes (looking for bound joints)
+            skeleton_joints = set()
+
+            # Get skinned joints from the meshes
             for mesh in meshes:
                 if cmds.objExists(mesh):
-                    transforms = cmds.listRelatives(mesh, parent=True, fullPath=True)
-                    if transforms:
-                        export_objects.update(transforms)
+                    # Find skin clusters
+                    history = cmds.listHistory(mesh) or []
+                    skin_clusters = cmds.ls(history, type="skinCluster") or []
+                    for skin_cluster in skin_clusters:
+                        # Get influenced joints
+                        influences = cmds.skinCluster(skin_cluster, query=True, influence=True) or []
+                        if influences:
+                            skeleton_joints.update(influences)
 
-            if not export_objects:
+            # If no skinned joints found, look for joints in the hierarchy
+            if not skeleton_joints:
+                # Get parent transforms of meshes and look for joints
+                for mesh in meshes:
+                    if cmds.objExists(mesh):
+                        transform = cmds.listRelatives(mesh, parent=True, fullPath=True)
+                        if transform:
+                            # Get all parents up to root
+                            all_parents = cmds.listRelatives(transform[0], allParents=True, fullPath=True) or []
+                            all_parents.append(transform[0])
+
+                            # Find joints in the hierarchy
+                            joints = cmds.ls(all_parents, type="joint")
+                            if joints:
+                                skeleton_joints.update(joints)
+
+            # If still no joints, find any joints in the scene as fallback
+            if not skeleton_joints:
+                all_joints = cmds.ls(type="joint")
+                if all_joints:
+                    skeleton_joints = set(all_joints[:10])  # Limit to first 10 joints
+
+            if not skeleton_joints:
+                print("Warning: No skeleton joints found for FBX animation export")
                 return {"size": 0, "path": None}
 
-            # Get hierarchy roots for export (simulating extract_fbx_animation.py)
-            export_roots = []
-            for obj in export_objects:
-                # Find top-level parent
-                current = obj
-                while True:
-                    parents = cmds.listRelatives(current, parent=True, fullPath=True)
-                    if not parents:
-                        export_roots.append(current)
-                        break
-                    current = parents[0]
+            # Get skeleton root joints (joints without joint parents)
+            skeleton_roots = []
+            for joint in skeleton_joints:
+                parent = cmds.listRelatives(joint, parent=True, type="joint", fullPath=True)
+                if not parent:
+                    skeleton_roots.append(joint)
 
-            # Remove duplicates and limit to reasonable size
-            export_roots = list(set(export_roots))[:5]
-
-            if not export_roots:
-                return {"size": len(meshes), "path": None}
+            # If no root joints, use all joints
+            if not skeleton_roots:
+                skeleton_roots = list(skeleton_joints)[:5]  # Limit for performance
 
             # Setup FBX export with absolute path
-            workspace_path = cmds.workspace(query=True, rootDirectory=True)
+            workspace_path = cmds.workspace(query=True, rootDirectory=True) or ""
             if keep_file:
                 temp_fbx = os.path.join(workspace_path, f"benchmark_animation_export{file_suffix}.fbx")
             else:
@@ -310,30 +346,40 @@ class MeshOptimizationBenchmark:
                     print("FBX plugin not available, skipping FBX export test")
                     return {"size": len(meshes), "path": None}
 
-            # Select objects for export
-            cmds.select(export_roots, replace=True)
+            # Select skeleton for export (matching AYON's animated_skeleton export)
+            cmds.select(skeleton_roots, replace=True)
+            print(f"Exporting skeleton: {len(skeleton_roots)} root joints, {len(skeleton_joints)} total joints")
 
-            # Configure FBX export settings (matching extract_fbx_animation.py workflow)
+            # Configure FBX export settings to match AYON's animation export
             mel.eval('FBXResetExport')
-            mel.eval('FBXExportSmoothingGroups -v true')
+
+            # CRITICAL: Animation exports should NOT include geometry!
+            mel.eval('FBXExportSmoothingGroups -v false')
             mel.eval('FBXExportHardEdges -v false')
             mel.eval('FBXExportTangents -v false')
-            mel.eval('FBXExportSmoothMesh -v true')
+            mel.eval('FBXExportSmoothMesh -v false')
             mel.eval('FBXExportInstances -v false')
+
+            # Animation-specific settings from AYON
             mel.eval('FBXExportReferencedAssetsContent -v true')
-            mel.eval('FBXExportAnimationOnly -v false')
+            mel.eval('FBXExportAnimationOnly -v false')  # Still need skeleton definition
             mel.eval('FBXExportBakeComplexAnimation -v false')
             mel.eval('FBXExportUseSceneName -v false')
             mel.eval('FBXExportQuaternion -v euler')
-            mel.eval('FBXExportShapes -v true')
-            mel.eval('FBXExportSkins -v true')
+
+            # IMPORTANT: Disable shapes/geometry but keep skins for skeleton
+            mel.eval('FBXExportShapes -v false')  # NO GEOMETRY!
+            mel.eval('FBXExportSkins -v true')    # Keep for skeleton definition
+            mel.eval('FBXExportSkeletonDefinitions -v true')  # Ensure skeleton is exported
+
+            # Disable other non-animation elements
             mel.eval('FBXExportConstraints -v false')
             mel.eval('FBXExportCameras -v false')
             mel.eval('FBXExportLights -v false')
-            
+
             # Set FBX version to ensure compatibility
             mel.eval('FBXExportFileVersion -v FBX202000')
-            
+
             # Ensure directory exists
             fbx_dir = os.path.dirname(temp_fbx)
             if not os.path.exists(fbx_dir):
@@ -342,11 +388,11 @@ class MeshOptimizationBenchmark:
             # Export FBX (this is where optimization makes the biggest difference)
             print(f"Exporting FBX to: {temp_fbx}")
             mel.eval(f'FBXExport -f "{temp_fbx}" -s')
-            
+
             # Verify export was successful
             if not os.path.exists(temp_fbx):
                 raise RuntimeError(f"FBX export failed - file not created: {temp_fbx}")
-            
+
             if os.path.getsize(temp_fbx) == 0:
                 raise RuntimeError(f"FBX export failed - empty file created: {temp_fbx}")
 
@@ -356,7 +402,7 @@ class MeshOptimizationBenchmark:
             if os.path.exists(temp_fbx):
                 file_size = os.path.getsize(temp_fbx)
                 file_path = os.path.abspath(temp_fbx)
-                
+
                 if not keep_file:
                     try:
                         os.remove(temp_fbx)
@@ -483,22 +529,23 @@ class MeshOptimizationBenchmark:
         print("\n" + "-"*50)
         print("CREATING FINAL FBX EXPORT FOR USER")
         print("-"*50)
-        
+
         # Export final FBX with optimized settings for user to import
         final_fbx_result, final_fbx_time = self.fbx_export_test(meshes, file_suffix="_final")
         final_fbx_path = final_fbx_result["path"]
         final_fbx_size = final_fbx_result["size"]
-        
+
         if final_fbx_path:
             print(f"✅ Final FBX exported in {final_fbx_time:.4f}s")
             print(f"📁 FBX File: {final_fbx_path}")
             print(f"📦 File Size: {final_fbx_size:,} bytes")
-            
+
             # Verify file exists and is readable
             if os.path.exists(final_fbx_path):
                 print(f"✅ File verified: {final_fbx_path}")
+                print("🦴 Contents: Animated skeleton only (no geometry)")
                 print(f"🔧 To import in Maya: File > Import > {final_fbx_path}")
-                print(f"💡 Make sure FBX plugin is loaded: Window > Settings/Preferences > Plug-in Manager > fbxmaya.mll")
+                print("💡 Make sure FBX plugin is loaded: Window > Settings/Preferences > Plug-in Manager > fbxmaya.mll")
             else:
                 print(f"❌ Warning: File not found at {final_fbx_path}")
         else:
@@ -578,7 +625,8 @@ class MeshOptimizationBenchmark:
             print(f"📦 Size: {final_fbx_size:,} bytes")
             print(f"⏱️  Export Time: {final_fbx_time:.4f}s")
             print("\n💡 You can now import this FBX file into any 3D application!")
-            print("   The file contains your optimized animation data.")
+            print("   The file contains your animated skeleton (joints only, no geometry).")
+            print("   This matches AYON's animation.fbx export behavior.")
 
         # Store results
         self.results = {
@@ -614,21 +662,24 @@ def create_benchmark_ui():
               backgroundColor=[0.2, 0.4, 0.6], font="boldLabelFont")
     cmds.separator(height=15)
 
-    cmds.text(label="🎯 Tests mesh optimization impact on FBX export performance",
+    cmds.text(label="🎯 Tests mesh optimization impact on skeleton FBX export",
               align="center", font="obliqueLabelFont")
     cmds.separator(height=10)
 
     cmds.text(label="Instructions:", align="left", font="boldLabelFont")
-    cmds.text(label="1. Select a rigged character or animation hierarchy", align="left")
+    cmds.text(label="1. Select a rigged character with skinned meshes", align="left")
     cmds.text(label="2. Click 'Run Animation Pipeline Benchmark'", align="left")
-    cmds.text(label="3. Check Script Editor for detailed FBX export results", align="left")
+    cmds.text(label="3. Check Script Editor for detailed results", align="left")
+    cmds.separator(height=5)
+    cmds.text(label="Note: Only skeleton/joints are exported (no geometry),", align="left", font="smallObliqueLabelFont")
+    cmds.text(label="matching AYON's animation.fbx workflow", align="left", font="smallObliqueLabelFont")
     cmds.separator(height=15)
 
     cmds.text(label="Current Selection:", align="left", font="boldLabelFont")
     selection_text = cmds.text(label="None", align="left", backgroundColor=[0.15, 0.15, 0.15], height=25)
 
     def update_selection():
-        selected = cmds.ls(selection=True)
+        selected = cmds.ls(selection=True) or []
         if selected:
             display_names = [obj.split('|')[-1] for obj in selected[:3]]
             if len(selected) > 3:
@@ -650,7 +701,7 @@ def create_benchmark_ui():
                 fbx_speedup = results.get('fbx_speedup', 1.0)
                 size_reduction = results.get('fbx_size_reduction', 0.0)
                 final_fbx_path = results.get('final_fbx_path', '')
-                
+
                 # Create message with FBX path info
                 fbx_info = ""
                 if final_fbx_path:
