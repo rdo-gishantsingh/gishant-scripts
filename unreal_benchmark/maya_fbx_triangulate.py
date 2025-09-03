@@ -1,114 +1,208 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Maya standalone script to triangulate FBX files.
-This script can be run with Maya in batch mode to triangulate FBX files.
+Maya FBX Triangulation Tool
+
+This module provides functionality to triangulate FBX files using Maya's batch mode.
+It can be used both as a standalone script and as a module imported by other tools.
 """
 
 import argparse
-import os
+import logging
 import sys
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
-def triangulate_fbx_in_maya(input_fbx, output_fbx):
-    """
-    Triangulates an FBX file using Maya's FBX exporter.
+class MayaFBXProcessor:
+    """Handles FBX processing operations using Maya"""
 
-    Args:
-        input_fbx (str): Path to input FBX file
-        output_fbx (str): Path to output triangulated FBX file
+    def __init__(self):
+        self._maya_initialized = False
 
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        import maya.standalone
+    def __enter__(self):
+        """Context manager entry - initialize Maya"""
+        self._initialize_maya()
+        return self
 
-        maya.standalone.initialize()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup Maya"""
+        self._cleanup_maya()
 
-        import maya.cmds as cmds
-        import maya.mel as mel
+    def _initialize_maya(self) -> None:
+        """Initialize Maya standalone"""
+        try:
+            import maya.standalone
+            maya.standalone.initialize()
+            self._maya_initialized = True
+            logger.info("Maya standalone initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Maya: {e}")
+            raise
 
-        # Load FBX plugin
-        cmds.loadPlugin("fbxmaya", quiet=True)
+    def _cleanup_maya(self) -> None:
+        """Cleanup Maya standalone"""
+        if self._maya_initialized:
+            try:
+                import maya.standalone
+                maya.standalone.uninitialize()
+                logger.info("Maya standalone cleanup completed")
+            except Exception as e:
+                logger.warning(f"Error during Maya cleanup: {e}")
 
-        # Clear the scene
-        cmds.file(new=True, force=True)
+    def triangulate_fbx(self, input_path: Path, output_path: Path) -> bool:
+        """
+        Triangulate an FBX file using Maya's FBX exporter
 
-        # Import the FBX file
-        print(f"Importing FBX: {input_fbx}")
-        cmds.file(input_fbx, i=True, type="FBX", ignoreVersion=True)
+        Args:
+            input_path: Path to input FBX file
+            output_path: Path to output triangulated FBX file
 
-        # Setup FBX export settings for triangulation
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._maya_initialized:
+            logger.error("Maya not initialized")
+            return False
+
+        try:
+            # Import Maya commands here to ensure Maya is initialized
+            import maya.cmds as cmds
+            import maya.mel as mel
+
+            # Load FBX plugin
+            cmds.loadPlugin("fbxmaya", quiet=True)
+
+            # Clear the scene
+            cmds.file(new=True, force=True)
+
+            # Import the FBX file
+            logger.info(f"Importing FBX: {input_path}")
+            cmds.file(str(input_path), i=True, type="FBX", ignoreVersion=True)
+
+            # Configure FBX export settings for triangulation
+            self._setup_export_settings(mel)
+
+            # Select objects for export
+            self._select_export_objects(cmds)
+
+            # Export the triangulated FBX
+            logger.info(f"Exporting triangulated FBX: {output_path}")
+            mel.eval(f'FBXExport -f "{output_path.as_posix()}" -s')
+
+            logger.info(f"Successfully triangulated: {input_path.name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error triangulating {input_path}: {e}")
+            return False
+
+    def _setup_export_settings(self, mel) -> None:
+        """Configure FBX export settings for optimal triangulation"""
+        # Reset export settings
         mel.eval("FBXResetExport")
 
-        # Configure FBX export settings
+        # Triangulation and geometry settings
         mel.eval("FBXExportTriangulate -v true")  # Enable triangulation
         mel.eval("FBXExportSmoothingGroups -v true")
         mel.eval("FBXExportHardEdges -v false")
         mel.eval("FBXExportTangents -v false")
         mel.eval("FBXExportSmoothMesh -v true")
         mel.eval("FBXExportInstances -v false")
+
+        # Animation and rigging settings
         mel.eval("FBXExportBakeComplexAnimation -v false")
-        mel.eval("FBXExportUseSceneName -v false")
-        mel.eval("FBXExportQuaternion -v euler")
-        mel.eval("FBXExportShapes -v true")
-        mel.eval("FBXExportSkins -v true")
+        mel.eval("FBXExportShapes -v true")  # Blend shapes
+        mel.eval("FBXExportSkins -v true")   # Skin weights
         mel.eval("FBXExportConstraints -v false")
+
+        # Exclude unnecessary data
         mel.eval("FBXExportLights -v false")
         mel.eval("FBXExportEmbeddedTextures -v false")
+
+        # General export settings
+        mel.eval("FBXExportUseSceneName -v false")
+        mel.eval("FBXExportQuaternion -v euler")
         mel.eval("FBXExportIncludeChildren -v true")
         mel.eval("FBXExportInputConnections -v true")
         mel.eval("FBXExportUpAxis -v y")
         mel.eval("FBXExportFileVersion -v FBX202000")
         mel.eval("FBXExportSkeletonDefinitions -v false")
+
+        # UI settings
         mel.eval("FBXExportShowUI -v false")
         mel.eval("FBXExportGenerateLog -v false")
 
-        # Select all objects for export
-        all_objects = cmds.ls(dag=True, visible=True, type=["mesh", "joint", "transform"])
-        if all_objects:
-            cmds.select(all_objects, replace=True)
+    def _select_export_objects(self, cmds) -> None:
+        """Select appropriate objects for export"""
+        # Find relevant objects for export
+        relevant_objects = cmds.ls(dag=True, visible=True, type=["mesh", "joint", "transform"])
+
+        if relevant_objects:
+            cmds.select(relevant_objects, replace=True)
+            logger.info(f"Selected {len(relevant_objects)} objects for export")
         else:
-            # If no specific objects, select all
+            # Fallback to select all if no specific objects found
             cmds.select(all=True)
+            logger.info("Selected all objects for export")
 
-        # Export the triangulated FBX
-        print(f"Exporting triangulated FBX: {output_fbx}")
-        output_fbx_normalized = output_fbx.replace("\\", "/")
-        mel.eval(f'FBXExport -f "{output_fbx_normalized}" -s')
 
-        print(f"Successfully triangulated: {os.path.basename(input_fbx)}")
-        return True
+def triangulate_fbx_in_maya(input_fbx: str, output_fbx: str) -> bool:
+    """
+    Main function to triangulate an FBX file using Maya
 
-    except Exception as e:
-        print(f"Error triangulating {input_fbx}: {str(e)}")
+    Args:
+        input_fbx: Path to input FBX file (string for backward compatibility)
+        output_fbx: Path to output triangulated FBX file (string for backward compatibility)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    input_path = Path(input_fbx)
+    output_path = Path(output_fbx)
+
+    # Validate input
+    if not input_path.exists():
+        logger.error(f"Input file does not exist: {input_path}")
         return False
-    finally:
-        try:
-            maya.standalone.uninitialize()
-        except:
-            pass
+
+    # Create output directory if needed
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Process the file
+    try:
+        with MayaFBXProcessor() as processor:
+            return processor.triangulate_fbx(input_path, output_path)
+    except Exception as e:
+        logger.error(f"Failed to process {input_path}: {e}")
+        return False
 
 
-def main():
-    """Main function for command line usage."""
+def main() -> None:
+    """Main function for command line usage"""
     parser = argparse.ArgumentParser(description="Triangulate FBX files using Maya")
     parser.add_argument("input_fbx", help="Input FBX file path")
     parser.add_argument("output_fbx", help="Output triangulated FBX file path")
 
     args = parser.parse_args()
 
-    if not os.path.exists(args.input_fbx):
-        print(f"Error: Input file does not exist: {args.input_fbx}")
+    input_path = Path(args.input_fbx)
+    output_path = Path(args.output_fbx)
+
+    if not input_path.exists():
+        logger.error(f"Input file does not exist: {input_path}")
         sys.exit(1)
 
     # Create output directory if it doesn't exist
-    output_dir = os.path.dirname(args.output_fbx)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    success = triangulate_fbx_in_maya(args.input_fbx, args.output_fbx)
+    success = triangulate_fbx_in_maya(str(input_path), str(output_path))
     sys.exit(0 if success else 1)
 
 
