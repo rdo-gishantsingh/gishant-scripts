@@ -28,6 +28,7 @@ from maya import cmds, mel
 
 def timing_decorator(func):
     """Decorator to measure function execution time."""
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
@@ -35,15 +36,24 @@ def timing_decorator(func):
         end_time = time.time()
         execution_time = end_time - start_time
         return result, execution_time
+
     return wrapper
 
 
 class MockLogger:
     """Simple logger for output."""
-    def info(self, msg): print(f"INFO: {msg}")
-    def warning(self, msg): print(f"WARNING: {msg}")
-    def error(self, msg): print(f"ERROR: {msg}")
-    def debug(self, msg): print(f"DEBUG: {msg}")
+
+    def info(self, msg):
+        print(f"INFO: {msg}")
+
+    def warning(self, msg):
+        print(f"WARNING: {msg}")
+
+    def error(self, msg):
+        print(f"ERROR: {msg}")
+
+    def debug(self, msg):
+        print(f"DEBUG: {msg}")
 
 
 class MeshOptimizer:
@@ -93,8 +103,11 @@ class MeshOptimizer:
         """Create a blank mesh with minimal geometry (matching AYON plugin)."""
         plane = cmds.polyPlane(
             name="optimization_blank_mesh",
-            width=1, height=1, subdivisionsX=1, subdivisionsY=1,
-            constructionHistory=False
+            width=1,
+            height=1,
+            subdivisionsX=1,
+            subdivisionsY=1,
+            constructionHistory=False,
         )[0]
 
         shapes = cmds.listRelatives(plane, shapes=True, fullPath=True)
@@ -179,10 +192,7 @@ class MeshOptimizer:
                 else:
                     # Disconnect blank mesh
                     try:
-                        cmds.disconnectAttr(
-                            f"{optimization_data['blank_mesh']}.outMesh",
-                            f"{mesh}.inMesh"
-                        )
+                        cmds.disconnectAttr(f"{optimization_data['blank_mesh']}.outMesh", f"{mesh}.inMesh")
                         self.log.debug(f"Disconnected blank mesh from {mesh}")
                     except:
                         pass  # Already disconnected
@@ -230,11 +240,7 @@ class MeshOptimizationBenchmark:
                 except:
                     pass
 
-        return {
-            "count": len(meshes),
-            "total_vertices": total_vertices,
-            "total_faces": total_faces
-        }
+        return {"count": len(meshes), "total_vertices": total_vertices, "total_faces": total_faces}
 
     @timing_decorator
     def mesh_evaluation_test(self, meshes):
@@ -351,34 +357,34 @@ class MeshOptimizationBenchmark:
             print(f"Exporting skeleton: {len(skeleton_roots)} root joints, {len(skeleton_joints)} total joints")
 
             # Configure FBX export settings to match AYON's animation export
-            mel.eval('FBXResetExport')
+            mel.eval("FBXResetExport")
 
             # CRITICAL: Animation exports should NOT include geometry!
-            mel.eval('FBXExportSmoothingGroups -v false')
-            mel.eval('FBXExportHardEdges -v false')
-            mel.eval('FBXExportTangents -v false')
-            mel.eval('FBXExportSmoothMesh -v false')
-            mel.eval('FBXExportInstances -v false')
+            mel.eval("FBXExportSmoothingGroups -v false")
+            mel.eval("FBXExportHardEdges -v false")
+            mel.eval("FBXExportTangents -v false")
+            mel.eval("FBXExportSmoothMesh -v false")
+            mel.eval("FBXExportInstances -v false")
 
             # Animation-specific settings from AYON
-            mel.eval('FBXExportReferencedAssetsContent -v true')
-            mel.eval('FBXExportAnimationOnly -v false')  # Still need skeleton definition
-            mel.eval('FBXExportBakeComplexAnimation -v false')
-            mel.eval('FBXExportUseSceneName -v false')
-            mel.eval('FBXExportQuaternion -v euler')
+            mel.eval("FBXExportReferencedAssetsContent -v true")
+            mel.eval("FBXExportAnimationOnly -v false")  # Still need skeleton definition
+            mel.eval("FBXExportBakeComplexAnimation -v false")
+            mel.eval("FBXExportUseSceneName -v false")
+            mel.eval("FBXExportQuaternion -v euler")
 
             # IMPORTANT: Disable shapes/geometry but keep skins for skeleton
-            mel.eval('FBXExportShapes -v false')  # NO GEOMETRY!
-            mel.eval('FBXExportSkins -v true')    # Keep for skeleton definition
-            mel.eval('FBXExportSkeletonDefinitions -v true')  # Ensure skeleton is exported
+            mel.eval("FBXExportShapes -v false")  # NO GEOMETRY!
+            mel.eval("FBXExportSkins -v true")  # Keep for skeleton definition
+            mel.eval("FBXExportSkeletonDefinitions -v true")  # Ensure skeleton is exported
 
             # Disable other non-animation elements
-            mel.eval('FBXExportConstraints -v false')
-            mel.eval('FBXExportCameras -v false')
-            mel.eval('FBXExportLights -v false')
+            mel.eval("FBXExportConstraints -v false")
+            mel.eval("FBXExportCameras -v false")
+            mel.eval("FBXExportLights -v false")
 
             # Set FBX version to ensure compatibility
-            mel.eval('FBXExportFileVersion -v FBX202000')
+            mel.eval("FBXExportFileVersion -v FBX202000")
 
             # Ensure directory exists
             fbx_dir = os.path.dirname(temp_fbx)
@@ -441,10 +447,10 @@ class MeshOptimizationBenchmark:
 
     def run_benchmark(self, selected_objects=None):
         """Run the complete AYON animation pipeline benchmark."""
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("AYON ANIMATION PIPELINE BENCHMARK")
         print("Testing mesh optimization impact on FBX export workflow")
-        print("="*80)
+        print("=" * 80)
 
         # Get selection
         if not selected_objects:
@@ -469,9 +475,9 @@ class MeshOptimizationBenchmark:
             return None
 
         # === BEFORE OPTIMIZATION (Original Pipeline) ===
-        print("\n" + "-"*50)
+        print("\n" + "-" * 50)
         print("BEFORE OPTIMIZATION (Original Pipeline)")
-        print("-"*50)
+        print("-" * 50)
 
         mesh_ops, mesh_time = self.mesh_evaluation_test(meshes)
         print(f"Mesh evaluation: {mesh_time:.4f}s ({mesh_ops} operations)")
@@ -488,9 +494,9 @@ class MeshOptimizationBenchmark:
         print(f"Scene save: {scene_time:.4f}s (size: {scene_size:,} bytes)")
 
         # === OPTIMIZATION PHASE ===
-        print("\n" + "-"*50)
+        print("\n" + "-" * 50)
         print("RUNNING MESH OPTIMIZATION")
-        print("-"*50)
+        print("-" * 50)
         opt_start = time.time()
         optimization_data = self.optimizer.optimize_meshes(meshes)
         opt_time = time.time() - opt_start
@@ -498,9 +504,9 @@ class MeshOptimizationBenchmark:
         print(f"Replaced {len(optimization_data.get('mesh_connections', {}))} meshes with single blank mesh")
 
         # === AFTER OPTIMIZATION (Optimized Pipeline) ===
-        print("\n" + "-"*50)
+        print("\n" + "-" * 50)
         print("AFTER OPTIMIZATION (Optimized Pipeline)")
-        print("-"*50)
+        print("-" * 50)
 
         mesh_ops_opt, mesh_time_opt = self.mesh_evaluation_test(meshes)
         print(f"Mesh evaluation: {mesh_time_opt:.4f}s ({mesh_ops_opt} operations)")
@@ -517,18 +523,18 @@ class MeshOptimizationBenchmark:
         print(f"Scene save: {scene_time_opt:.4f}s (size: {scene_size_opt:,} bytes)")
 
         # === RESTORATION PHASE ===
-        print("\n" + "-"*50)
+        print("\n" + "-" * 50)
         print("RUNNING MESH RESTORATION")
-        print("-"*50)
+        print("-" * 50)
         restore_start = time.time()
         self.optimizer.restore_meshes(optimization_data)
         restore_time = time.time() - restore_start
         print(f"Restoration completed in {restore_time:.4f}s")
 
         # === FINAL FBX EXPORT FOR USER ===
-        print("\n" + "-"*50)
+        print("\n" + "-" * 50)
         print("CREATING FINAL FBX EXPORT FOR USER")
-        print("-"*50)
+        print("-" * 50)
 
         # Export final FBX with optimized settings for user to import
         final_fbx_result, final_fbx_time = self.fbx_export_test(meshes, file_suffix="_final")
@@ -545,22 +551,24 @@ class MeshOptimizationBenchmark:
                 print(f"✅ File verified: {final_fbx_path}")
                 print("🦴 Contents: Animated skeleton only (no geometry)")
                 print(f"🔧 To import in Maya: File > Import > {final_fbx_path}")
-                print("💡 Make sure FBX plugin is loaded: Window > Settings/Preferences > Plug-in Manager > fbxmaya.mll")
+                print(
+                    "💡 Make sure FBX plugin is loaded: Window > Settings/Preferences > Plug-in Manager > fbxmaya.mll"
+                )
             else:
                 print(f"❌ Warning: File not found at {final_fbx_path}")
         else:
             print("❌ Failed to create final FBX export")
 
         # === PERFORMANCE RESULTS ===
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("🚀 PERFORMANCE IMPROVEMENT RESULTS")
-        print("="*80)
+        print("=" * 80)
 
         # Calculate speedups
-        mesh_speedup = mesh_time / mesh_time_opt if mesh_time_opt > 0 else float('inf')
-        deformer_speedup = deformer_time / deformer_time_opt if deformer_time_opt > 0 else float('inf')
-        fbx_speedup = fbx_time / fbx_time_opt if fbx_time_opt > 0 else float('inf')
-        scene_speedup = scene_time / scene_time_opt if scene_time_opt > 0 else float('inf')
+        mesh_speedup = mesh_time / mesh_time_opt if mesh_time_opt > 0 else float("inf")
+        deformer_speedup = deformer_time / deformer_time_opt if deformer_time_opt > 0 else float("inf")
+        fbx_speedup = fbx_time / fbx_time_opt if fbx_time_opt > 0 else float("inf")
+        scene_speedup = scene_time / scene_time_opt if scene_time_opt > 0 else float("inf")
 
         # File size reductions
         fbx_reduction = ((fbx_size - fbx_size_opt) / fbx_size * 100) if fbx_size > 0 else 0
@@ -569,36 +577,38 @@ class MeshOptimizationBenchmark:
         print("Mesh Operations:")
         print(f"  Before: {mesh_time:.4f}s")
         print(f"  After:  {mesh_time_opt:.4f}s")
-        print(f"  Speedup: {mesh_speedup:.2f}x ({((mesh_speedup-1)*100):.1f}% faster)")
+        print(f"  Speedup: {mesh_speedup:.2f}x ({((mesh_speedup - 1) * 100):.1f}% faster)")
 
         print("\nDeformer Operations:")
         print(f"  Before: {deformer_time:.4f}s")
         print(f"  After:  {deformer_time_opt:.4f}s")
-        print(f"  Speedup: {deformer_speedup:.2f}x ({((deformer_speedup-1)*100):.1f}% faster)")
+        print(f"  Speedup: {deformer_speedup:.2f}x ({((deformer_speedup - 1) * 100):.1f}% faster)")
 
         print("\n🎯 FBX EXPORT (Most Important):")
         print(f"  Before: {fbx_time:.4f}s ({fbx_size:,} bytes)")
         print(f"  After:  {fbx_time_opt:.4f}s ({fbx_size_opt:,} bytes)")
-        print(f"  Speedup: {fbx_speedup:.2f}x ({((fbx_speedup-1)*100):.1f}% faster)")
+        print(f"  Speedup: {fbx_speedup:.2f}x ({((fbx_speedup - 1) * 100):.1f}% faster)")
         print(f"  File size reduction: {fbx_reduction:.1f}%")
 
         print("\nScene Save:")
         print(f"  Before: {scene_time:.4f}s ({scene_size:,} bytes)")
         print(f"  After:  {scene_time_opt:.4f}s ({scene_size_opt:,} bytes)")
-        print(f"  Speedup: {scene_speedup:.2f}x ({((scene_speedup-1)*100):.1f}% faster)")
+        print(f"  Speedup: {scene_speedup:.2f}x ({((scene_speedup - 1) * 100):.1f}% faster)")
         print(f"  File size reduction: {scene_reduction:.1f}%")
 
         # Overall pipeline assessment
         total_before = mesh_time + deformer_time + fbx_time + scene_time
         total_after = mesh_time_opt + deformer_time_opt + fbx_time_opt + scene_time_opt
-        overall_speedup = total_before / total_after if total_after > 0 else float('inf')
+        overall_speedup = total_before / total_after if total_after > 0 else float("inf")
         overhead_time = opt_time + restore_time
-        net_speedup = total_before / (total_after + overhead_time) if (total_after + overhead_time) > 0 else float('inf')
+        net_speedup = (
+            total_before / (total_after + overhead_time) if (total_after + overhead_time) > 0 else float("inf")
+        )
 
         print("\n📊 OVERALL PIPELINE PERFORMANCE:")
         print(f"  Total time before optimization: {total_before:.4f}s")
         print(f"  Total time after optimization:  {total_after:.4f}s")
-        print(f"  Raw speedup: {overall_speedup:.2f}x ({((overall_speedup-1)*100):.1f}% faster)")
+        print(f"  Raw speedup: {overall_speedup:.2f}x ({((overall_speedup - 1) * 100):.1f}% faster)")
         print(f"  Optimization overhead: {opt_time:.4f}s")
         print(f"  Restoration overhead: {restore_time:.4f}s")
         print(f"  Net speedup (including overhead): {net_speedup:.2f}x")
@@ -618,9 +628,9 @@ class MeshOptimizationBenchmark:
 
         # === FBX FILE FOR IMPORT ===
         if final_fbx_path:
-            print("\n" + "="*80)
+            print("\n" + "=" * 80)
             print("📦 FBX FILE READY FOR IMPORT")
-            print("="*80)
+            print("=" * 80)
             print(f"📁 Path: {final_fbx_path}")
             print(f"📦 Size: {final_fbx_size:,} bytes")
             print(f"⏱️  Export Time: {final_fbx_time:.4f}s")
@@ -640,10 +650,10 @@ class MeshOptimizationBenchmark:
             "optimization_time": opt_time,
             "restoration_time": restore_time,
             "final_fbx_path": final_fbx_path,
-            "final_fbx_size": final_fbx_size
+            "final_fbx_size": final_fbx_size,
         }
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         return self.results
 
 
@@ -656,14 +666,21 @@ def create_benchmark_ui():
 
     window = cmds.window(window_name, title="AYON Animation Pipeline Benchmark", widthHeight=(500, 400))
 
-    cmds.columnLayout(adjustableColumn=True, columnOffset=['both', 15])
+    cmds.columnLayout(adjustableColumn=True, columnOffset=["both", 15])
 
-    cmds.text(label="AYON Animation Pipeline Benchmark", height=35,
-              backgroundColor=[0.2, 0.4, 0.6], font="boldLabelFont")
+    cmds.text(
+        label="AYON Animation Pipeline Benchmark",
+        height=35,
+        backgroundColor=[0.2, 0.4, 0.6],
+        font="boldLabelFont",
+    )
     cmds.separator(height=15)
 
-    cmds.text(label="🎯 Tests mesh optimization impact on skeleton FBX export",
-              align="center", font="obliqueLabelFont")
+    cmds.text(
+        label="🎯 Tests mesh optimization impact on skeleton FBX export",
+        align="center",
+        font="obliqueLabelFont",
+    )
     cmds.separator(height=10)
 
     cmds.text(label="Instructions:", align="left", font="boldLabelFont")
@@ -671,7 +688,11 @@ def create_benchmark_ui():
     cmds.text(label="2. Click 'Run Animation Pipeline Benchmark'", align="left")
     cmds.text(label="3. Check Script Editor for detailed results", align="left")
     cmds.separator(height=5)
-    cmds.text(label="Note: Only skeleton/joints are exported (no geometry),", align="left", font="smallObliqueLabelFont")
+    cmds.text(
+        label="Note: Only skeleton/joints are exported (no geometry),",
+        align="left",
+        font="smallObliqueLabelFont",
+    )
     cmds.text(label="matching AYON's animation.fbx workflow", align="left", font="smallObliqueLabelFont")
     cmds.separator(height=15)
 
@@ -681,11 +702,14 @@ def create_benchmark_ui():
     def update_selection():
         selected = cmds.ls(selection=True) or []
         if selected:
-            display_names = [obj.split('|')[-1] for obj in selected[:3]]
+            display_names = [obj.split("|")[-1] for obj in selected[:3]]
             if len(selected) > 3:
-                display_names.append(f"... and {len(selected)-3} more")
-            cmds.text(selection_text, edit=True,
-                     label=f"{len(selected)} objects: {', '.join(display_names)}")
+                display_names.append(f"... and {len(selected) - 3} more")
+            cmds.text(
+                selection_text,
+                edit=True,
+                label=f"{len(selected)} objects: {', '.join(display_names)}",
+            )
         else:
             cmds.text(selection_text, edit=True, label="None selected")
 
@@ -698,9 +722,9 @@ def create_benchmark_ui():
             results = benchmark.run_benchmark()
 
             if results:
-                fbx_speedup = results.get('fbx_speedup', 1.0)
-                size_reduction = results.get('fbx_size_reduction', 0.0)
-                final_fbx_path = results.get('final_fbx_path', '')
+                fbx_speedup = results.get("fbx_speedup", 1.0)
+                size_reduction = results.get("fbx_size_reduction", 0.0)
+                final_fbx_path = results.get("final_fbx_path", "")
 
                 # Create message with FBX path info
                 fbx_info = ""
@@ -710,10 +734,10 @@ def create_benchmark_ui():
 
                 message = f"""🚀 AYON Animation Pipeline Benchmark Complete!
 
-Meshes tested: {results['mesh_count']} ({results['vertex_count']:,} vertices)
+Meshes tested: {results["mesh_count"]} ({results["vertex_count"]:,} vertices)
 🎯 FBX Export Speedup: {fbx_speedup:.2f}x
 📦 FBX Size Reduction: {size_reduction:.1f}%
-⚡ Overall Pipeline Speedup: {results['overall_speedup']:.2f}x{fbx_info}
+⚡ Overall Pipeline Speedup: {results["overall_speedup"]:.2f}x{fbx_info}
 
 This shows the real-world performance improvement
 animators will experience during cache publishing!
@@ -722,20 +746,28 @@ See Script Editor for complete detailed analysis."""
 
                 cmds.confirmDialog(title="🎖️ Benchmark Results", message=message, button=["Excellent!"])
             else:
-                cmds.confirmDialog(title="❌ Benchmark Failed",
-                                 message="Please select a rigged character with mesh geometry.",
-                                 button=["OK"])
+                cmds.confirmDialog(
+                    title="❌ Benchmark Failed",
+                    message="Please select a rigged character with mesh geometry.",
+                    button=["OK"],
+                )
         except Exception as e:
             cmds.confirmDialog(title="💥 Error", message=f"Benchmark error: {str(e)}", button=["OK"])
 
-    cmds.button(label="🚀 Run Animation Pipeline Benchmark", height=50,
-                backgroundColor=[0.3, 0.7, 0.3], command=lambda x: run_benchmark_ui())
+    cmds.button(
+        label="🚀 Run Animation Pipeline Benchmark",
+        height=50,
+        backgroundColor=[0.3, 0.7, 0.3],
+        command=lambda x: run_benchmark_ui(),
+    )
 
     cmds.separator(height=15)
-    cmds.text(label="🎬 Simulates complete AYON animation workflow:",
-              align="center", font="boldLabelFont")
-    cmds.text(label="OptimizeAnimationMeshes → FBX Export → RestoreAnimationMeshes",
-              align="center", font="smallPlainLabelFont")
+    cmds.text(label="🎬 Simulates complete AYON animation workflow:", align="center", font="boldLabelFont")
+    cmds.text(
+        label="OptimizeAnimationMeshes → FBX Export → RestoreAnimationMeshes",
+        align="center",
+        font="smallPlainLabelFont",
+    )
 
     update_selection()
     cmds.showWindow(window)

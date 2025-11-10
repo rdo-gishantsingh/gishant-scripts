@@ -1,10 +1,9 @@
-import ayon_api
 import json
-from typing import List, Dict, Optional
-from collections import defaultdict
+
+import ayon_api
 
 
-def fetch_all_product_types() -> List[Dict]:
+def fetch_all_product_types() -> list[dict]:
     """
     Fetch all product types from the AYON server.
 
@@ -21,7 +20,7 @@ def fetch_all_product_types() -> List[Dict]:
         return []
 
 
-def fetch_product_types_by_project(project_name: str) -> List[Dict]:
+def fetch_product_types_by_project(project_name: str) -> list[dict]:
     """
     Fetch product types specific to a project.
 
@@ -34,16 +33,14 @@ def fetch_product_types_by_project(project_name: str) -> List[Dict]:
     try:
         # Get project-specific product types
         project_product_types = ayon_api.get_project_product_types(project_name)
-        print(
-            f"Found {len(project_product_types)} product types for project '{project_name}'"
-        )
+        print(f"Found {len(project_product_types)} product types for project '{project_name}'")
         return project_product_types
     except Exception as e:
         print(f"Error fetching product types for project '{project_name}': {e}")
         return []
 
 
-def fetch_product_type_names() -> List[str]:
+def fetch_product_type_names() -> list[str]:
     """
     Fetch just the names of all product types.
 
@@ -60,7 +57,7 @@ def fetch_product_type_names() -> List[str]:
         return []
 
 
-def analyze_product_usage(project_name: Optional[str] = None) -> Dict:
+def analyze_product_usage(project_name: str | None = None) -> dict:
     """
     Analyze how product types are being used across projects or within a specific project.
 
@@ -101,9 +98,7 @@ def analyze_product_usage(project_name: Optional[str] = None) -> Dict:
                         }
 
                     usage_stats["product_types"][product_type]["count"] += 1
-                    usage_stats["product_types"][product_type]["projects"].add(
-                        proj_name
-                    )
+                    usage_stats["product_types"][product_type]["projects"].add(proj_name)
 
                     # Store some examples
                     if len(usage_stats["product_types"][product_type]["examples"]) < 3:
@@ -135,7 +130,7 @@ def analyze_product_usage(project_name: Optional[str] = None) -> Dict:
         return usage_stats
 
 
-def display_product_types_summary(product_types: List[Dict]):
+def display_product_types_summary(product_types: list[dict]):
     """
     Display a formatted summary of product types.
 
@@ -146,9 +141,9 @@ def display_product_types_summary(product_types: List[Dict]):
         print("No product types found.")
         return
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"PRODUCT TYPES SUMMARY ({len(product_types)} total)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for i, product_type in enumerate(product_types, 1):
         name = product_type.get("name", "Unknown")
@@ -165,16 +160,16 @@ def display_product_types_summary(product_types: List[Dict]):
         print()
 
 
-def display_usage_analysis(usage_stats: Dict):
+def display_usage_analysis(usage_stats: dict):
     """
     Display formatted usage analysis.
 
     Args:
         usage_stats: Dictionary with usage statistics
     """
-    print(f"\n{'='*60}")
-    print(f"PRODUCT TYPE USAGE ANALYSIS")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("PRODUCT TYPE USAGE ANALYSIS")
+    print(f"{'=' * 60}")
     print(f"Projects analyzed: {len(usage_stats['projects_analyzed'])}")
     print(f"Total products: {usage_stats['total_products']}")
     print(f"Unique product types: {len(usage_stats['product_types'])}")
@@ -184,11 +179,9 @@ def display_usage_analysis(usage_stats: Dict):
         return
 
     # Sort by usage count
-    sorted_types = sorted(
-        usage_stats["product_types"].items(), key=lambda x: x[1]["count"], reverse=True
-    )
+    sorted_types = sorted(usage_stats["product_types"].items(), key=lambda x: x[1]["count"], reverse=True)
 
-    print(f"\nProduct types by usage:")
+    print("\nProduct types by usage:")
     print(f"{'Rank':<4} {'Type':<20} {'Count':<8} {'Projects':<10} {'Examples'}")
     print("-" * 80)
 
@@ -198,12 +191,10 @@ def display_usage_analysis(usage_stats: Dict):
         if len(stats["examples"]) > 2:
             examples += "..."
 
-        print(
-            f"{rank:<4} {product_type:<20} {stats['count']:<8} {project_count:<10} {examples}"
-        )
+        print(f"{rank:<4} {product_type:<20} {stats['count']:<8} {project_count:<10} {examples}")
 
 
-def export_to_json(data: Dict, filename: str):
+def export_to_json(data: dict, filename: str):
     """
     Export data to JSON file.
 
@@ -268,14 +259,14 @@ def main():
                 project_product_types = fetch_product_types_by_project(example_project)
 
                 if project_product_types:
-                    print(f"Project-specific product types:")
+                    print("Project-specific product types:")
                     for pt in project_product_types[:10]:  # Show first 10
                         print(f"  - {pt.get('name', 'Unknown')}")
     except Exception as e:
         print(f"Error fetching projects: {e}")
 
     # 4. Analyze product usage across projects
-    print(f"\n5. Analyzing product type usage...")
+    print("\n5. Analyzing product type usage...")
     usage_stats = analyze_product_usage()
     display_usage_analysis(usage_stats)
 
@@ -289,14 +280,14 @@ def main():
 
     export_to_json(export_data, "ayon_product_types_analysis.json")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Analysis complete!")
     print("Summary:")
     print(f"  - Total product types on server: {len(all_product_types)}")
     print(f"  - Product type names: {len(product_type_names)}")
     print(f"  - Projects analyzed: {len(usage_stats.get('projects_analyzed', []))}")
     print(f"  - Total products found: {usage_stats.get('total_products', 0)}")
-    print(f"  - Results exported to: ayon_product_types_analysis.json")
+    print("  - Results exported to: ayon_product_types_analysis.json")
 
 
 if __name__ == "__main__":

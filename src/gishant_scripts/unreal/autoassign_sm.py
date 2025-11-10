@@ -1,6 +1,6 @@
-import unreal
 import logging
-import re
+
+import unreal
 
 # --- Script Configuration ---
 
@@ -11,10 +11,13 @@ DRY_RUN = False
 # !!! IMPORTANT !!!
 # 1. SET THIS TO THE FULL, EXACT CONTENT BROWSER PATH FOR THE SKELETAL MESH ASSET.
 # The path has been corrected to remove the incorrect "/Game/" prefix.
-FULL_SKELETAL_MESH_PATH = "/bwfro_01_0140_seqData/Ayon/episodes/ep00/bwfro_00_000/crowd_assets/SkeletalMeshes/tuktukcrowd_rigHigh_v001_fbx"
+FULL_SKELETAL_MESH_PATH = (
+    "/bwfro_01_0140_seqData/Ayon/episodes/ep00/bwfro_00_000/crowd_assets/SkeletalMeshes/tuktukcrowd_rigHigh_v001_fbx"
+)
 
 
 # --- Helper Function ---
+
 
 def get_all_descendants(parent_actor):
     """
@@ -28,7 +31,9 @@ def get_all_descendants(parent_actor):
         descendants.extend(get_all_descendants(child))
     return descendants
 
+
 # --- Main Logic ---
+
 
 def assign_skeletal_meshes_to_crowd():
     """
@@ -36,7 +41,7 @@ def assign_skeletal_meshes_to_crowd():
     and assigns a predefined Skeletal Mesh asset.
     Includes a DRY_RUN mode to test without applying changes.
     """
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s', force=True)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", force=True)
 
     if DRY_RUN:
         logging.warning("--- Starting Skeletal Mesh Assignment [DRY RUN MODE] ---")
@@ -48,14 +53,14 @@ def assign_skeletal_meshes_to_crowd():
     logging.info(f"Verifying asset path: '{FULL_SKELETAL_MESH_PATH}'")
     if not unreal.EditorAssetLibrary.does_asset_exist(FULL_SKELETAL_MESH_PATH):
         logging.error("--- SCRIPT HALTED ---")
-        logging.error(f"FATAL: The specified Skeletal Mesh asset could not be found.")
+        logging.error("FATAL: The specified Skeletal Mesh asset could not be found.")
         logging.error("Please verify the FULL_SKELETAL_MESH_PATH variable is correct and try again.")
         return
 
     skeletal_mesh_asset = unreal.load_asset(FULL_SKELETAL_MESH_PATH)
     if not skeletal_mesh_asset:
         logging.error("--- SCRIPT HALTED ---")
-        logging.error(f"FATAL: Asset exists but could not be loaded. Asset may be corrupted or unloadable.")
+        logging.error("FATAL: Asset exists but could not be loaded. Asset may be corrupted or unloadable.")
         return
 
     logging.info("Asset verified successfully. Proceeding with assignments.")
@@ -77,7 +82,7 @@ def assign_skeletal_meshes_to_crowd():
     logging.info(f"Found {len(actors_to_process)} total actors in the hierarchy to process.")
 
     success_count = 0
-    fail_count = 0 # This should theoretically be 0 now, but good to keep.
+    fail_count = 0  # This should theoretically be 0 now, but good to keep.
 
     # 3. Iterate through each actor
     for actor in actors_to_process:
@@ -102,6 +107,6 @@ def assign_skeletal_meshes_to_crowd():
     summary_prefix = "[DRY RUN] " if DRY_RUN else ""
     logging.info(f"{summary_prefix}Summary: {success_count} assignments would be successful, {fail_count} would fail.")
 
+
 # --- Run the main function ---
 assign_skeletal_meshes_to_crowd()
-

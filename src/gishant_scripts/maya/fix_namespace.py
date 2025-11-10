@@ -23,9 +23,9 @@ def rename_hierarchy_nodes(root_node="adam_rig", old_string="adam", new_string="
         candidate = next((a for a in assemblies if a.split("|")[-1] in variants), None)
         if candidate:
             root_node = candidate
-            print("Using root node: '{}'".format(root_node))
+            print(f"Using root node: '{root_node}'")
         else:
-            cmds.warning("Root node '{}' not found. Aborting script.".format(root_node))
+            cmds.warning(f"Root node '{root_node}' not found. Aborting script.")
             return
 
     # Get all descendants in the hierarchy
@@ -46,9 +46,9 @@ def rename_hierarchy_nodes(root_node="adam_rig", old_string="adam", new_string="
         try:
             if cmds.namespace(exists=namespace):
                 cmds.namespace(rename=[namespace, new_namespace])
-                print("Renamed namespace '{}' -> '{}'".format(namespace, new_namespace))
+                print(f"Renamed namespace '{namespace}' -> '{new_namespace}'")
         except Exception as e:
-            cmds.warning("Could not rename namespace '{}'. Error: {}".format(namespace, e))
+            cmds.warning(f"Could not rename namespace '{namespace}'. Error: {e}")
 
     # Then handle non-namespaced nodes
     all_descendants = cmds.ls(root_node, dag=True, long=True) or []  # Refresh the list
@@ -73,12 +73,12 @@ def rename_hierarchy_nodes(root_node="adam_rig", old_string="adam", new_string="
             # Only rename if the name actually changes
             if final_name != short_name:
                 cmds.rename(node_path, final_name)
-                print("Renamed '{}' -> '{}'".format(short_name, final_name))
+                print(f"Renamed '{short_name}' -> '{final_name}'")
 
         except Exception as e:
-            cmds.warning("Could not rename node '{}'. Error: {}".format(node_path, e))
+            cmds.warning(f"Could not rename node '{node_path}'. Error: {e}")
 
-    print("\nHierarchy renaming complete for: '{}'".format(root_node))
+    print(f"\nHierarchy renaming complete for: '{root_node}'")
 
 
 # --- How to run the script ---

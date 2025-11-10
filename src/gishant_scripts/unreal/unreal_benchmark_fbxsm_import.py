@@ -27,10 +27,9 @@ Recent fixes:
 import shutil
 import subprocess
 import time
-from pathlib import Path
-from typing import List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 import unreal
 
@@ -96,7 +95,7 @@ class MayaChecker:
 
     def __init__(self, config: BenchmarkConfig):
         self.config = config
-        self._is_available: Optional[bool] = None
+        self._is_available: bool | None = None
 
     @property
     def is_available(self) -> bool:
@@ -192,9 +191,9 @@ class MayaTriangulator:
         """Execute Maya triangulation process"""
         try:
             # Convert paths to strings with proper Windows formatting
-            script_path = str(self.config.maya_triangulate_script).replace('\\', '/')
-            input_path_str = str(input_path).replace('\\', '/')
-            output_path_str = str(output_path).replace('\\', '/')
+            script_path = str(self.config.maya_triangulate_script).replace("\\", "/")
+            input_path_str = str(input_path).replace("\\", "/")
+            output_path_str = str(output_path).replace("\\", "/")
 
             cmd = [
                 self.config.maya_executable,
@@ -225,15 +224,24 @@ class MayaTriangulator:
                 Logger.log(f"✅ [MayaTriangulator] Successfully triangulated: {input_path.name}")
                 return True
             else:
-                Logger.log(f"❌ [MayaTriangulator] Maya triangulation failed for {input_path}", LogLevel.ERROR)
+                Logger.log(
+                    f"❌ [MayaTriangulator] Maya triangulation failed for {input_path}",
+                    LogLevel.ERROR,
+                )
                 Logger.log("📁 [MayaTriangulator] Falling back to copying original file")
                 return self._copy_original(input_path, output_path)
 
         except subprocess.TimeoutExpired:
-            Logger.log(f"⏱️ [MayaTriangulator] Maya triangulation timed out for {input_path}", LogLevel.ERROR)
+            Logger.log(
+                f"⏱️ [MayaTriangulator] Maya triangulation timed out for {input_path}",
+                LogLevel.ERROR,
+            )
             return self._copy_original(input_path, output_path)
         except Exception as e:
-            Logger.log(f"❌ [MayaTriangulator] Error running Maya triangulation for {input_path}: {e}", LogLevel.ERROR)
+            Logger.log(
+                f"❌ [MayaTriangulator] Error running Maya triangulation for {input_path}: {e}",
+                LogLevel.ERROR,
+            )
             return self._copy_original(input_path, output_path)
 
 
@@ -257,13 +265,13 @@ class FileProcessor:
         except Exception as e:
             Logger.log(f"Failed to clean up working directory: {e}", LogLevel.WARNING)
 
-    def find_fbx_files(self, source_folder: Path) -> List[str]:
+    def find_fbx_files(self, source_folder: Path) -> list[str]:
         """Find all FBX files in the source folder"""
         if not source_folder.is_dir():
             return []
         return [f.name for f in source_folder.iterdir() if f.suffix.lower() == ".fbx"]
 
-    def process_fbx_files(self, source_folder: Path, fbx_files: List[str]) -> tuple[List[Path], float]:
+    def process_fbx_files(self, source_folder: Path, fbx_files: list[str]) -> tuple[list[Path], float]:
         """
         Process FBX files by copying and optionally triangulating them
 
@@ -300,14 +308,14 @@ class FileProcessor:
 
         return processed_files, triangulation_time
 
-    def _process_single_file(self, source_path: Path) -> Optional[Path]:
+    def _process_single_file(self, source_path: Path) -> Path | None:
         """Process a single FBX file"""
         if self.config.triangulate_mesh:
             return self._triangulate_file(source_path)
         else:
             return self._copy_file(source_path)
 
-    def _triangulate_file(self, source_path: Path) -> Optional[Path]:
+    def _triangulate_file(self, source_path: Path) -> Path | None:
         """Triangulate a single FBX file"""
         base_name = source_path.stem
 
@@ -327,7 +335,7 @@ class FileProcessor:
             return dest_path
         return None
 
-    def _copy_file(self, source_path: Path) -> Optional[Path]:
+    def _copy_file(self, source_path: Path) -> Path | None:
         """Copy a single FBX file without triangulation"""
         dest_path = self.config.working_dir / source_path.name
         try:
@@ -525,7 +533,7 @@ class FBXBenchmarkRunner:
             import_time=0.0,
         )
 
-    def _import_to_unreal(self, processed_files: List[Path]) -> dict:
+    def _import_to_unreal(self, processed_files: list[Path]) -> dict:
         """Import processed files into Unreal Engine - measures pure import time only"""
         asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
         import_options = UnrealImportOptions.create_skeletal_mesh_options()

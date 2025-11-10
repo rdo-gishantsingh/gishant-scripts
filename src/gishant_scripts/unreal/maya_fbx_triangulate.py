@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 Maya FBX Triangulation Tool
 
@@ -13,10 +12,7 @@ import sys
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +35,7 @@ class MayaFBXProcessor:
         """Initialize Maya standalone"""
         try:
             import maya.standalone
+
             maya.standalone.initialize()
             self._maya_initialized = True
             logger.info("Maya standalone initialized successfully")
@@ -51,6 +48,7 @@ class MayaFBXProcessor:
         if self._maya_initialized:
             try:
                 import maya.standalone
+
                 maya.standalone.uninitialize()
                 logger.info("Maya standalone cleanup completed")
             except Exception as e:
@@ -119,7 +117,7 @@ class MayaFBXProcessor:
         # Animation and rigging settings
         mel.eval("FBXExportBakeComplexAnimation -v false")
         mel.eval("FBXExportShapes -v true")  # Blend shapes
-        mel.eval("FBXExportSkins -v true")   # Skin weights
+        mel.eval("FBXExportSkins -v true")  # Skin weights
         mel.eval("FBXExportConstraints -v false")
 
         # Exclude unnecessary data

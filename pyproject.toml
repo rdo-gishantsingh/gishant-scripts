@@ -1,0 +1,51 @@
+[project]
+name = "gishant-scripts"
+version = "0.1.0"
+description = "Collection of custom scripts for AYON pipeline, YouTrack integration, GitHub automation, and Maya/Unreal utilities"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Gishant Singh", email = "gisi@redefine.co" }
+]
+dependencies = [
+    "requests>=2.31.0",
+    "google-genai>=0.8.1",
+    "python-dotenv>=1.0.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+# Main CLI entry point
+gishant = "gishant_scripts.cli:main"
+
+# Legacy individual script entry points (for backward compatibility)
+fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"
+fetch-github-prs = "gishant_scripts.github.fetch_prs:main"
+generate-report = "gishant_scripts.utils.generate_report:main"
+generate-work-summary = "gishant_scripts.utils.generate_work_summary:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

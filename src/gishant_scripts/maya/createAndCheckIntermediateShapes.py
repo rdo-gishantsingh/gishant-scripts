@@ -6,9 +6,7 @@ def create_non_intermediate_cube():
     Creates a cube with a non-intermediate shape.
     """
     # cmds.polyCube returns [transform_name, polyCube_node_name]
-    transform_name, _ = cmds.polyCube(
-        name="nonIntermediateCube_GEO#"
-    )  # Added # for uniqueness if run multiple times
+    transform_name, _ = cmds.polyCube(name="nonIntermediateCube_GEO#")  # Added # for uniqueness if run multiple times
 
     # Get the actual shape node from the transform
     shape_nodes = cmds.listRelatives(transform_name, shapes=True, fullPath=True)
@@ -28,14 +26,10 @@ def create_non_intermediate_cube():
                 f"Could not set intermediateObject on {actual_shape_node} (it might be locked or connected): {e}"
             )
     else:
-        cmds.warning(
-            f"Shape {actual_shape_node} does not have 'intermediateObject' attribute."
-        )
+        cmds.warning(f"Shape {actual_shape_node} does not have 'intermediateObject' attribute.")
 
     cmds.select(clear=True)
-    print(
-        f"Created non-intermediate shape: {actual_shape_node} (parent: {transform_name})"
-    )
+    print(f"Created non-intermediate shape: {actual_shape_node} (parent: {transform_name})")
     return transform_name, actual_shape_node
 
 
@@ -65,18 +59,14 @@ def create_intermediate_cube():
                 f"Could not set intermediateObject on {actual_shape_node} (it might be locked or connected): {e}"
             )
             cmds.warning(
-                f"Consider creating intermediate objects via construction history for more robust behavior if direct setting fails."
+                "Consider creating intermediate objects via construction history for more robust behavior if direct setting fails."
             )
 
     else:
-        cmds.warning(
-            f"Shape {actual_shape_node} does not have 'intermediateObject' attribute."
-        )
+        cmds.warning(f"Shape {actual_shape_node} does not have 'intermediateObject' attribute.")
 
     cmds.select(clear=True)
-    print(
-        f"Attempted to create intermediate shape: {actual_shape_node} (parent: {transform_name})"
-    )
+    print(f"Attempted to create intermediate shape: {actual_shape_node} (parent: {transform_name})")
     return transform_name, actual_shape_node
 
 
@@ -91,12 +81,8 @@ def check_shape_intermediate_status(shape_node):
     if cmds.attributeQuery("intermediateObject", node=shape_node, exists=True):
         try:
             io_value = cmds.getAttr(f"{shape_node}.intermediateObject")
-            status = (
-                "Intermediate" if io_value else "Non-Intermediate"
-            )  # Boolean attribute, 1 is True, 0 is False
-            print(
-                f"Shape '{shape_node}' is: {status} (intermediateObject = {io_value})"
-            )
+            status = "Intermediate" if io_value else "Non-Intermediate"  # Boolean attribute, 1 is True, 0 is False
+            print(f"Shape '{shape_node}' is: {status} (intermediateObject = {io_value})")
             return status
         except Exception as e:
             print(f"Error getting 'intermediateObject' for {shape_node}: {e}")
