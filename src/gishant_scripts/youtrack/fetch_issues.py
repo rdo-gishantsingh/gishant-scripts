@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 import click
@@ -60,6 +61,16 @@ class YouTrackIssuesFetcher:
         issue = response.json()
         return self._process_issue(issue)
 
+    def _extract_github_links(self, text: str | None) -> list[str]:
+        """Extract GitHub PR/issue links from text."""
+        if not text:
+            return []
+
+        # Pattern for GitHub PR and issue URLs
+        github_pattern = r"https?://github\.com/[\w-]+/[\w-]+/(?:pull|issues)/\d+"
+        matches = re.findall(github_pattern, text)
+        return list(set(matches))  # Remove duplicates
+
     def _process_issue(self, issue: dict) -> dict:
         """Process raw issue data into formatted structure."""
         # Get current user for comparison
@@ -115,18 +126,31 @@ class YouTrackIssuesFetcher:
             if author_login == user_login:
                 user_commented = True
 
-            all_comments.append(
-                {
-                    "author": author.get("fullName", "Unknown"),
-                    "author_login": author_login,
-                    "text": comment_text,
-                    "created": self._format_timestamp(comment.get("created")),
-                    "updated": self._format_timestamp(comment.get("updated")),
-                }
-            )
-
-        # Get tags
+                all_comments.append(
+                    {
+                        "author": author.get("fullName", "Unknown"),
+                        "author_login": author_login,
+                        "text": comment_text,
+                        "created": self._format_timestamp(comment.get("created")),
+                        "created_timestamp": comment.get("created"),  # Raw timestamp in milliseconds
+                        "updated": self._format_timestamp(comment.get("updated")),
+                        "updated_timestamp": comment.get("updated"),  # Raw timestamp in milliseconds
+                    }
+                )  # Get tags
         tags = [tag.get("name", "") for tag in issue.get("tags", [])]
+
+        # Extract GitHub links from description and custom fields
+        github_links = []
+        description = issue.get("description", "")
+        github_links.extend(self._extract_github_links(description))
+
+        # Check custom fields for GitHub links
+        for field_name, field_value in custom_fields.items():
+            if isinstance(field_value, str):
+                github_links.extend(self._extract_github_links(field_value))
+
+        # Remove duplicates and sort
+        github_links = sorted(list(set(github_links)))
 
         # Build comprehensive issue information
         return {
@@ -137,7 +161,9 @@ class YouTrackIssuesFetcher:
             "state": state,
             "priority": priority,
             "created": self._format_timestamp(issue.get("created")),
+            "created_timestamp": issue.get("created"),  # Raw timestamp in milliseconds
             "updated": self._format_timestamp(issue.get("updated")),
+            "updated_timestamp": issue.get("updated"),  # Raw timestamp in milliseconds
             "reporter": issue.get("reporter", {}).get("fullName", "Unknown"),
             "reporter_login": issue.get("reporter", {}).get("login", "Unknown"),
             "assignee": assignee,
@@ -148,6 +174,7 @@ class YouTrackIssuesFetcher:
             "user_commented": user_commented,
             "user_is_assignee": assignee == user_full_name if assignee else False,
             "url": f"{self.base_url}/issue/{issue.get('idReadable', '')}",
+            "github_links": github_links,
         }
 
     def fetch_issues_where_involved(self, max_results: int = 100) -> list[str]:
