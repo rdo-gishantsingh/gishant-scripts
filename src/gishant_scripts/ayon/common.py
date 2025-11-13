@@ -378,13 +378,16 @@ def compare_settings(
     return comparison
 
 
-def get_differences(comparison: dict[str, Any], only_diff: bool = False) -> dict[str, list[dict[str, Any]]]:
+def get_differences(
+    comparison: dict[str, Any], only_diff: bool = False, addon_filter: list[str] | None = None
+) -> dict[str, list[dict[str, Any]]]:
     """
     Extract differences from comparison results.
 
     Args:
         comparison: Comparison results from compare_settings()
         only_diff: If True, only include differences; if False, include all settings
+        addon_filter: Optional list of addon names to filter results
 
     Returns:
         Dictionary with lists of differences for each category
@@ -410,6 +413,11 @@ def get_differences(comparison: dict[str, Any], only_diff: bool = False) -> dict
 
     # Addon version differences
     all_addons = set(comparison["addons"]["bundle1"].keys()) | set(comparison["addons"]["bundle2"].keys())
+
+    # Apply addon filter if specified
+    if addon_filter:
+        all_addons = {addon for addon in all_addons if addon in addon_filter}
+
     for addon in sorted(all_addons):
         val1 = comparison["addons"]["bundle1"].get(addon, "Not installed")
         val2 = comparison["addons"]["bundle2"].get(addon, "Not installed")
@@ -448,6 +456,14 @@ def get_differences(comparison: dict[str, Any], only_diff: bool = False) -> dict
 
     # Settings differences
     all_keys = set(comparison["settings"]["bundle1"].keys()) | set(comparison["settings"]["bundle2"].keys())
+
+    # Apply addon filter if specified
+    if addon_filter:
+        all_keys = {
+            key for key in all_keys
+            if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
+        }
+
     for key in sorted(all_keys):
         val1 = comparison["settings"]["bundle1"].get(key, "Not set")
         val2 = comparison["settings"]["bundle2"].get(key, "Not set")
@@ -468,6 +484,14 @@ def get_differences(comparison: dict[str, Any], only_diff: bool = False) -> dict
         all_keys = set(comparison["project_settings"]["bundle1"].keys()) | set(
             comparison["project_settings"]["bundle2"].keys()
         )
+
+        # Apply addon filter if specified
+        if addon_filter:
+            all_keys = {
+                key for key in all_keys
+                if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
+            }
+
         for key in sorted(all_keys):
             val1 = comparison["project_settings"]["bundle1"].get(key, "Not set")
             val2 = comparison["project_settings"]["bundle2"].get(key, "Not set")

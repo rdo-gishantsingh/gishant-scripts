@@ -17,21 +17,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
-# Add rdo-ayon-utils to Python path
-RDO_AYON_UTILS_PATH = Path("/home/gisi/dev/repos/rdo-ayon-utils/python")
-if RDO_AYON_UTILS_PATH.exists() and str(RDO_AYON_UTILS_PATH) not in sys.path:
-    sys.path.insert(0, str(RDO_AYON_UTILS_PATH))
-
-try:
-    import ayon_api
-except ImportError:
-    ayon_api = None
-
-try:
-    from rdo_ayon_utils import ayon_utils
-except ImportError:
-    ayon_utils = None
-
 # Import common utilities
 from gishant_scripts.ayon.common import (
     AYONConnectionError,
@@ -49,11 +34,20 @@ from gishant_scripts.ayon.common import (
     setup_ayon_connection,
 )
 
-# ============================================================================
-# Unique Display and Export Functions
-# ============================================================================
-# All common functions (connection, bundle operations, comparison) have been
-# moved to gishant_scripts.ayon.common module
+# Add rdo-ayon-utils to Python path
+RDO_AYON_UTILS_PATH = Path("/home/gisi/dev/repos/rdo-ayon-utils/python")
+if RDO_AYON_UTILS_PATH.exists() and str(RDO_AYON_UTILS_PATH) not in sys.path:
+    sys.path.insert(0, str(RDO_AYON_UTILS_PATH))
+
+try:
+    import ayon_api
+except ImportError:
+    ayon_api = None
+
+try:
+    from rdo_ayon_utils import ayon_utils
+except ImportError:
+    ayon_utils = None
 
 
 # ============================================================================
@@ -603,12 +597,19 @@ def export_to_markdown(
     help="Project name for project-specific comparison (interactive if not specified)",
 )
 @click.option(
+    "--addon",
+    "-a",
+    type=str,
+    multiple=True,
+    help="Filter comparison to specific addon(s) (can be used multiple times)",
+)
+@click.option(
     "--interactive",
     "-i",
     is_flag=True,
     help="Interactive mode: select bundles and project from list",
 )
-def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, project, interactive):
+def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive):
     """
     Analyze and compare AYON bundles comprehensively.
 
@@ -639,10 +640,17 @@ def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, pr
 
         # Limit comparison depth to 3 levels
         gishant analyze-bundles dev staging --max-depth 3
+
+        # Filter to specific addon(s)
+        gishant analyze-bundles dev staging --addon maya
+        gishant analyze-bundles dev staging --addon maya --addon nuke
     """
     console = Console()
 
     try:
+        # Convert addon tuple to list or None
+        addon_filter = list(addon) if addon else None
+
         # Display header
         console.print(
             Panel.fit(
@@ -727,7 +735,7 @@ def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, pr
             max_depth=max_depth,
         )
 
-        differences = get_differences(comparison, only_diff=only_diff)
+        differences = get_differences(comparison, only_diff=only_diff, addon_filter=addon_filter)
         console.print("[green]✓ Comparison complete[/green]\n")
 
         # Display results
@@ -735,6 +743,8 @@ def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, pr
         result_title = f"[bold green]ANALYSIS RESULTS[/bold green]\n{bundle1_name} vs {bundle2_name}"
         if project_name:
             result_title += f"\nProject: {project_name}"
+        if addon_filter:
+            result_title += f"\nAddon Filter: {', '.join(addon_filter)}"
         console.print(
             Panel.fit(
                 result_title,

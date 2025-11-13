@@ -181,7 +181,7 @@ def preview_sync_changes(
     target_name: str,
     sync_mode: str,
     console: Console,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> None:
     """
     Display preview of changes that will be synced.
@@ -192,14 +192,15 @@ def preview_sync_changes(
         target_name: Target bundle/project name
         sync_mode: 'diff-only' or 'all'
         console: Rich console for display
-        addon_filter: Optional addon name to filter
+        addon_filter: Optional list of addon names to filter
     """
     console.print()
+    addon_filter_str = ", ".join(addon_filter) if addon_filter else ""
     console.print(
         Panel(
             f"[bold cyan]Sync Preview: {source_name} → {target_name}[/bold cyan]\n"
             f"Mode: [yellow]{sync_mode}[/yellow]"
-            + (f"\nAddon Filter: [magenta]{addon_filter}[/magenta]" if addon_filter else ""),
+            + (f"\nAddon Filter: [magenta]{addon_filter_str}[/magenta]" if addon_filter else ""),
             title="Sync Operation",
         )
     )
@@ -216,11 +217,13 @@ def preview_sync_changes(
 
         # Filter by addon if specified
         if addon_filter and category != "addons":
-            # Only show settings for the specific addon
-            filtered_items = [item for item in items if item.get("key", "").startswith(f"{addon_filter}.")]
+            # Only show settings for the specific addons
+            filtered_items = [
+                item for item in items if any(item.get("key", "").startswith(f"{addon}.") for addon in addon_filter)
+            ]
         elif addon_filter and category == "addons":
-            # Only show the specific addon
-            filtered_items = [item for item in items if item.get("key") == addon_filter]
+            # Only show the specific addons
+            filtered_items = [item for item in items if item.get("key") in addon_filter]
 
         if not filtered_items:
             continue
@@ -265,7 +268,7 @@ def sync_addon_versions(
     target_bundle_name: str,
     console: Console,
     dry_run: bool = False,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> bool:
     """
     Sync addon versions from source bundle to target bundle.
@@ -275,7 +278,7 @@ def sync_addon_versions(
         target_bundle_name: Name of target bundle
         console: Rich console for output
         dry_run: If True, don't apply changes
-        addon_filter: Optional addon name to filter
+        addon_filter: Optional list of addon names to filter
 
     Returns:
         True if sync successful
@@ -295,10 +298,12 @@ def sync_addon_versions(
 
         # Filter by addon if specified
         if addon_filter:
-            if addon_filter not in source_addons:
-                console.print(f"[yellow]Addon '{addon_filter}' not found in source bundle[/yellow]")
+            missing_addons = [addon for addon in addon_filter if addon not in source_addons]
+            if missing_addons:
+                console.print(f"[yellow]Addons not found in source bundle: {', '.join(missing_addons)}[/yellow]")
+            addons_to_sync = {addon: source_addons[addon] for addon in addon_filter if addon in source_addons}
+            if not addons_to_sync:
                 return True
-            addons_to_sync = {addon_filter: source_addons[addon_filter]}
         else:
             addons_to_sync = source_addons
 
@@ -406,7 +411,7 @@ def sync_project_settings(
     differences: list[dict[str, Any]],
     console: Console,
     dry_run: bool = False,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> bool:
     """
     Sync project-specific settings.
@@ -418,7 +423,7 @@ def sync_project_settings(
         differences: List of setting differences
         console: Rich console
         dry_run: If True, don't apply changes
-        addon_filter: Optional addon name to filter
+        addon_filter: Optional list of addon names to filter
 
     Returns:
         True if sync successful
@@ -429,7 +434,9 @@ def sync_project_settings(
     try:
         # Filter by addon if specified
         if addon_filter:
-            differences = [d for d in differences if addon_filter in d.get("path", "").split(".")[0]]
+            differences = [
+                d for d in differences if any(addon in d.get("path", "").split(".")[0] for addon in addon_filter)
+            ]
 
         if not differences:
             console.print("[yellow]No project settings to sync[/yellow]")
@@ -503,7 +510,7 @@ def sync_bundles(
     sync_mode: str = "diff-only",
     dry_run: bool = False,
     force: bool = False,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> bool:
     """
     Sync settings from source bundle to target bundle.
@@ -515,7 +522,7 @@ def sync_bundles(
         sync_mode: 'diff-only' or 'all'
         dry_run: If True, preview only
         force: If True, skip confirmations
-        addon_filter: Optional addon name to sync only that addon
+        addon_filter: Optional list of addon names to sync only those addons
 
     Returns:
         True if sync successful
@@ -541,7 +548,7 @@ def sync_bundles(
 
     # Get differences
     only_diff = sync_mode == "diff-only"
-    differences = get_differences(comparison, only_diff=only_diff)
+    differences = get_differences(comparison, only_diff=only_diff, addon_filter=addon_filter)
 
     # Preview changes
     preview_sync_changes(
@@ -607,58 +614,126 @@ def sync_project_to_bundle(
     sync_mode: str = "diff-only",
     dry_run: bool = False,
     force: bool = False,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> bool:
     """
     Sync project-specific settings to a bundle's studio settings.
 
+    This function extracts project overrides from a project and applies them
+    to the target bundle's studio settings, effectively promoting project-specific
+    configurations to be studio-wide defaults.
+
     Args:
-        project_name: Project name
-        source_bundle_name: Source bundle for project settings
-        target_bundle_name: Target bundle to update
+        project_name: Project name to get settings from
+        source_bundle_name: Source bundle context for project settings
+        target_bundle_name: Target bundle to update studio settings
         console: Rich console
         sync_mode: 'diff-only' or 'all'
         dry_run: If True, preview only
         force: If True, skip confirmations
-        addon_filter: Optional addon name to filter
+        addon_filter: Optional list of addon names to filter
 
     Returns:
         True if sync successful
     """
     console.print("\n[bold cyan]Fetching project and bundle data...[/bold cyan]")
 
-    # Fetch bundles and project settings
+    # Fetch bundles
     bundles_data = fetch_all_bundles(console)
+    source_bundle = get_bundle_by_name(bundles_data, source_bundle_name)
     target_bundle = get_bundle_by_name(bundles_data, target_bundle_name)
 
+    # Get project settings and target bundle settings
     source_project_settings = get_project_settings(source_bundle_name, project_name, console)
-    target_settings = get_bundle_settings(target_bundle_name, console)
-
-    # Compare (project settings vs bundle studio settings)
-    # This is a simplified comparison - would need more sophisticated logic
-    only_diff = sync_mode == "diff-only"
+    target_bundle_settings = get_bundle_settings(target_bundle_name, console)
 
     console.print(
         f"\n[yellow]Note:[/yellow] Syncing project '{project_name}' overrides "
         f"from bundle '{source_bundle_name}' to studio settings in '{target_bundle_name}'"
     )
 
-    # Preview and confirmation logic here
+    # Create comparison structure
+    # We compare project settings (as bundle1) vs target bundle studio settings (as bundle2)
+    comparison = compare_settings(
+        source_bundle,
+        source_project_settings,  # Project overrides as source
+        target_bundle,
+        target_bundle_settings,  # Bundle studio settings as target
+        bundle1_project_settings=source_project_settings,
+        bundle2_project_settings=None,  # Target has no project context
+    )
+
+    # Get differences (only from project_settings section)
+    only_diff = sync_mode == "diff-only"
+    all_differences = get_differences(comparison, only_diff=only_diff, addon_filter=addon_filter)
+
+    # Extract only the project_settings differences (these are the overrides)
+    # We'll apply these to the target bundle's studio settings
+    project_overrides = all_differences.get("project_settings", [])
+
+    if not project_overrides:
+        console.print("[green]✓ No project overrides to sync[/green]")
+        return True
+
+    # Create a differences dict for preview
+    preview_differences = {
+        "settings": project_overrides,  # Show as settings changes
+    }
+
+    # Preview changes
+    preview_sync_changes(
+        preview_differences,
+        f"{project_name} (project)",
+        f"{target_bundle_name} (studio)",
+        sync_mode,
+        console,
+        addon_filter,
+    )
+
+    # Confirm if not forced
     if not force and not dry_run:
         if not Confirm.ask("\n[bold yellow]Proceed with sync?[/bold yellow]"):
             console.print("[red]✗[/red] Sync cancelled")
             return False
 
+    # Create backup
     if not dry_run:
         try:
-            create_backup(target_bundle_name, target_settings, "bundle_from_project", console)
+            create_backup(
+                target_bundle_name,
+                target_bundle_settings,
+                "bundle_from_project",
+                console,
+                project_name=project_name,
+            )
         except BackupError as err:
             console.print(f"[red]✗ Backup failed: {err}[/red]")
             if not force:
                 return False
 
-    console.print("\n[bold green]✓ Sync completed successfully![/bold green]")
-    return True
+    # Perform sync
+    console.print("\n[bold cyan]Syncing project overrides to studio settings...[/bold cyan]")
+
+    try:
+        # Sync project overrides as studio settings
+        if project_overrides:
+            sync_studio_settings(
+                source_project_settings,
+                target_bundle_name,
+                project_overrides,
+                console,
+                dry_run,
+            )
+
+        console.print("\n[bold green]✓ Sync completed successfully![/bold green]")
+        console.print(
+            f"[dim]Project '{project_name}' overrides are now studio defaults in '{target_bundle_name}'[/dim]"
+        )
+        return True
+
+    except SyncError as err:
+        console.print(f"\n[bold red]✗ Sync failed: {err}[/bold red]")
+        return False
 
 
 def sync_projects(
@@ -669,7 +744,7 @@ def sync_projects(
     sync_mode: str = "diff-only",
     dry_run: bool = False,
     force: bool = False,
-    addon_filter: str | None = None,
+    addon_filter: list[str] | None = None,
 ) -> bool:
     """
     Sync settings between two projects.
@@ -682,7 +757,7 @@ def sync_projects(
         sync_mode: 'diff-only' or 'all'
         dry_run: If True, preview only
         force: If True, skip confirmations
-        addon_filter: Optional addon name to filter
+        addon_filter: Optional list of addon names to filter
 
     Returns:
         True if sync successful
@@ -714,7 +789,7 @@ def sync_projects(
 
     # Get differences
     only_diff = sync_mode == "diff-only"
-    differences = get_differences(comparison, only_diff=only_diff)
+    differences = get_differences(comparison, only_diff=only_diff, addon_filter=addon_filter)
 
     # Preview
     preview_sync_changes(
@@ -727,10 +802,7 @@ def sync_projects(
     )
 
     # Check if anything to sync (excluding metadata)
-    has_changes = any(
-        len(items) > 0 for category, items in differences.items()
-        if category != "metadata"
-    )
+    has_changes = any(len(items) > 0 for category, items in differences.items() if category != "metadata")
     if not has_changes:
         return True
 
@@ -795,12 +867,12 @@ def sync_projects(
 # ============================================================================
 
 
-def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, str | None]:
+def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, list[str] | None]:
     """
     Interactive mode for selecting sync operation.
 
     Returns:
-        Tuple of (operation, source, target, project/bundle, addon_filter)
+        Tuple of (operation, source, target, project/bundle, addon_filter list)
     """
     console.print("\n[bold cyan]AYON Bundle Sync - Interactive Mode[/bold cyan]\n")
 
@@ -853,8 +925,10 @@ def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, 
 
     # Ask for addon filter
     addon_filter = None
-    if Confirm.ask("\nSync specific addon only?", default=False):
-        addon_filter = Prompt.ask("Addon name")
+    if Confirm.ask("\nFilter to specific addon(s)?", default=False):
+        addon_input = Prompt.ask("Enter addon names (comma-separated)")
+        # Split by comma and strip whitespace
+        addon_filter = [addon.strip() for addon in addon_input.split(",") if addon.strip()]
 
     return (operation, source, target, context, addon_filter)
 
@@ -896,7 +970,8 @@ def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, 
     "--addon",
     "-a",
     type=str,
-    help="Sync only specific addon settings",
+    multiple=True,
+    help="Sync only specific addon settings (can be used multiple times)",
 )
 @click.option(
     "--dry-run",
@@ -931,6 +1006,9 @@ def main(source, target, operation, project, bundle, sync_mode, addon, dry_run, 
         # Sync specific addon only
         sync-bundles production staging --addon maya
 
+        # Sync multiple addons
+        sync-bundles production staging --addon maya --addon nuke --addon houdini
+
         # Sync project to bundle
         sync-bundles --operation project-bundle --project myproject
                      --bundle source_bundle target_bundle
@@ -947,6 +1025,9 @@ def main(source, target, operation, project, bundle, sync_mode, addon, dry_run, 
     console = Console()
 
     try:
+        # Convert addon tuple to list or None
+        addon_filter = list(addon) if addon else None
+
         # Setup AYON connection
         setup_ayon_connection(console)
 
@@ -970,17 +1051,17 @@ def main(source, target, operation, project, bundle, sync_mode, addon, dry_run, 
         success = False
 
         if operation == "bundle":
-            success = sync_bundles(source, target, console, sync_mode, dry_run, force, addon)
+            success = sync_bundles(source, target, console, sync_mode, dry_run, force, addon_filter)
         elif operation == "project-bundle":
             if not project or not bundle:
                 console.print("[red]✗ --project and --bundle are required for project-bundle operation[/red]")
                 raise click.Abort()
-            success = sync_project_to_bundle(project, source, target, console, sync_mode, dry_run, force, addon)
+            success = sync_project_to_bundle(project, source, target, console, sync_mode, dry_run, force, addon_filter)
         elif operation == "project":
             if not bundle:
                 console.print("[red]✗ --bundle is required for project operation[/red]")
                 raise click.Abort()
-            success = sync_projects(source, target, bundle, console, sync_mode, dry_run, force, addon)
+            success = sync_projects(source, target, bundle, console, sync_mode, dry_run, force, addon_filter)
 
         if not success:
             raise click.Abort()
