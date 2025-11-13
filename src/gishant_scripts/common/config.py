@@ -1,5 +1,7 @@
 """Configuration management for gishant scripts."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +19,7 @@ class YouTrackConfig:
     api_token: str | None
 
     @classmethod
-    def from_env(cls) -> "YouTrackConfig":
+    def from_env(cls) -> YouTrackConfig:
         """Load configuration from environment variables.
 
         Expected variables:
@@ -53,7 +55,7 @@ class GitHubConfig:
     token: str | None = None
 
     @classmethod
-    def from_env(cls) -> "GitHubConfig":
+    def from_env(cls) -> GitHubConfig:
         """Load configuration from environment variables.
 
         Expected variables:
@@ -81,7 +83,7 @@ class GoogleAIConfig:
     api_key: str | None
 
     @classmethod
-    def from_env(cls) -> "GoogleAIConfig":
+    def from_env(cls) -> GoogleAIConfig:
         """Load configuration from environment variables.
 
         Expected variables:
@@ -112,7 +114,7 @@ class AYONConfig:
     api_key: str | None = None
 
     @classmethod
-    def from_env(cls) -> "AYONConfig":
+    def from_env(cls) -> AYONConfig:
         """Load configuration from environment variables.
 
         Expected variables:

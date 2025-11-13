@@ -27,11 +27,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/yourusername/gishant-scripts.git
 cd gishant-scripts
 
-# Create virtual environment and install dependencies
+# Install dependencies and package (creates venv automatically)
 uv sync
-
-# Install in development mode
-uv pip install -e .
 ```
 
 ## Configuration
@@ -54,20 +51,23 @@ GOOGLE_API_KEY=your-google-ai-api-key
 
 ### Command-Line Tools
 
-After installation, the following commands are available:
+After installation, use `uv run` to execute commands:
 
 ```bash
 # Fetch YouTrack issues
-fetch-youtrack
+uv run fetch-youtrack
 
 # Fetch GitHub PRs
-fetch-github-prs
+uv run fetch-github-prs
 
 # Generate management report
-generate-report
+uv run generate-report
 
 # Generate work summary email
-generate-work-summary
+uv run generate-work-summary
+
+# Compare AYON bundles
+uv run gishant analyze-bundles --interactive
 ```
 
 ### Python Scripts
