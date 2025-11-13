@@ -178,4 +178,4 @@ Private repository - Internal use only
 
 ## Author
 
-Gishant Sharma - gishant@redefineoriginals.com
+Gishant Singh - gisi@redefine.co
