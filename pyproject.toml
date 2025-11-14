@@ -27,6 +27,9 @@ dev = [
 # Main CLI entry point
 gishant = "gishant_scripts.cli:main"
 
+# Media conversion CLI
+ffmpeg-convert = "gishant_scripts.media.ffmpeg_convert:cli"
+
 # Legacy individual script entry points (for backward compatibility)
 fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"
 fetch-github-prs = "gishant_scripts.github.fetch_prs:main"
