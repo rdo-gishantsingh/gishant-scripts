@@ -9,7 +9,17 @@ from rich.panel import Panel
 
 
 class YouTrackIssuesFetcher:
-    """Fetch YouTrack issues where the authenticated user is involved."""
+    """Fetch YouTrack issues where the authenticated user is involved.
+
+    SECURITY NOTICE: This class is READ-ONLY by design.
+    It ONLY performs GET requests to fetch data from YouTrack.
+    NO modifications (POST, PUT, PATCH, DELETE) are allowed.
+
+    All methods use HTTP GET requests exclusively to ensure data safety.
+    """
+
+    # Safety constant - ensures this class is strictly read-only
+    READ_ONLY_MODE: bool = True
 
     def __init__(self, base_url: str, token: str):
         """
@@ -18,6 +28,10 @@ class YouTrackIssuesFetcher:
         Args:
             base_url: Your YouTrack instance URL (e.g., 'https://yourcompany.youtrack.cloud')
             token: Your permanent API token
+
+        Security:
+            This client is configured for READ-ONLY operations.
+            Only HTTP GET requests are permitted.
         """
         self.base_url = base_url.rstrip("/")
         self.headers = {
@@ -27,8 +41,42 @@ class YouTrackIssuesFetcher:
         }
         self.console = Console()
 
+        # Verify read-only mode on initialization
+        self._ensure_read_only_mode()
+
+    def _ensure_read_only_mode(self) -> None:
+        """Validate that this instance operates in read-only mode.
+
+        Raises:
+            RuntimeError: If READ_ONLY_MODE is disabled
+        """
+        if not self.READ_ONLY_MODE:
+            raise RuntimeError(
+                "SECURITY ERROR: YouTrackIssuesFetcher must operate in READ_ONLY_MODE. "
+                "This class is designed exclusively for data fetching and does not support write operations."
+            )
+
+    def _validate_http_method(self, method: str) -> None:
+        """Validate that only GET requests are allowed.
+
+        Args:
+            method: HTTP method name
+
+        Raises:
+            ValueError: If method is not GET
+        """
+        if method.upper() != "GET":
+            raise ValueError(
+                f"SECURITY ERROR: HTTP {method} not allowed. "
+                f"YouTrackIssuesFetcher only supports GET requests (read-only operations)."
+            )
+
     def get_current_user(self) -> dict:
-        """Get the current authenticated user's information."""
+        """Get the current authenticated user's information.
+
+        Security: READ-ONLY operation using HTTP GET.
+        """
+        self._validate_http_method("GET")
         url = f"{self.base_url}/api/users/me"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
@@ -43,7 +91,10 @@ class YouTrackIssuesFetcher:
 
         Returns:
             Dictionary containing complete issue information
+
+        Security: READ-ONLY operation using HTTP GET.
         """
+        self._validate_http_method("GET")
         url = f"{self.base_url}/api/issues/{issue_id}"
 
         params = {
@@ -186,7 +237,10 @@ class YouTrackIssuesFetcher:
 
         Returns:
             List of issue IDs
+
+        Security: READ-ONLY operation using HTTP GET.
         """
+        self._validate_http_method("GET")
         # Get current user info first
         current_user = self.get_current_user()
         user_login = current_user.get("login", "")
@@ -222,7 +276,10 @@ class YouTrackIssuesFetcher:
 
         Returns:
             List of issue dictionaries with complete information
+
+        Security: READ-ONLY operation using HTTP GET.
         """
+        self._validate_http_method("GET")
         # Get current user info first
         current_user = self.get_current_user()
         user_login = current_user.get("login", "")

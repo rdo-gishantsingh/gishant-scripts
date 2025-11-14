@@ -19,20 +19,17 @@ import json
 from datetime import datetime, timedelta
 
 import click
-from google import genai
 from rich.console import Console
 from rich.panel import Panel
 
 from gishant_scripts.common.config import AppConfig
 from gishant_scripts.common.errors import ConfigurationError
+from gishant_scripts.common.gemini import (
+    AVAILABLE_MODELS,
+    DEFAULT_MODEL,
+    GeminiClient,
+)
 from gishant_scripts.youtrack.fetch_issues import YouTrackIssuesFetcher
-
-# Available Gemini models
-AVAILABLE_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash-exp",
-]
 
 
 def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
@@ -150,8 +147,7 @@ def generate_work_summary_with_gemini(
     Returns:
         Generated work summary text
     """
-    console = Console()
-    client = genai.Client(api_key=api_key)
+    gemini_client = GeminiClient(api_key=api_key, model=model)
 
     # Create detailed prompt with strict formatting requirements
     prompt = f"""
@@ -220,22 +216,13 @@ Generate the work summary now following the EXACT format specified above.
 Start with "COMPLETED:" or "IN PROGRESS:" headers and list issues under each category.
 """
 
-    console.print(f"[cyan]Generating work summary with {model}...[/cyan]")
-    console.print("[dim]This may take 30-60 seconds...[/dim]")
-
     try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
+        return gemini_client.generate_content(
+            prompt,
+            show_progress=True,
         )
-
-        if not response.text:
-            raise ValueError("Empty response from Gemini API")
-
-        return str(response.text)
-
     except Exception as e:
-        console.print(f"[red]Error generating summary: {e}[/red]")
+        gemini_client.console.print(f"[red]Error generating summary: {e}[/red]")
         raise
 
 
@@ -249,7 +236,7 @@ Start with "COMPLETED:" or "IN PROGRESS:" headers and list issues under each cat
 @click.option(
     "--model",
     type=click.Choice(AVAILABLE_MODELS, case_sensitive=False),
-    default="gemini-2.5-flash",
+    default=DEFAULT_MODEL,
     help="Gemini model to use for generation",
 )
 @click.option(
@@ -269,6 +256,9 @@ def main(weeks: int, model: str, save_to_file: str | None, max_issues: int):
 
     Fetches issues where you are involved (assigned or commented) from the last N weeks
     and generates a structured summary with Done/Current Work/Pending/Blockers sections.
+
+    SECURITY NOTICE: This tool operates in READ-ONLY mode.
+    It ONLY fetches data from YouTrack - NO modifications are made to any issues.
 
     Examples:
 
