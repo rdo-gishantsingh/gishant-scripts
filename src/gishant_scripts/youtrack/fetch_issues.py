@@ -2,8 +2,8 @@ import json
 import re
 from datetime import datetime
 
-import click
 import requests
+import typer
 from rich.console import Console
 from rich.panel import Panel
 
@@ -440,36 +440,27 @@ class YouTrackIssuesFetcher:
         self.console.print(f"\n[green]✓ Issue IDs saved to {filename}[/green]")
 
 
-@click.command()
-@click.option("--id", "issue_id", help="Fetch a specific issue by ID (e.g., PIPE-1234)")
-@click.option("--summary", is_flag=True, help="Show only the summary of the issue")
-@click.option("--description", "show_description", is_flag=True, help="Show only the description of the issue")
-@click.option("--comments", is_flag=True, help="Show only the comments of the issue")
-@click.option("--type", "show_type", is_flag=True, help="Show only the type of the issue")
-@click.option("--state", is_flag=True, help="Show only the state of the issue")
-@click.option("--priority", is_flag=True, help="Show only the priority of the issue")
-@click.option("--assignee", is_flag=True, help="Show only the assignee of the issue")
-@click.option("--reporter", is_flag=True, help="Show only the reporter of the issue")
-@click.option("--tags", is_flag=True, help="Show only the tags of the issue")
-@click.option("--url", "show_url", is_flag=True, help="Show only the URL of the issue")
-@click.option("--max-results", default=200, help="Maximum number of issues to fetch (default: 200)")
-@click.option("--save-json", is_flag=True, help="Save results to JSON file")
-@click.option("--save-ids", is_flag=True, help="Save issue IDs to text file")
+app = typer.Typer()
+
+
+@app.command()
 def main(
-    issue_id: str | None,
-    summary: bool,
-    show_description: bool,
-    comments: bool,
-    show_type: bool,
-    state: bool,
-    priority: bool,
-    assignee: bool,
-    reporter: bool,
-    tags: bool,
-    show_url: bool,
-    max_results: int,
-    save_json: bool,
-    save_ids: bool,
+    issue_id: str | None = typer.Option(None, "--id", help="Fetch a specific issue by ID (e.g., PIPE-1234)"),
+    summary: bool = typer.Option(False, "--summary", help="Show only the summary of the issue"),
+    show_description: bool = typer.Option(
+        False, "--description", help="Show only the description of the issue"
+    ),
+    comments: bool = typer.Option(False, "--comments", help="Show only the comments of the issue"),
+    show_type: bool = typer.Option(False, "--type", help="Show only the type of the issue"),
+    state: bool = typer.Option(False, "--state", help="Show only the state of the issue"),
+    priority: bool = typer.Option(False, "--priority", help="Show only the priority of the issue"),
+    assignee: bool = typer.Option(False, "--assignee", help="Show only the assignee of the issue"),
+    reporter: bool = typer.Option(False, "--reporter", help="Show only the reporter of the issue"),
+    tags: bool = typer.Option(False, "--tags", help="Show only the tags of the issue"),
+    show_url: bool = typer.Option(False, "--url", help="Show only the URL of the issue"),
+    max_results: int = typer.Option(200, "--max-results", help="Maximum number of issues to fetch"),
+    save_json: bool = typer.Option(False, "--save-json", help="Save results to JSON file"),
+    save_ids: bool = typer.Option(False, "--save-ids", help="Save issue IDs to text file"),
 ):
     """Fetch YouTrack issues where you're involved or a specific issue by ID.
 
@@ -505,12 +496,12 @@ def main(
         console.print("  YOUTRACK_URL=https://your-instance.youtrack.cloud")
         console.print("  YOUTRACK_API_TOKEN=perm-your-token-here")
         console.print("\n[dim]You can copy .env.example to .env and fill in your values.[/dim]")
-        raise click.Abort()
+        raise typer.Exit(1)
 
     # Initialize the fetcher
     if not config.youtrack.url or not config.youtrack.api_token:
         console.print("[red]✖ Missing YouTrack URL or API token in configuration[/red]")
-        raise click.Abort()
+        raise typer.Exit(1)
 
     fetcher = YouTrackIssuesFetcher(config.youtrack.url, config.youtrack.api_token)
 
@@ -576,13 +567,11 @@ def main(
         console.print(f"[red]❌ HTTP Error:[/red] {err}")
         if hasattr(err, "response"):
             console.print(f"[red]Response:[/red] {err.response.text}")
-        raise click.Abort()
+        raise typer.Exit(1)
     except Exception as err:
         console.print(f"[red]❌ Error:[/red] {err}")
-        raise click.Abort()
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())
+    app()
