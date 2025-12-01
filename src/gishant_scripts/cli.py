@@ -1215,3 +1215,26 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ============================================================================
+# Ayon and Kitsu Tools
+# ============================================================================
+
+try:
+    import typer
+
+    from gishant_scripts.ayon.cli import app as ayon_app
+    from gishant_scripts.kitsu.cli import app as kitsu_app
+
+    # Convert Typer apps to Click commands
+    ayon_cmd = typer.main.get_command(ayon_app)
+    kitsu_cmd = typer.main.get_command(kitsu_app)
+
+    # Add to main CLI
+    cli.add_command(ayon_cmd, name="ayon")
+    cli.add_command(kitsu_cmd, name="kitsu")
+
+except ImportError:
+    # If dependencies are missing, just log it but don't crash the main CLI
+    # This allows the CLI to work even if some optional deps are missing
+    pass

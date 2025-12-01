@@ -177,17 +177,17 @@ class YouTrackIssuesFetcher:
             if author_login == user_login:
                 user_commented = True
 
-                all_comments.append(
-                    {
-                        "author": author.get("fullName", "Unknown"),
-                        "author_login": author_login,
-                        "text": comment_text,
-                        "created": self._format_timestamp(comment.get("created")),
-                        "created_timestamp": comment.get("created"),  # Raw timestamp in milliseconds
-                        "updated": self._format_timestamp(comment.get("updated")),
-                        "updated_timestamp": comment.get("updated"),  # Raw timestamp in milliseconds
-                    }
-                )  # Get tags
+            all_comments.append(
+                {
+                    "author": author.get("fullName", "Unknown"),
+                    "author_login": author_login,
+                    "text": comment_text,
+                    "created": self._format_timestamp(comment.get("created")),
+                    "created_timestamp": comment.get("created"),  # Raw timestamp in milliseconds
+                    "updated": self._format_timestamp(comment.get("updated")),
+                    "updated_timestamp": comment.get("updated"),  # Raw timestamp in milliseconds
+                }
+            )
         tags = [tag.get("name", "") for tag in issue.get("tags", [])]
 
         # Extract GitHub links from description and custom fields

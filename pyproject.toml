@@ -14,6 +14,7 @@ dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
     "ayon-python-api>=1.0.9,<2",
+    "gazu>=0.9.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,9 @@ gishant = "gishant_scripts.cli:main"
 
 # Media conversion CLI
 ffmpeg-convert = "gishant_scripts.media.ffmpeg_convert:cli"
+
+# Bulk data management CLI for AYON and Kitsu
+bulk-data = "gishant_scripts.common.bulk_data_manager:app"
 
 # Legacy individual script entry points (for backward compatibility)
 fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"

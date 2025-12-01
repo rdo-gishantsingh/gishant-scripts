@@ -11,6 +11,7 @@ This repository contains personal utility scripts for:
 - **Maya Utilities**: Mesh optimization, namespace fixes, attribute queries
 - **Unreal Integration**: FBX imports, SM auto-assignment, benchmarking
 - **AYON Tools**: Product management and bundle checking
+- **Bulk Data Management**: Generate and clean test data for AYON and Kitsu (NEW! 🎉)
 
 ## Installation
 
@@ -45,6 +46,15 @@ YOUTRACK_TOKEN=your-permanent-token
 
 # Google AI (for report generation)
 GOOGLE_API_KEY=your-google-ai-api-key
+
+# AYON (for bulk data management)
+AYON_SERVER_URL_LOCAL=http://localhost:5000
+AYON_API_KEY_LOCAL=your-ayon-api-key
+
+# Kitsu (for bulk data management)
+KITSU_API_URL_LOCAL=http://localhost:8080/api
+KITSU_LOGIN_LOCAL=admin@example.com
+KITSU_PASSWORD_LOCAL=your-password
 ```
 
 ## Usage
@@ -68,6 +78,10 @@ uv run generate-work-summary
 
 # Compare AYON bundles
 uv run gishant analyze-bundles --interactive
+
+# Bulk data management for AYON and Kitsu
+source .venv/bin/activate
+bulk-data reset-and-generate --projects 2 --sequences 10 --shots 10 --yes
 ```
 
 ### Python Scripts
@@ -115,6 +129,48 @@ from gishant_scripts.github.fetch_prs import GitHubPRFetcher
 - **`check_bundles.py`**: Check AYON bundle configurations
 - **`kitsu_integration_demo.py`**: Kitsu integration examples
 - **`search_executable.py`**: Find executables in system PATH
+
+### Bulk Data Management (NEW! 🎉)
+Unified tool for managing test data across AYON and Kitsu systems.
+
+**Quick Start:**
+```bash
+source .venv/bin/activate
+
+# Clean up and generate fresh data (one command!)
+bulk-data reset-and-generate \
+  --projects 2 \
+  --sequences 10 \
+  --shots 10 \
+  --tasks 3 \
+  --users 5 \
+  --yes
+
+# Or use the shell script
+scripts/reset-and-populate.sh
+```
+
+**Features:**
+- ✅ Clean up test data from both AYON and Kitsu
+- ✅ Generate realistic bulk data with production naming conventions
+- ✅ Dry-run mode to preview changes safely
+- ✅ Progress bars and beautiful console output
+- ✅ Handles errors gracefully
+- ✅ Can target individual systems (--ayon-only, --kitsu-only)
+
+**Commands:**
+```bash
+bulk-data cleanup --dry-run              # Preview what will be deleted
+bulk-data cleanup --yes                  # Delete all test data
+bulk-data generate -p 2 -s 10 --shots 10 # Generate data only
+bulk-data reset-and-generate --yes       # Clean + generate (recommended)
+```
+
+**Documentation:**
+- **Quick Start:** [QUICK_START_BULK_DATA.md](QUICK_START_BULK_DATA.md)
+- **Full Guide:** [BULK_DATA_MANAGER_GUIDE.md](BULK_DATA_MANAGER_GUIDE.md)
+- **Usage Summary:** [USAGE_SUMMARY.md](USAGE_SUMMARY.md)
+- **Test Results:** [TEST_RESULTS.md](TEST_RESULTS.md)
 
 ## Development
 

@@ -102,6 +102,7 @@ class YouTrackIssueCreator:
         issue_type: str | None = None,
         priority: str | None = None,
         assignee: str | None = None,
+        submitted_for: str | None = None,
         dry_run: bool = True,
     ) -> dict[str, Any]:
         """Create a YouTrack issue.
@@ -113,6 +114,7 @@ class YouTrackIssueCreator:
             issue_type: Issue type (e.g., 'Bug', 'Feature', 'Task')
             priority: Priority (e.g., 'Critical', 'Major', 'Normal', 'Minor')
             assignee: Assignee login name (optional)
+            submitted_for: Submitted for user full name (optional)
             dry_run: If True, validate but don't create the issue
 
         Returns:
@@ -156,6 +158,9 @@ class YouTrackIssueCreator:
 
         if assignee:
             custom_fields.append({"$type": "SingleUserIssueCustomField", "name": "Assignee", "value": {"login": assignee}})
+
+        if submitted_for:
+            custom_fields.append({"$type": "SingleUserIssueCustomField", "name": "Submitted for", "value": {"login": submitted_for}})
 
         if custom_fields:
             payload["customFields"] = custom_fields
@@ -278,6 +283,7 @@ def create(
     issue_type: str | None = typer.Option(None, "--type", "-t", help="Issue type (Bug, Feature, Task, etc.)"),
     priority: str | None = typer.Option(None, "--priority", "-p", help="Priority (Critical, Major, Normal, Minor)"),
     assignee: str | None = typer.Option(None, "--assignee", "-a", help="Assignee login name"),
+    submitted_for: str | None = typer.Option(None, "--submitted-for", "-s", help="Submitted for user full name"),
     dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Validate without creating (default: True)"),
 ):
     """Create a new YouTrack issue.
@@ -334,6 +340,7 @@ def create(
             issue_type=issue_type,
             priority=priority,
             assignee=assignee,
+            submitted_for=submitted_for,
             dry_run=dry_run,
         )
 

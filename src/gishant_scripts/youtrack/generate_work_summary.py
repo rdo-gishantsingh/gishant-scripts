@@ -204,6 +204,8 @@ Blockers
 
 6. DATE CONTEXT: Today is {datetime.now().strftime("%Y-%m-%d")}. All issues have activity in the last {data["time_period_weeks"]} weeks.
 
+7. You are Gishant Singh, so use "I" instead of "we" or "Gishant" when writing.
+
 YOUTRACK ISSUES DATA:
 
 Total Issues: {data["total_issues"]}

@@ -8,12 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - FFmpeg video conversion tools with 10 presets (web, mobile, archive, GIF, etc.)
 - FFmpeg audio conversion tools with podcast and compression presets
 - Rich library integration for beautiful terminal output across all commands
 - Colored, styled CLI output with consistent formatting
 
 ### Changed
+
 - **BREAKING**: Renamed commands for better organization:
   - `convert-video` → `ffmpeg-video`
   - `convert-audio` → `ffmpeg-audio`
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved help text and command examples throughout
 
 ### Fixed
+
 - Type checking issue with Google AI API key configuration
 - Proper stderr routing for all error messages
 - Trailing whitespace in CLI module
@@ -34,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-11-10
 
 ### Added
+
 - Initial repository organization using uv package manager
 - Organized project structure with proper Python package layout
 - Created modular structure with separate packages for:
@@ -54,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - .env.example for credential configuration
 
 ### Scripts Included
+
 - **YouTrack**: fetch_issues.py
 - **GitHub**: fetch_prs.py
 - **Reports**: generate_report.py, generate_work_summary.py
@@ -62,11 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Utils**: ayon_products.py, check_bundles.py, kitsu_integration_demo.py, search_executable.py
 
 ### Dependencies
+
 - requests: HTTP client for API interactions
 - google-genai: Google Gemini AI for report generation
 - python-dotenv: Environment variable management
 
 ### Development
+
 - ruff: Code formatting and linting
 - pytest: Testing framework
 - pytest-cov: Test coverage reporting
