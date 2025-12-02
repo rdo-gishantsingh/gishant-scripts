@@ -959,13 +959,20 @@ def list_ffmpeg_presets(ctx, format):
     help="Project name for project-specific comparison (interactive if not specified)",
 )
 @click.option(
+    "--addon",
+    "-a",
+    type=str,
+    multiple=True,
+    help="Filter comparison to specific addon(s) (can be used multiple times)",
+)
+@click.option(
     "--interactive",
     "-i",
     is_flag=True,
     help="Interactive mode: select bundles and project from list",
 )
 @click.pass_context
-def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, interactive):
+def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive):
     """
     Compare settings between two AYON bundles.
 
@@ -996,6 +1003,10 @@ def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, outpu
         # Limit comparison depth to 3 levels
         gishant analyze-bundles prod staging --max-depth 3
 
+        # Filter to specific addon(s)
+        gishant analyze-bundles dev staging --addon maya
+        gishant analyze-bundles dev staging --addon maya --addon nuke
+
     Requires:
         - AYON server running and accessible
         - AYON_SERVER_URL and AYON_API_KEY in .env file
@@ -1004,36 +1015,26 @@ def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, outpu
     logger = ctx.obj["logger"]
 
     try:
-        # Import the standalone function and pass through arguments
-        # We need to invoke it directly since it's already a Click command
-        from click.testing import CliRunner
+        # Import the standalone command and invoke it directly
+        # We access the underlying function from the Click command object
+        from gishant_scripts.ayon.analyze_bundles import analyze_bundles_cli as analyze_bundles_cmd
 
-        from gishant_scripts.ayon.analyze_bundles import analyze_bundles_cli
+        # The command is a Click Command object, get its callback function
+        analyze_bundles_func = analyze_bundles_cmd.callback
 
-        runner = CliRunner()
-
-        # Build arguments list
-        args = []
-        if bundle1:
-            args.append(bundle1)
-        if bundle2:
-            args.append(bundle2)
-        if only_diff:
-            args.append("--only-diff")
-        if max_depth:
-            args.extend(["--max-depth", str(max_depth)])
-        if view != "both":
-            args.extend(["--view", view])
-        if output:
-            args.extend(["--output", str(output)])
-        if project:
-            args.extend(["--project", project])
-        if interactive:
-            args.append("--interactive")
-
-        # Run the command
-        result = runner.invoke(analyze_bundles_cli, args, catch_exceptions=False)
-        sys.exit(result.exit_code)
+        # Call the function directly with all arguments
+        # Note: addon is already a tuple from Click's multiple=True
+        analyze_bundles_func(
+            bundle1=bundle1,
+            bundle2=bundle2,
+            only_diff=only_diff,
+            max_depth=max_depth,
+            view=view,
+            output=output,
+            project=project,
+            addon=addon,
+            interactive=interactive,
+        )
 
     except ImportError as e:
         logger.error(f"Import error: {e}")
