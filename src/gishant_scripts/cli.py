@@ -971,8 +971,18 @@ def list_ffmpeg_presets(ctx, format):
     is_flag=True,
     help="Interactive mode: select bundles and project from list",
 )
+@click.option(
+    "--local",
+    is_flag=True,
+    help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)",
+)
+@click.option(
+    "--dev",
+    is_flag=True,
+    help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)",
+)
 @click.pass_context
-def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive):
+def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev):
     """
     Compare settings between two AYON bundles.
 
@@ -1034,6 +1044,8 @@ def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, outpu
             project=project,
             addon=addon,
             interactive=interactive,
+            local=local,
+            dev=dev,
         )
 
     except ImportError as e:
@@ -1102,8 +1114,18 @@ def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, outpu
     is_flag=True,
     help="Interactive mode: guided sync setup",
 )
+@click.option(
+    "--local",
+    is_flag=True,
+    help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)",
+)
+@click.option(
+    "--dev",
+    is_flag=True,
+    help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)",
+)
 @click.pass_context
-def sync_bundles_cli(ctx, source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive):
+def sync_bundles_cli(ctx, source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive, local, dev):
     """
     Sync AYON bundle and project settings.
 
@@ -1189,6 +1211,10 @@ def sync_bundles_cli(ctx, source, target, operation, project, bundle, sync_mode,
             args.append("--force")
         if interactive:
             args.append("--interactive")
+        if local:
+            args.append("--local")
+        if dev:
+            args.append("--dev")
 
         # Run the command
         result = runner.invoke(sync_main, args, catch_exceptions=False)

@@ -1,12 +1,10 @@
-import os
-
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from gishant_scripts.common.config import AppConfig
+from gishant_scripts.ayon.common import AYONConnectionError, setup_ayon_connection
 
 try:
     import ayon_api
@@ -17,40 +15,29 @@ except ImportError:
 app = typer.Typer(help="Ayon CRUD operations")
 console = Console()
 
+# Global state for environment flags
+_use_local = False
+_use_dev = False
+
+
+@app.callback()
+def main(
+    local: bool = typer.Option(False, "--local", help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)"),
+    dev: bool = typer.Option(False, "--dev", help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)"),
+):
+    """Ayon CRUD operations with environment selection."""
+    global _use_local, _use_dev
+    _use_local = local
+    _use_dev = dev
+
+
 def get_connection():
     """Establish connection to Ayon server."""
-    # Load environment variables via AppConfig
-    AppConfig()
-
-    if ayon_api is None:
-        console.print("[red]Error: ayon-python-api not installed.[/red]")
-        raise typer.Exit(code=1)
-
-    # Check for local test env vars first
-    server_url = os.getenv("AYON_SERVER_URL_LOCAL") or os.getenv("AYON_SERVER_URL")
-    api_key = os.getenv("AYON_API_KEY_LOCAL") or os.getenv("AYON_API_KEY")
-
-    if not server_url or not api_key:
-        console.print("[red]Error: AYON_SERVER_URL and AYON_API_KEY must be set.[/red]")
-        console.print("[yellow]Tip: Use AYON_SERVER_URL_LOCAL for testing.[/yellow]")
-        raise typer.Exit(code=1)
-
     try:
-        # Set env vars for ayon_api to pick up
-        os.environ["AYON_SERVER_URL"] = server_url
-        os.environ["AYON_API_KEY"] = api_key
-
-        # ayon_api auto-initializes on first call if env vars are set
-        # We can verify connection by checking if we can get the user or similar
-        if not ayon_api.is_connection_created():
-             # In newer versions, we might not need explicit init if env vars are set
-             # But if we need to force it, we might use change_token or similar if init is gone
-             # For now, let's assume auto-init works or try to create connection if needed
-             pass
-
+        setup_ayon_connection(console, use_local=_use_local, use_dev=_use_dev)
         return ayon_api
-    except Exception as e:
-        console.print(f"[red]Failed to connect to Ayon: {e}[/red]")
+    except AYONConnectionError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1)
 
 @app.command("list-projects")

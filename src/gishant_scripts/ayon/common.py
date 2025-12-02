@@ -4,9 +4,7 @@ This module provides shared functionality for analyzing and syncing AYON bundles
 including connection management, data fetching, and comparison operations.
 """
 
-import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,20 +12,12 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-# Add rdo-ayon-utils to Python path
-RDO_AYON_UTILS_PATH = Path("/home/gisi/dev/repos/rdo-ayon-utils/python")
-if RDO_AYON_UTILS_PATH.exists() and str(RDO_AYON_UTILS_PATH) not in sys.path:
-    sys.path.insert(0, str(RDO_AYON_UTILS_PATH))
+from gishant_scripts.common.config import AppConfig
 
 try:
     import ayon_api
 except ImportError:
     ayon_api = None
-
-try:
-    from rdo_ayon_utils import ayon_utils
-except ImportError:
-    ayon_utils = None
 
 
 # ============================================================================
@@ -52,12 +42,20 @@ class BundleNotFoundError(Exception):
 # ============================================================================
 
 
-def setup_ayon_connection(console: Console) -> None:
+def setup_ayon_connection(
+    console: Console,
+    env_file: Path | None = None,
+    use_local: bool = False,
+    use_dev: bool = False,
+) -> None:
     """
-    Set up AYON connection using rdo-ayon-utils or environment variables.
+    Set up AYON connection using configuration from .env file or environment variables.
 
     Args:
         console: Rich console for displaying messages
+        env_file: Optional path to .env file
+        use_local: Use local environment variables (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)
+        use_dev: Use dev environment variables (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)
 
     Raises:
         AYONConnectionError: If connection setup fails
@@ -65,34 +63,42 @@ def setup_ayon_connection(console: Console) -> None:
     if ayon_api is None:
         raise AYONConnectionError("ayon-python-api not installed. Install it with: uv pip install ayon-python-api")
 
-    # Try using rdo-ayon-utils first
-    if ayon_utils is not None:
-        try:
-            console.print("[dim]Connecting to AYON using rdo-ayon-utils...[/dim]")
-            ayon_utils.set_connection()
-            server_url = ayon_api.get_base_url()
-            console.print(f"[green]✓ Connected to AYON server: {server_url}[/green]")
-            return
-        except Exception as err:
-            console.print(f"[yellow]Warning: rdo-ayon-utils connection failed: {err}[/yellow]")
+    # Determine environment
+    if use_local:
+        ayon_environment = "local"
+    elif use_dev:
+        ayon_environment = "dev"
+    else:
+        ayon_environment = "production"
 
-    # Fallback to environment variables
-    server_url = os.getenv("AYON_SERVER_URL")
-    api_key = os.getenv("AYON_API_KEY")
+    # Load configuration (loads .env file automatically)
+    config = AppConfig(env_file=env_file, ayon_environment=ayon_environment)
+    ayon_config = config.ayon
 
-    if not server_url or not api_key:
+    # Validate AYON configuration
+    errors = ayon_config.validate()
+    if errors:
+        error_messages = [f"{field}: {msg}" for field, msg in errors.items()]
+        suffix = "_LOCAL" if use_local else "_DEV" if use_dev else ""
         raise AYONConnectionError(
-            "AYON connection not configured. Please set AYON_SERVER_URL and AYON_API_KEY environment variables."
+            "AYON configuration missing:\n  - " + "\n  - ".join(error_messages) + "\n\n"
+            f"Please set AYON_SERVER_URL{suffix} and AYON_API_KEY{suffix} in your .env file or environment."
         )
 
     try:
-        os.environ["AYON_SERVER_URL"] = server_url
-        os.environ["AYON_API_KEY"] = api_key
+        env_label = f" ({ayon_environment})" if ayon_environment != "production" else ""
+        console.print(f"[dim]Connecting to AYON{env_label}...[/dim]")
+
+        # Set environment variables for ayon_api (validated above, so values are not None)
+        assert ayon_config.server_url is not None
+        assert ayon_config.api_key is not None
+        os.environ["AYON_SERVER_URL"] = ayon_config.server_url
+        os.environ["AYON_API_KEY"] = ayon_config.api_key
 
         if not ayon_api.is_connection_created():
-            ayon_api.init()
+            ayon_api.create_connection()
 
-        console.print(f"[green]✓ Connected to AYON server: {server_url}[/green]")
+        console.print(f"[green]✓ Connected to AYON server{env_label}: {ayon_config.server_url}[/green]")
     except Exception as err:
         raise AYONConnectionError(f"Failed to connect to AYON server: {err}") from err
 
@@ -408,7 +414,7 @@ def get_differences(
 
         if not only_diff or val1 != val2:
             differences["metadata"].append(
-                {"key": key, "bundle1": val1, "bundle2": val2, "status": "changed" if val1 != val2 else "same"}
+                {"key": key, "bundle1": val1, "bundle2": val2, "status": "changed" if val1 != val2 else "unchanged"}
             )
 
     # Addon version differences
@@ -419,15 +425,15 @@ def get_differences(
         all_addons = {addon for addon in all_addons if addon in addon_filter}
 
     for addon in sorted(all_addons):
-        val1 = comparison["addons"]["bundle1"].get(addon, "Not installed")
-        val2 = comparison["addons"]["bundle2"].get(addon, "Not installed")
+        val1 = comparison["addons"]["bundle1"].get(addon)
+        val2 = comparison["addons"]["bundle2"].get(addon)
 
         if not only_diff or val1 != val2:
-            status = "same"
-            if val1 == "Not installed":
-                status = "only_in_bundle2"
-            elif val2 == "Not installed":
-                status = "only_in_bundle1"
+            status = "unchanged"
+            if val1 is None:
+                status = "added"
+            elif val2 is None:
+                status = "removed"
             elif val1 != val2:
                 status = "changed"
 
@@ -438,20 +444,20 @@ def get_differences(
         comparison["dependencies"]["bundle2"].keys()
     )
     for platform in sorted(all_platforms):
-        val1 = comparison["dependencies"]["bundle1"].get(platform, {})
-        val2 = comparison["dependencies"]["bundle2"].get(platform, {})
+        val1 = comparison["dependencies"]["bundle1"].get(platform)
+        val2 = comparison["dependencies"]["bundle2"].get(platform)
 
         if not only_diff or val1 != val2:
-            status = "same"
-            if not val1:
-                status = "only_in_bundle2"
-            elif not val2:
-                status = "only_in_bundle1"
+            status = "unchanged"
+            if val1 is None:
+                status = "added"
+            elif val2 is None:
+                status = "removed"
             elif val1 != val2:
                 status = "changed"
 
             differences["dependencies"].append(
-                {"key": platform, "bundle1": json.dumps(val1), "bundle2": json.dumps(val2), "status": status}
+                {"key": platform, "bundle1": val1, "bundle2": val2, "status": status}
             )
 
     # Settings differences
@@ -465,15 +471,15 @@ def get_differences(
         }
 
     for key in sorted(all_keys):
-        val1 = comparison["settings"]["bundle1"].get(key, "Not set")
-        val2 = comparison["settings"]["bundle2"].get(key, "Not set")
+        val1 = comparison["settings"]["bundle1"].get(key)
+        val2 = comparison["settings"]["bundle2"].get(key)
 
         if not only_diff or val1 != val2:
-            status = "same"
-            if val1 == "Not set":
-                status = "only_in_bundle2"
-            elif val2 == "Not set":
-                status = "only_in_bundle1"
+            status = "unchanged"
+            if val1 is None:
+                status = "added"
+            elif val2 is None:
+                status = "removed"
             elif val1 != val2:
                 status = "changed"
 
@@ -493,15 +499,15 @@ def get_differences(
             }
 
         for key in sorted(all_keys):
-            val1 = comparison["project_settings"]["bundle1"].get(key, "Not set")
-            val2 = comparison["project_settings"]["bundle2"].get(key, "Not set")
+            val1 = comparison["project_settings"]["bundle1"].get(key)
+            val2 = comparison["project_settings"]["bundle2"].get(key)
 
             if not only_diff or val1 != val2:
-                status = "same"
-                if val1 == "Not set":
-                    status = "only_in_bundle2"
-                elif val2 == "Not set":
-                    status = "only_in_bundle1"
+                status = "unchanged"
+                if val1 is None:
+                    status = "added"
+                elif val2 is None:
+                    status = "removed"
                 elif val1 != val2:
                     status = "changed"
 
@@ -513,15 +519,15 @@ def get_differences(
     if "anatomy" in comparison:
         all_keys = set(comparison["anatomy"]["bundle1"].keys()) | set(comparison["anatomy"]["bundle2"].keys())
         for key in sorted(all_keys):
-            val1 = comparison["anatomy"]["bundle1"].get(key, "Not set")
-            val2 = comparison["anatomy"]["bundle2"].get(key, "Not set")
+            val1 = comparison["anatomy"]["bundle1"].get(key)
+            val2 = comparison["anatomy"]["bundle2"].get(key)
 
             if not only_diff or val1 != val2:
-                status = "same"
-                if val1 == "Not set":
-                    status = "only_in_bundle2"
-                elif val2 == "Not set":
-                    status = "only_in_bundle1"
+                status = "unchanged"
+                if val1 is None:
+                    status = "added"
+                elif val2 is None:
+                    status = "removed"
                 elif val1 != val2:
                     status = "changed"
 

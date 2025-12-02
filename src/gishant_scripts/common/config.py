@@ -112,21 +112,31 @@ class AYONConfig:
 
     server_url: str | None = None
     api_key: str | None = None
+    environment: str = "production"  # production, dev, or local
 
     @classmethod
-    def from_env(cls) -> AYONConfig:
+    def from_env(cls, environment: str = "production") -> AYONConfig:
         """Load configuration from environment variables.
 
-        Expected variables:
-            AYON_SERVER_URL: AYON server URL (optional, uses ayon_api defaults)
-            AYON_API_KEY: AYON API key (optional, uses ayon_api defaults)
+        Args:
+            environment: Environment to use - "production", "dev", or "local".
+                        - production: uses AYON_SERVER_URL, AYON_API_KEY
+                        - dev: uses AYON_SERVER_URL_DEV, AYON_API_KEY_DEV
+                        - local: uses AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL
 
         Returns:
             AYONConfig instance
         """
+        suffix = ""
+        if environment == "dev":
+            suffix = "_DEV"
+        elif environment == "local":
+            suffix = "_LOCAL"
+
         return cls(
-            server_url=os.getenv("AYON_SERVER_URL"),
-            api_key=os.getenv("AYON_API_KEY"),
+            server_url=os.getenv(f"AYON_SERVER_URL{suffix}"),
+            api_key=os.getenv(f"AYON_API_KEY{suffix}"),
+            environment=environment,
         )
 
     def validate(self) -> dict[str, str]:
@@ -135,20 +145,36 @@ class AYONConfig:
         Returns:
             Dict of field names to error messages (empty if valid)
         """
-        # AYON config is optional since ayon_api uses its own config
-        return {}
+        suffix = ""
+        if self.environment == "dev":
+            suffix = "_DEV"
+        elif self.environment == "local":
+            suffix = "_LOCAL"
+
+        errors = {}
+        if not self.server_url:
+            errors["server_url"] = f"AYON_SERVER_URL{suffix} not set"
+        if not self.api_key:
+            errors["api_key"] = f"AYON_API_KEY{suffix} not set"
+        return errors
 
 
 class AppConfig:
     """Main application configuration loader."""
 
-    def __init__(self, env_file: Path | None = None, load_env: bool = True):
+    def __init__(
+        self,
+        env_file: Path | None = None,
+        load_env: bool = True,
+        ayon_environment: str = "production",
+    ):
         """Initialize configuration from environment.
 
         Args:
             env_file: Optional path to .env file. If not provided,
                      looks for .env in current directory or ~/.gishant_scripts.env
             load_env: Whether to load from .env files (default True). Set False in tests.
+            ayon_environment: AYON environment to use - "production", "dev", or "local".
 
         Raises:
             ConfigurationError: If configuration is invalid
@@ -171,7 +197,7 @@ class AppConfig:
         self.youtrack = YouTrackConfig.from_env()
         self.github = GitHubConfig.from_env()
         self.google_ai = GoogleAIConfig.from_env()
-        self.ayon = AYONConfig.from_env()
+        self.ayon = AYONConfig.from_env(environment=ayon_environment)
 
         # Store output directory
         self.output_dir = Path(os.getenv("OUTPUT_DIR", "./output"))
