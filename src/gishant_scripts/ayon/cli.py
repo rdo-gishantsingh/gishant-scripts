@@ -170,8 +170,18 @@ def _register_batch_commands():
     app.command("simulate-load", help="Simulate concurrent user load to stress-test sync service")(simulate_load_cli)
 
 
+def _register_representation_commands():
+    """Register representation commands."""
+    from gishant_scripts.ayon.cli.get_representation_cli import get_representation_cli
+
+    app.command("get-representation", help="Get representation for a product in a folder")(get_representation_cli)
+
+
 # Register batch commands
 _register_batch_commands()
+
+# Register representation commands
+_register_representation_commands()
 
 if __name__ == "__main__":
     app()

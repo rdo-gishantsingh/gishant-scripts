@@ -320,7 +320,8 @@ def export_to_markdown(
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode: select bundles and project from list")
 @click.option("--local", is_flag=True, help="Use local environment")
 @click.option("--dev", is_flag=True, help="Use dev environment")
-def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev):
+@click.option("--uat", is_flag=True, help="Use UAT environment")
+def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev, uat):
     """
     Compare two AYON bundles.
 
@@ -346,7 +347,7 @@ def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, pr
         console.print()
 
         # Connect
-        setup_ayon_connection(console, use_local=local, use_dev=dev)
+        setup_ayon_connection(console, use_local=local, use_dev=dev, use_uat=uat)
 
         # Fetch bundles
         bundles_data = fetch_all_bundles(console)

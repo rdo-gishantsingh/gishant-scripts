@@ -37,6 +37,7 @@ bulk-data = "gishant_scripts.common.bulk_data_manager:app"
 # Legacy individual script entry points (for backward compatibility)
 fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"
 create-youtrack-issue = "gishant_scripts.youtrack.create_issue:main"
+update-epic-progress = "gishant_scripts.youtrack.update_epic_progress:main"
 fetch-github-prs = "gishant_scripts.github.fetch_prs:main"
 generate-copilot-prompt = "gishant_scripts.youtrack.generate_copilot_prompt:main"
 generate-report = "gishant_scripts.utils.generate_report:main"
