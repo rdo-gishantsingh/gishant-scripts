@@ -1,0 +1,111 @@
+services:
+  db:
+    image: postgres:${AYON_STACK_POSTGRES_TAG:-15}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ayon}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    expose: [5432]
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"
+      - "ayon-db-data:/var/lib/postgresql/data"
+      # - ./backups:/backups
+    environment:
+      - "POSTGRES_USER=${POSTGRES_USER:-ayon}"
+      - "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ayon}"
+      - "POSTGRES_DB=${POSTGRES_DB:-ayon}"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ayon_pgadmin
+    restart: always
+    networks:
+      - default
+      - pipeline_network
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-9080}:80"
+    volumes:
+      - ayon-pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    expose: [6379]
+
+  server:
+    build:
+      context: ../../../../../ayon-docker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/info"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose: [5000]
+    ports:
+      - ${AYON_STACK_SERVER_PORT:-5000}:5000
+    volumes:
+      - "../../../../../ayon-docker/addons:/addons"
+      - "../../../../../ayon-docker/storage:/storage"
+      - "/etc/localtime:/etc/localtime:ro"
+      - "../../../../../ayon-docker/backend:/backend"
+    environment:
+      - "AYON_SERVER_WORKERS=${AYON_SERVER_WORKERS:-1}"
+      - "AYON_SERVER_TIMEOUT=${AYON_SERVER_TIMEOUT:-120}"
+      - "AYON_SERVER_LOG_LEVEL=${AYON_SERVER_LOG_LEVEL:-warning}"
+      - "AYON_SERVER_TYPE=${AYON_SERVER_TYPE:-gunicorn}"
+      - "AYON_POSTGRES_POOL_SIZE=${AYON_POSTGRES_POOL_SIZE:-64}"
+      - "AYON_POSTGRES_POOL_TIMEOUT=${AYON_POSTGRES_POOL_TIMEOUT:-20}"
+      - "AYON_POSTGRES_URL=${AYON_POSTGRES_URL:-postgres://ayon:ayon@db:5432/ayon}"
+      - "AYON_REDIS_URL=redis://redis:6379/0"
+      - "AYON_API_KEY=${AYON_API_KEY:-veryinsecurapikey}"
+
+  worker:
+    hostname: worker
+    image: ynput/ayon-ash:latest
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - "AYON_API_KEY=${AYON_API_KEY:-veryinsecurapikey}"
+      - "AYON_SERVER_URL=${AYON_SERVER_URL:-http://server:5000}"
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: ayon_dozzle
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    environment:
+      - "DOZZLE_LEVEL=${DOZZLE_LEVEL:-info}"
+      - "DOZZLE_TAILSIZE=${DOZZLE_TAILSIZE:-300}"
+
+volumes:
+  ayon-db-data: {}
+  ayon-pgadmin-data: {}
+
+networks:
+  pipeline_network:
+    external: true

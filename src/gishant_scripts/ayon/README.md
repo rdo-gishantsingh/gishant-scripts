@@ -35,7 +35,7 @@ gishant sync-bundles dev_bundle staging_bundle -a maya --dry-run
 uv pip install ayon-python-api rich click
 
 # Configure environment (.env file)
-AYON_SERVER_URL=http://ayon-server:5000
+AYON_SERVER_URL=http://server:5000
 AYON_API_KEY=your-api-key
 
 # For dev/local servers

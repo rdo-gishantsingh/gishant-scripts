@@ -47,6 +47,7 @@ def setup_ayon_connection(
     env_file: Path | None = None,
     use_local: bool = False,
     use_dev: bool = False,
+    use_uat: bool = False,
 ) -> None:
     """
     Set up AYON connection using configuration from .env file or environment variables.
@@ -56,6 +57,7 @@ def setup_ayon_connection(
         env_file: Optional path to .env file
         use_local: Use local environment variables (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)
         use_dev: Use dev environment variables (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)
+        use_uat: Use UAT environment variables (AYON_SERVER_URL_UAT, AYON_API_KEY_UAT)
 
     Raises:
         AYONConnectionError: If connection setup fails
@@ -68,6 +70,8 @@ def setup_ayon_connection(
         ayon_environment = "local"
     elif use_dev:
         ayon_environment = "dev"
+    elif use_uat:
+        ayon_environment = "uat"
     else:
         ayon_environment = "production"
 
@@ -79,7 +83,7 @@ def setup_ayon_connection(
     errors = ayon_config.validate()
     if errors:
         error_messages = [f"{field}: {msg}" for field, msg in errors.items()]
-        suffix = "_LOCAL" if use_local else "_DEV" if use_dev else ""
+        suffix = "_LOCAL" if use_local else "_DEV" if use_dev else "_UAT" if use_uat else ""
         raise AYONConnectionError(
             "AYON configuration missing:\n  - " + "\n  - ".join(error_messages) + "\n\n"
             f"Please set AYON_SERVER_URL{suffix} and AYON_API_KEY{suffix} in your .env file or environment."

@@ -119,9 +119,10 @@ class AYONConfig:
         """Load configuration from environment variables.
 
         Args:
-            environment: Environment to use - "production", "dev", or "local".
+            environment: Environment to use - "production", "dev", "uat", or "local".
                         - production: uses AYON_SERVER_URL, AYON_API_KEY
                         - dev: uses AYON_SERVER_URL_DEV, AYON_API_KEY_DEV
+                        - uat: uses AYON_SERVER_URL_UAT, AYON_API_KEY_UAT
                         - local: uses AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL
 
         Returns:
@@ -130,6 +131,8 @@ class AYONConfig:
         suffix = ""
         if environment == "dev":
             suffix = "_DEV"
+        elif environment == "uat":
+            suffix = "_UAT"
         elif environment == "local":
             suffix = "_LOCAL"
 
@@ -148,6 +151,8 @@ class AYONConfig:
         suffix = ""
         if self.environment == "dev":
             suffix = "_DEV"
+        elif self.environment == "uat":
+            suffix = "_UAT"
         elif self.environment == "local":
             suffix = "_LOCAL"
 
