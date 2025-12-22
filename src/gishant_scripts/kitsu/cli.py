@@ -195,8 +195,18 @@ def _register_batch_commands():
     app.command("simulate-load", help="Simulate concurrent user load to stress-test sync service")(simulate_load_cli)
 
 
+def _register_restore_commands():
+    """Register database restore commands."""
+    from gishant_scripts.kitsu.restore_db_cli import restore
+
+    app.command("restore-db", help="Restore Kitsu database from backup file")(restore)
+
+
 # Register batch commands
 _register_batch_commands()
+
+# Register restore commands
+_register_restore_commands()
 
 if __name__ == "__main__":
     app()

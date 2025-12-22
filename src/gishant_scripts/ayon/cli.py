@@ -177,11 +177,21 @@ def _register_representation_commands():
     app.command("get-representation", help="Get representation for a product in a folder")(get_representation_cli)
 
 
+def _register_restore_commands():
+    """Register database restore commands."""
+    from gishant_scripts.ayon.restore_db_cli import restore
+
+    app.command("restore-db", help="Restore AYON database from backup file")(restore)
+
+
 # Register batch commands
 _register_batch_commands()
 
 # Register representation commands
 _register_representation_commands()
+
+# Register restore commands
+_register_restore_commands()
 
 if __name__ == "__main__":
     app()
