@@ -34,6 +34,10 @@ ffmpeg-convert = "gishant_scripts.media.ffmpeg_convert:cli"
 # Bulk data management CLI for AYON and Kitsu
 bulk-data = "gishant_scripts.common.bulk_data_manager:app"
 
+# Database restore CLIs
+restore-ayon-db = "gishant_scripts.ayon.restore_db_cli:app"
+restore-kitsu-db = "gishant_scripts.kitsu.restore_db_cli:app"
+
 # Legacy individual script entry points (for backward compatibility)
 fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"
 create-youtrack-issue = "gishant_scripts.youtrack.create_issue:main"
