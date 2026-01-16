@@ -44,10 +44,10 @@ services:
     expose: [6379]
 
   server:
-    # build:
-    #   context: ../../../../../ayon-docker
-    #   dockerfile: Dockerfile
-    image: ynput/ayon:1.12.0-20250924
+    build:
+      context: ../../../../../ayon-docker
+      dockerfile: Dockerfile
+    # image: ynput/ayon:1.12.0-20250924
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/info"]
@@ -88,7 +88,7 @@ services:
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     environment:
-      - "AYON_API_KEY=${AYON_API_KEY:-veryinsecurapikey}"
+      - "AYON_API_KEY=${AYON_API_KEY:-a306f6bdca604242a57600a697e9d3e5}"
       - "AYON_SERVER_URL=${AYON_SERVER_URL:-http://server:5000}"
 
   dozzle:
