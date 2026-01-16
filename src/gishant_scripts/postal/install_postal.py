@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 import os
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 import time
-from typing import Optional, Dict, Any
+from typing import Any
+
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.prompt import Confirm
 
 # Try to import yaml
 try:
@@ -22,7 +23,10 @@ except ImportError:
 console = Console()
 app = typer.Typer()
 
-def run_command(command: list[str], shell: bool = False, check: bool = True, sudo: bool = False) -> subprocess.CompletedProcess:
+
+def run_command(
+    command: list[str], shell: bool = False, check: bool = True, sudo: bool = False
+) -> subprocess.CompletedProcess:
     """Run a command, optionally with sudo."""
     if sudo and os.geteuid() != 0:
         command = ["sudo"] + command
@@ -39,19 +43,22 @@ def run_command(command: list[str], shell: bool = False, check: bool = True, sud
         console.print(f"[red]Stdout:[/red] {e.stdout}")
         raise
 
+
 def ensure_sudo():
     """Ensure the script has sudo privileges."""
     if os.geteuid() != 0:
         console.print("[yellow]This script requires sudo privileges.[/yellow]")
         try:
-            subprocess.check_call(['sudo', '-v'])
+            subprocess.check_call(["sudo", "-v"])
         except subprocess.CalledProcessError:
             console.print("[bold red]Sudo authentication failed. Exiting.[/bold red]")
             raise typer.Exit(1)
 
+
 def find_free_port(start_port: int, max_port: int = 6000) -> int:
     """Find a free port starting from start_port."""
     import socket
+
     for port in range(start_port, max_port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -60,6 +67,7 @@ def find_free_port(start_port: int, max_port: int = 6000) -> int:
             except OSError:
                 continue
     raise RuntimeError("No free ports found.")
+
 
 def perform_cleanup():
     """Completely remove existing Postal installation."""
@@ -83,8 +91,8 @@ def perform_cleanup():
     paths = [
         "/opt/postal/config",
         "/opt/postal/caddy-data",
-        "/opt/postal/install", # The repo itself
-        "/usr/bin/postal"      # The symlink
+        "/opt/postal/install",  # The repo itself
+        "/usr/bin/postal",  # The symlink
     ]
 
     for path in paths:
@@ -94,14 +102,19 @@ def perform_cleanup():
 
     console.print("[green]Cleanup complete. Starting fresh.[/green]")
 
+
 def check_and_cleanup(force: bool):
     """Check for existing install and prompt for cleanup."""
     indicators = [
         os.path.exists("/opt/postal/config/postal.yml"),
         os.path.exists("/usr/bin/postal"),
         # check for our containers by name
-        shutil.which("docker") and subprocess.run(["docker", "ps", "-a", "-q", "-f", "name=postal-mariadb"], capture_output=True).stdout.strip(),
-        shutil.which("docker") and subprocess.run(["docker", "ps", "-a", "-q", "-f", "name=postal-caddy"], capture_output=True).stdout.strip()
+        shutil.which("docker")
+        and subprocess.run(
+            ["docker", "ps", "-a", "-q", "-f", "name=postal-mariadb"], capture_output=True
+        ).stdout.strip(),
+        shutil.which("docker")
+        and subprocess.run(["docker", "ps", "-a", "-q", "-f", "name=postal-caddy"], capture_output=True).stdout.strip(),
     ]
 
     if any(indicators):
@@ -109,22 +122,28 @@ def check_and_cleanup(force: bool):
         if force:
             perform_cleanup()
         else:
-            if Confirm.ask("Do you want to [bold red]WIPE[/bold red] the existing installation and start fresh?", default=False):
+            if Confirm.ask(
+                "Do you want to [bold red]WIPE[/bold red] the existing installation and start fresh?", default=False
+            ):
                 perform_cleanup()
             else:
-                console.print("[dim]Proceeding with existing components (skipping creation steps if resources exist)...[/dim]")
+                console.print(
+                    "[dim]Proceeding with existing components (skipping creation steps if resources exist)...[/dim]"
+                )
+
 
 def check_system_requirements():
     """Check basic system requirements."""
     console.print(Panel("Checking System Requirements", style="bold blue"))
 
     # Check RAM
-    total_ram_gb = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024.**3)
+    total_ram_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024.0**3)
     console.print(f"Detected RAM: [bold]{total_ram_gb:.2f} GB[/bold]")
     if total_ram_gb < 3.5:
         console.print("[yellow]Warning: Postal recommends at least 4GB of RAM.[/yellow]")
         if not Confirm.ask("Do you want to continue anyway?", default=True):
             raise typer.Exit()
+
 
 def install_system_utils():
     """Install git, curl, jq if missing."""
@@ -135,7 +154,9 @@ def install_system_utils():
 
     if to_install:
         console.print(f"Installing missing utilities: {', '.join(to_install)}")
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+        ) as progress:
             progress.add_task(description="Installing...", total=None)
             # Detect OS package manager
             if shutil.which("apt"):
@@ -146,11 +167,14 @@ def install_system_utils():
             elif shutil.which("dnf"):
                 run_command(["dnf", "install", "-y"] + to_install, sudo=True)
             else:
-                console.print("[bold red]Could not detect package manager. Please install git, curl, jq manually.[/bold red]")
+                console.print(
+                    "[bold red]Could not detect package manager. Please install git, curl, jq manually.[/bold red]"
+                )
                 raise typer.Exit(1)
         console.print("[green]System utilities installed.[/green]")
     else:
         console.print("[green]All system utilities checked.[/green]")
+
 
 def check_docker():
     """Check if docker and docker compose are installed."""
@@ -165,8 +189,9 @@ def check_docker():
         run_command(["docker", "compose", "version"], check=True)
         console.print("[green]Docker and Docker Compose are available.[/green]")
     except subprocess.CalledProcessError:
-         console.print("[bold red]Docker Compose plugin 'docker compose' is not available.[/bold red]")
-         raise typer.Exit(1)
+        console.print("[bold red]Docker Compose plugin 'docker compose' is not available.[/bold red]")
+        raise typer.Exit(1)
+
 
 def setup_postal_repo():
     """Clone postal installation repo and link binary."""
@@ -183,6 +208,7 @@ def setup_postal_repo():
     else:
         console.print("Postal binary already linked.")
 
+
 def setup_database(db_password: str):
     """Run MariaDB container."""
     console.print(Panel("Setting up MariaDB", style="bold blue"))
@@ -193,20 +219,28 @@ def setup_database(db_password: str):
         return
 
     cmd = [
-        "docker", "run", "-d",
-        "--name", "postal-mariadb",
-        "-p", "127.0.0.1:3306:3306",
-        "--restart", "always",
-        "-e", "MARIADB_DATABASE=postal",
-        "-e", f"MARIADB_ROOT_PASSWORD={db_password}",
-        "mariadb"
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        "postal-mariadb",
+        "-p",
+        "127.0.0.1:3306:3306",
+        "--restart",
+        "always",
+        "-e",
+        "MARIADB_DATABASE=postal",
+        "-e",
+        f"MARIADB_ROOT_PASSWORD={db_password}",
+        "mariadb",
     ]
     run_command(cmd)
     console.print("[green]MariaDB container started.[/green]")
     console.print("Waiting for Database to initialize...")
     time.sleep(10)
 
-def update_postal_config_yaml(updates: Dict[str, Any]):
+
+def update_postal_config_yaml(updates: dict[str, Any]):
     """Update postal.yml using PyYAML for robust handling."""
     config_path = "/opt/postal/config/postal.yml"
     console.print(f"Updating configuration in {config_path}...")
@@ -215,14 +249,14 @@ def update_postal_config_yaml(updates: Dict[str, Any]):
         # Read the file (requires sudo, so we copy it to temp, edit, move back)
         temp_path = "/tmp/postal.yml.tmp"
         run_command(["sudo", "cp", config_path, temp_path])
-        run_command(["sudo", "chmod", "666", temp_path]) # make readable/writable
+        run_command(["sudo", "chmod", "666", temp_path])  # make readable/writable
 
-        with open(temp_path, 'r') as f:
+        with open(temp_path) as f:
             config = yaml.safe_load(f) or {}
 
         # Apply updates
         for key, value in updates.items():
-            keys = key.split('.')
+            keys = key.split(".")
             current = config
             for i, k in enumerate(keys[:-1]):
                 if k not in current:
@@ -230,7 +264,7 @@ def update_postal_config_yaml(updates: Dict[str, Any]):
                 current = current[k]
             current[keys[-1]] = value
 
-        with open(temp_path, 'w') as f:
+        with open(temp_path, "w") as f:
             yaml.dump(config, f, default_flow_style=False)
 
         # Move back
@@ -248,7 +282,7 @@ def bootstrap_postal(domain: str, db_password: str):
     console.print(Panel("Bootstrapping Postal Configuration", style="bold blue"))
 
     if os.path.exists("/opt/postal/config/postal.yml"):
-         console.print("[yellow]Configuration already exists. Skipping bootstrap.[/yellow]")
+        console.print("[yellow]Configuration already exists. Skipping bootstrap.[/yellow]")
     else:
         run_command(["postal", "bootstrap", domain], sudo=True)
         console.print("[green]Configuration bootstrapped.[/green]")
@@ -256,10 +290,8 @@ def bootstrap_postal(domain: str, db_password: str):
     console.print("Updating database password in config...")
 
     # We use our new YAML updater
-    update_postal_config_yaml({
-        "main_db.password": db_password,
-        "message_db.password": db_password
-    })
+    update_postal_config_yaml({"main_db.password": db_password, "message_db.password": db_password})
+
 
 def setup_caddy_config(domain: str, port: int):
     """Write Caddyfile configuration."""
@@ -276,11 +308,18 @@ def setup_caddy_config(domain: str, port: int):
 # and ensure your domain resolves publicly for Let's Encrypt.
 """
     try:
-        process = subprocess.Popen(['sudo', 'tee', '/opt/postal/config/Caddyfile'], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(
+            ["sudo", "tee", "/opt/postal/config/Caddyfile"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         process.communicate(input=caddy_content)
         console.print("[green]Caddyfile configured successfully.[/green]")
     except Exception as e:
         console.print(f"[red]Failed to write Caddyfile: {e}[/red]")
+
 
 def update_hosts_file(domain: str):
     """Add domain to /etc/hosts if not present."""
@@ -288,7 +327,7 @@ def update_hosts_file(domain: str):
 
     entry = f"127.0.0.1 {domain}"
     try:
-        with open("/etc/hosts", "r") as f:
+        with open("/etc/hosts") as f:
             content = f.read()
 
         if domain in content:
@@ -298,12 +337,7 @@ def update_hosts_file(domain: str):
         console.print(f"Adding '{entry}' to /etc/hosts...")
         # Use sudo tee -a with text=True to fix encoding issues
         cmd = ["sudo", "tee", "-a", "/etc/hosts"]
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            text=True
-        )
+        process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
         process.communicate(input=f"\n{entry}\n")
 
         if process.returncode == 0:
@@ -313,6 +347,7 @@ def update_hosts_file(domain: str):
 
     except Exception as e:
         console.print(f"[red]Failed to update /etc/hosts: {e}[/red]")
+
 
 def create_initial_user(email: str, password: str, first_name: str, last_name: str):
     """Create the initial admin user non-interactively."""
@@ -328,11 +363,7 @@ def create_initial_user(email: str, password: str, first_name: str, last_name: s
 
     try:
         process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         stdout, stderr = process.communicate(input=input_str)
 
@@ -342,12 +373,15 @@ def create_initial_user(email: str, password: str, first_name: str, last_name: s
             if "Email has already been taken" in stdout or "Email has already been taken" in stderr:
                 console.print("[yellow]User already exists. Skipping creation.[/yellow]")
             else:
-                console.print(f"[red]Failed to create user.[/red]")
-                if stderr: console.print(stderr)
-                if stdout: console.print(stdout)
+                console.print("[red]Failed to create user.[/red]")
+                if stderr:
+                    console.print(stderr)
+                if stdout:
+                    console.print(stdout)
 
     except Exception as e:
         console.print(f"[red]Error creating user: {e}[/red]")
+
 
 def start_postal_services():
     """Start postal."""
@@ -355,6 +389,7 @@ def start_postal_services():
     run_command(["postal", "start"], sudo=True)
     console.print("[green]Postal started.[/green]")
     run_command(["postal", "status"], sudo=True, check=False)
+
 
 def setup_caddy():
     """Run Caddy."""
@@ -366,16 +401,24 @@ def setup_caddy():
         return
 
     cmd = [
-        "docker", "run", "-d",
-        "--name", "postal-caddy",
-        "--restart", "always",
-        "--network", "host",
-        "-v", "/opt/postal/config/Caddyfile:/etc/caddy/Caddyfile",
-        "-v", "/opt/postal/caddy-data:/data",
-        "caddy"
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        "postal-caddy",
+        "--restart",
+        "always",
+        "--network",
+        "host",
+        "-v",
+        "/opt/postal/config/Caddyfile:/etc/caddy/Caddyfile",
+        "-v",
+        "/opt/postal/caddy-data:/data",
+        "caddy",
     ]
     run_command(cmd)
     console.print("[green]Caddy started.[/green]")
+
 
 @app.command()
 def main(
@@ -384,7 +427,7 @@ def main(
     admin_email: str = typer.Option("admin@example.com", help="Email for the admin user"),
     admin_password: str = typer.Option("admin123", help="Password for the admin user"),
     skip_user_creation: bool = typer.Option(False, help="Skip admin user creation"),
-    force_cleanup: bool = typer.Option(False, help="Force cleanup of existing installation without prompting")
+    force_cleanup: bool = typer.Option(False, help="Force cleanup of existing installation without prompting"),
 ):
     """
     Automated Postal Installation Script.
@@ -394,9 +437,9 @@ def main(
     ensure_sudo()
 
     # Check if yaml is actually usable (double check)
-    if 'yaml' not in sys.modules:
-         console.print("[bold red]PyYAML is strictly required. Please install it.[/bold red]")
-         raise typer.Exit(1)
+    if "yaml" not in sys.modules:
+        console.print("[bold red]PyYAML is strictly required. Please install it.[/bold red]")
+        raise typer.Exit(1)
 
     check_and_cleanup(force_cleanup)
 
@@ -416,10 +459,7 @@ def main(
 
     # Update Config for v3
     console.print(f"Updating Postal config (Bind 0.0.0.0, Port {target_web_port})...")
-    updates = {
-        "web_server.default_port": target_web_port,
-        "web_server.default_bind_address": "0.0.0.0"
-    }
+    updates = {"web_server.default_port": target_web_port, "web_server.default_bind_address": "0.0.0.0"}
     update_postal_config_yaml(updates)
 
     # Setup Caddy Config (Handles TLS internal + Port)
@@ -429,23 +469,26 @@ def main(
     run_command(["postal", "initialize"], sudo=True)
 
     if not skip_user_creation:
-         create_initial_user(admin_email, admin_password, "Admin", "User")
+        create_initial_user(admin_email, admin_password, "Admin", "User")
 
     start_postal_services()
     setup_caddy()
 
     update_hosts_file(domain)
 
-    console.print(Panel(
-        f"[bold green]Installation Complete![/bold green]\n\n"
-        f"URL: https://{domain}\n"
-        f"Admin Email: {admin_email}\n"
-        f"Admin Password: {admin_password}\n\n"
-        f"Internal Web Port: {target_web_port}\n"
-        f"[bold cyan]Note:[/bold cyan] Access the URL directly! Caddy handles the proxying.\n"
-        f"If using Firefox, you might need to accept the self-signed certificate exception.",
-        title="Success"
-    ))
+    console.print(
+        Panel(
+            f"[bold green]Installation Complete![/bold green]\n\n"
+            f"URL: https://{domain}\n"
+            f"Admin Email: {admin_email}\n"
+            f"Admin Password: {admin_password}\n\n"
+            f"Internal Web Port: {target_web_port}\n"
+            f"[bold cyan]Note:[/bold cyan] Access the URL directly! Caddy handles the proxying.\n"
+            f"If using Firefox, you might need to accept the self-signed certificate exception.",
+            title="Success",
+        )
+    )
+
 
 if __name__ == "__main__":
     app()
