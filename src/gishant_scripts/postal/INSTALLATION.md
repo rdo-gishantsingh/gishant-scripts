@@ -8,7 +8,7 @@ This guide describes how to install Postal on a Linux server, strictly following
     *   4GB RAM
     *   2 CPU Cores
     *   25GB Disk Space
-    *   Operating System: Ubuntu/Debian or CentOS/RHEL (Must support Docker)
+    *   Operating System: **Ubuntu/Debian** or **Rocky Linux 9 / RHEL** (Must support Docker)
     *   **Port 25 outbound** must be open (check with your provider).
 
 2.  **Dependencies**:
@@ -16,6 +16,10 @@ This guide describes how to install Postal on a Linux server, strictly following
     *   Docker Compose Plugin
     *   `git`, `curl`, `jq`
     *   **PyYAML** (Required for the installer script)
+
+> [!TIP]
+> **Production Deployment & Gmail Integration**
+> For details on deploying to Rocky Linux 9 and integrating with **Google Workspace**, see [`PRODUCTION.md`](PRODUCTION.md).
 
 ## Installation Steps (Automated)
 
@@ -39,9 +43,9 @@ sudo apt update
 sudo apt install -y git curl jq
 ```
 
-**CentOS/RHEL:**
+**Rocky Linux 9 / RHEL:**
 ```bash
-sudo yum install -y git curl jq
+sudo dnf install -y git curl jq
 ```
 
 ### 2. Install Docker
