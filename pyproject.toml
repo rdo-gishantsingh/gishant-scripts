@@ -45,6 +45,9 @@ postal-install = "gishant_scripts.postal.install:app"
 postal-smtp = "gishant_scripts.postal.send_smtp:app"
 postal-api = "gishant_scripts.postal.send_api:app"
 
+# BookStack API CLI
+bookstack = "gishant_scripts.bookstack.cli:main"
+
 # Legacy individual script entry points (for backward compatibility)
 fetch-youtrack = "gishant_scripts.youtrack.fetch_issues:main"
 create-youtrack-issue = "gishant_scripts.youtrack.create_issue:main"
