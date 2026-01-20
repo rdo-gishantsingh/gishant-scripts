@@ -1265,3 +1265,22 @@ except ImportError:
     # If dependencies are missing, just log it but don't crash the main CLI
     # This allows the CLI to work even if some optional deps are missing
     pass
+
+# ============================================================================
+# BookStack Tools
+# ============================================================================
+
+try:
+    import typer
+
+    from gishant_scripts.bookstack.cli import app as bookstack_app
+
+    # Convert Typer app to Click command
+    bookstack_cmd = typer.main.get_command(bookstack_app)
+
+    # Add to main CLI
+    cli.add_command(bookstack_cmd, name="bookstack")
+
+except ImportError:
+    # If dependencies are missing, just log it but don't crash the main CLI
+    pass

@@ -107,6 +107,54 @@ class GoogleAIConfig:
 
 
 @dataclass
+class BookStackConfig:
+    """BookStack API configuration."""
+
+    url: str | None = None
+    token_id: str | None = None
+    token_secret: str | None = None
+    verify_ssl: bool = True
+
+    @classmethod
+    def from_env(cls) -> BookStackConfig:
+        """Load configuration from environment variables.
+
+        Expected variables:
+            BOOKSTACK_URL: BookStack instance URL
+            BOOKSTACK_TOKEN_ID: API token ID
+            BOOKSTACK_TOKEN_SECRET: API token secret
+            BOOKSTACK_VERIFY_SSL: Whether to verify SSL (default: true, set to 'false' to disable)
+
+        Returns:
+            BookStackConfig instance
+        """
+        verify_ssl_env = os.getenv("BOOKSTACK_VERIFY_SSL", "true").lower()
+        verify_ssl = verify_ssl_env not in ("false", "0", "no", "off")
+
+        return cls(
+            url=os.getenv("BOOKSTACK_URL") or None,
+            token_id=os.getenv("BOOKSTACK_TOKEN_ID") or None,
+            token_secret=os.getenv("BOOKSTACK_TOKEN_SECRET") or None,
+            verify_ssl=verify_ssl,
+        )
+
+    def validate(self) -> dict[str, str]:
+        """Validate configuration.
+
+        Returns:
+            Dict of field names to error messages (empty if valid)
+        """
+        errors = {}
+        if not self.url:
+            errors["url"] = "BOOKSTACK_URL not set"
+        if not self.token_id:
+            errors["token_id"] = "BOOKSTACK_TOKEN_ID not set"
+        if not self.token_secret:
+            errors["token_secret"] = "BOOKSTACK_TOKEN_SECRET not set"
+        return errors
+
+
+@dataclass
 class AYONConfig:
     """AYON API configuration."""
 
@@ -203,6 +251,7 @@ class AppConfig:
         self.github = GitHubConfig.from_env()
         self.google_ai = GoogleAIConfig.from_env()
         self.ayon = AYONConfig.from_env(environment=ayon_environment)
+        self.bookstack = BookStackConfig.from_env()
 
         # Store output directory
         self.output_dir = Path(os.getenv("OUTPUT_DIR", "./output"))
@@ -213,7 +262,7 @@ class AppConfig:
 
         Args:
             services: List of service names to validate. If None, validates all.
-                     Valid names: 'youtrack', 'github', 'google_ai', 'ayon'
+                     Valid names: 'youtrack', 'github', 'google_ai', 'ayon', 'bookstack'
 
         Returns:
             Dictionary mapping service names to dicts of field errors
@@ -229,6 +278,7 @@ class AppConfig:
             "github": self.github,
             "google_ai": self.google_ai,
             "ayon": self.ayon,
+            "bookstack": self.bookstack,
         }
 
         if services is None:
