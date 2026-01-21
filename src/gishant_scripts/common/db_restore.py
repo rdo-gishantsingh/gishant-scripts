@@ -457,7 +457,7 @@ def restore_sql_format(
 
                     if progress_callback and file_size > 0:
                         pct = min(int((bytes_read / file_size) * 100), 99)
-                        progress_callback(pct, 100, f"Restoring ({bytes_read // (1024*1024)} MB)...")
+                        progress_callback(pct, 100, f"Restoring ({bytes_read // (1024 * 1024)} MB)...")
 
                 stdin.close()
                 stdout, stderr = psql_proc.communicate()

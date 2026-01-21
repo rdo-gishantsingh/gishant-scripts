@@ -9,6 +9,7 @@ from rich.console import Console
 app = typer.Typer()
 console = Console()
 
+
 @app.command()
 def smtp(
     host: str = typer.Option("postal.example.com", help="Postal SMTP Host"),
@@ -18,7 +19,7 @@ def smtp(
     sender: str = typer.Option(..., prompt="Sender Address", help="From Address"),
     recipient: str = typer.Option(..., prompt="Recipient Address", help="To Address"),
     subject: str = typer.Option("Postal Test Email (SMTP)", help="Email Subject"),
-    body: str = typer.Option("This is a test email sent via Postal SMTP.", help="Email Body")
+    body: str = typer.Option("This is a test email sent via Postal SMTP.", help="Email Body"),
 ):
     """
     Send a test email using SMTP.
@@ -26,10 +27,10 @@ def smtp(
     console.print(f"Connecting to SMTP server at {host}:{port}...")
 
     msg = MIMEMultipart()
-    msg['From'] = sender
-    msg['To'] = recipient
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
+    msg["From"] = sender
+    msg["To"] = recipient
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
 
     try:
         # Postal often supports STARTTLS on 25 or plain 25, depending on config.
@@ -41,7 +42,7 @@ def smtp(
 
         # Check if we need EHLO and STARTTLS
         server.ehlo()
-        if server.has_extn('STARTTLS'):
+        if server.has_extn("STARTTLS"):
             console.print("Starting TLS...")
             server.starttls()
             server.ehlo()
@@ -66,24 +67,16 @@ def api(
     sender: str = typer.Option(..., prompt="Sender Address", help="From Address"),
     recipient: str = typer.Option(..., prompt="Recipient Address", help="To Address"),
     subject: str = typer.Option("Postal Test Email (API)", help="Email Subject"),
-    body: str = typer.Option("This is a test email sent via Postal API.", help="Email Body")
+    body: str = typer.Option("This is a test email sent via Postal API.", help="Email Body"),
 ):
     """
     Send a test email using HTTP API.
     """
     url = f"https://{host}/api/v1/send/message"
 
-    payload = {
-        "to": [recipient],
-        "from": sender,
-        "subject": subject,
-        "plain_body": body
-    }
+    payload = {"to": [recipient], "from": sender, "subject": subject, "plain_body": body}
 
-    headers = {
-        "X-Server-API-Key": api_key,
-        "Content-Type": "application/json"
-    }
+    headers = {"X-Server-API-Key": api_key, "Content-Type": "application/json"}
 
     console.print(f"Sending via API to {url}...")
 
@@ -95,15 +88,18 @@ def api(
         if response.status_code == 200:
             data = response.json()
             if data.get("status") == "success":
-                console.print(f"[bold green]Email sent successfully via API![/bold green] ID: {data.get('data', {}).get('message_id')}")
+                console.print(
+                    f"[bold green]Email sent successfully via API![/bold green] ID: {data.get('data', {}).get('message_id')}"
+                )
             else:
-                 console.print(f"[bold red]API returned error:[/bold red] {data}")
+                console.print(f"[bold red]API returned error:[/bold red] {data}")
         else:
             console.print(f"[bold red]HTTP Error:[/bold red] {response.status_code}")
             console.print(response.text)
 
     except Exception as e:
         console.print(f"[bold red]Failed to call API:[/bold red] {e}")
+
 
 if __name__ == "__main__":
     app()

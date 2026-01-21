@@ -178,7 +178,9 @@ def render_tree_view(
     add_section("📋 Metadata", comparison["metadata"]["bundle1"], comparison["metadata"]["bundle2"])
     add_section("🔌 Addons", comparison["addons"]["bundle1"], comparison["addons"]["bundle2"])
     add_section("📦 Dependencies", comparison["dependencies"]["bundle1"], comparison["dependencies"]["bundle2"])
-    add_section("⚙️  Studio Settings", comparison["settings"]["bundle1"], comparison["settings"]["bundle2"], group_by_prefix=True)
+    add_section(
+        "⚙️  Studio Settings", comparison["settings"]["bundle1"], comparison["settings"]["bundle2"], group_by_prefix=True
+    )
 
     if "project_settings" in comparison:
         add_section(
@@ -280,12 +282,14 @@ def export_to_markdown(
         if not items:
             continue
 
-        lines.extend([
-            f"## {section_title}",
-            "",
-            f"| Setting | {bundle1_name} | {bundle2_name} | Status |",
-            "|---------|---------|---------|--------|",
-        ])
+        lines.extend(
+            [
+                f"## {section_title}",
+                "",
+                f"| Setting | {bundle1_name} | {bundle2_name} | Status |",
+                "|---------|---------|---------|--------|",
+            ]
+        )
 
         for item in items:
             val1 = str(item["bundle1"] if item["bundle1"] is not None else "-").replace("|", "\\|")
@@ -321,7 +325,9 @@ def export_to_markdown(
 @click.option("--local", is_flag=True, help="Use local environment")
 @click.option("--dev", is_flag=True, help="Use dev environment")
 @click.option("--uat", is_flag=True, help="Use UAT environment")
-def analyze_bundles_cli(bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev, uat):
+def analyze_bundles_cli(
+    bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev, uat
+):
     """
     Compare two AYON bundles.
 

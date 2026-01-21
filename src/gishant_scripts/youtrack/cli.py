@@ -17,6 +17,7 @@ from rich.table import Table
 
 # --- Classes moved from original scripts ---
 
+
 class YouTrackIssueCreator:
     """Create YouTrack issues with dry-run support."""
 
@@ -95,11 +96,17 @@ class YouTrackIssueCreator:
         if issue_type:
             custom_fields.append({"$type": "SingleEnumIssueCustomField", "name": "Type", "value": {"name": issue_type}})
         if priority:
-            custom_fields.append({"$type": "SingleEnumIssueCustomField", "name": "Priority", "value": {"name": priority}})
+            custom_fields.append(
+                {"$type": "SingleEnumIssueCustomField", "name": "Priority", "value": {"name": priority}}
+            )
         if assignee:
-            custom_fields.append({"$type": "SingleUserIssueCustomField", "name": "Assignee", "value": {"login": assignee}})
+            custom_fields.append(
+                {"$type": "SingleUserIssueCustomField", "name": "Assignee", "value": {"login": assignee}}
+            )
         if submitted_for:
-            custom_fields.append({"$type": "SingleUserIssueCustomField", "name": "Submitted for", "value": {"login": submitted_for}})
+            custom_fields.append(
+                {"$type": "SingleUserIssueCustomField", "name": "Submitted for", "value": {"login": submitted_for}}
+            )
 
         if custom_fields:
             payload["customFields"] = custom_fields
@@ -157,7 +164,9 @@ class YouTrackIssueCreator:
                 table.add_row(field_name, value)
             self.console.print(table)
             self.console.print()
-            self.console.print("[yellow]💡 To actually create this issue, run the command again with --no-dry-run[/yellow]")
+            self.console.print(
+                "[yellow]💡 To actually create this issue, run the command again with --no-dry-run[/yellow]"
+            )
         else:
             self.console.print("[red]✗ Issue validation failed[/red]")
 
@@ -177,7 +186,11 @@ class YouTrackIssueCreator:
             desc = issue["description"]
             desc_preview = (desc[:150] + "...") if len(desc) > 150 else desc
             content.append(f"\n[bold]Description:[/bold]\n{desc_preview}")
-        panel = Panel("\n".join(content), title=f"[bold green]{issue.get('idReadable', 'Issue')}[/bold green]", border_style="green")
+        panel = Panel(
+            "\n".join(content),
+            title=f"[bold green]{issue.get('idReadable', 'Issue')}[/bold green]",
+            border_style="green",
+        )
         self.console.print(panel)
 
 
@@ -280,15 +293,17 @@ class YouTrackIssuesFetcher:
             comment_text = comment.get("text", "")
             if author_login == user_login:
                 user_commented = True
-            all_comments.append({
-                "author": author.get("fullName", "Unknown"),
-                "author_login": author_login,
-                "text": comment_text,
-                "created": self._format_timestamp(comment.get("created")),
-                "created_timestamp": comment.get("created"),
-                "updated": self._format_timestamp(comment.get("updated")),
-                "updated_timestamp": comment.get("updated"),
-            })
+            all_comments.append(
+                {
+                    "author": author.get("fullName", "Unknown"),
+                    "author_login": author_login,
+                    "text": comment_text,
+                    "created": self._format_timestamp(comment.get("created")),
+                    "created_timestamp": comment.get("created"),
+                    "updated": self._format_timestamp(comment.get("updated")),
+                    "updated_timestamp": comment.get("updated"),
+                }
+            )
         tags = [tag.get("name", "") for tag in issue.get("tags", [])]
 
         github_links = []
@@ -392,7 +407,9 @@ class YouTrackIssuesFetcher:
 
         content = []
         content.append(f"[bold]Summary:[/bold] {issue['summary']}")
-        content.append(f"[bold]Type:[/bold] {issue.get('type', 'N/A')} | [bold]State:[/bold] {issue.get('state', 'N/A')} | [bold]Priority:[/bold] {issue.get('priority', 'N/A')}")
+        content.append(
+            f"[bold]Type:[/bold] {issue.get('type', 'N/A')} | [bold]State:[/bold] {issue.get('state', 'N/A')} | [bold]Priority:[/bold] {issue.get('priority', 'N/A')}"
+        )
         content.append(f"[bold]Created:[/bold] {issue['created']} | [bold]Updated:[/bold] {issue['updated']}")
         content.append(f"[bold]Reporter:[/bold] {issue['reporter']}")
         if issue.get("assignee"):
@@ -551,7 +568,7 @@ class YouTrackIssueUpdater:
             table.add_row("Action", result.get("action", "N/A"))
             payload = result.get("payload", {})
             if "text" in payload:
-                 table.add_row("Comment", payload["text"])
+                table.add_row("Comment", payload["text"])
             if "summary" in payload:
                 table.add_row("New Summary", payload["summary"])
             if "description" in payload:
@@ -560,7 +577,9 @@ class YouTrackIssueUpdater:
                 table.add_row("New Description", desc_preview)
             self.console.print(table)
             self.console.print()
-            self.console.print("[yellow]💡 To actually execute this update, run the command again with --no-dry-run[/yellow]")
+            self.console.print(
+                "[yellow]💡 To actually execute this update, run the command again with --no-dry-run[/yellow]"
+            )
         else:
             self.console.print("[red]✗ Validation failed[/red]")
 
@@ -577,6 +596,7 @@ class YouTrackIssueUpdater:
 
 app = typer.Typer(help="YouTrack CLI tool")
 
+
 @app.command()
 def create(
     project: str = typer.Argument(..., help="Project short name (e.g., PIPE)"),
@@ -591,6 +611,7 @@ def create(
     """Create a new YouTrack issue."""
     from gishant_scripts.common.config import AppConfig
     from gishant_scripts.common.errors import ConfigurationError
+
     console = Console()
     try:
         config = AppConfig()
@@ -623,6 +644,7 @@ def create(
         console.print(f"[red]❌ Error:[/red] {err}")
         raise typer.Exit(1)
 
+
 @app.command()
 def fetch(
     issue_id: str | None = typer.Option(None, "--id", help="Fetch a specific issue by ID (e.g., PIPE-1234)"),
@@ -635,6 +657,7 @@ def fetch(
     """Fetch YouTrack issues or a specific issue."""
     from gishant_scripts.common.config import AppConfig
     from gishant_scripts.common.errors import ConfigurationError
+
     console = Console()
     try:
         config = AppConfig()
@@ -654,9 +677,12 @@ def fetch(
             issue = fetcher.fetch_issue_by_id(issue_id)
 
             show_fields = []
-            if summary: show_fields.append("summary")
-            if show_description: show_fields.append("description")
-            if comments: show_fields.append("comments")
+            if summary:
+                show_fields.append("summary")
+            if show_description:
+                show_fields.append("description")
+            if comments:
+                show_fields.append("comments")
 
             fetcher.print_issue(issue, show_fields if show_fields else None)
             if save_json:
@@ -672,6 +698,7 @@ def fetch(
         console.print(f"[red]❌ Error:[/red] {err}")
         raise typer.Exit(1)
 
+
 @app.command()
 def update(
     issue_id: str = typer.Argument(..., help="Issue ID (e.g., PIPE-671)"),
@@ -683,6 +710,7 @@ def update(
     """Update a YouTrack issue."""
     from gishant_scripts.common.config import AppConfig
     from gishant_scripts.common.errors import ConfigurationError
+
     console = Console()
     try:
         config = AppConfig()
@@ -708,13 +736,15 @@ def update(
                 updater.print_success_result(result)
 
         if not (comment or summary or description):
-             console.print("[yellow]No update action specified. Use --comment, --summary, or --description.[/yellow]")
+            console.print("[yellow]No update action specified. Use --comment, --summary, or --description.[/yellow]")
     except Exception as err:
         console.print(f"[red]❌ Error:[/red] {err}")
         raise typer.Exit(1)
 
+
 def main():
     app()
+
 
 if __name__ == "__main__":
     app()

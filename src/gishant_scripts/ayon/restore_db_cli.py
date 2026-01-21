@@ -112,9 +112,7 @@ def restore(
         compose_file = script_dir / "ayon-server" / "docker-compose.yml"
 
         if not compose_file.exists():
-            console.print(
-                "[red]✗ Could not find docker-compose.yml. Please specify path with --compose-file[/red]"
-            )
+            console.print("[red]✗ Could not find docker-compose.yml. Please specify path with --compose-file[/red]")
             raise typer.Exit(code=1)
 
     # Confirm action

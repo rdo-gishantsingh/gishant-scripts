@@ -16,6 +16,7 @@ except ImportError:
 app = typer.Typer(help="Kitsu CRUD operations")
 console = Console()
 
+
 def get_connection():
     """Establish connection to Kitsu server."""
     # Load environment variables via AppConfig
@@ -38,9 +39,9 @@ def get_connection():
     try:
         # Initialize gazu
         if not gazu.client.host_is_valid(host):
-             # Sometimes host_is_valid returns False even if valid if /api is missing or present unexpectedly
-             # We'll try setting it anyway and catch connection errors later
-             pass
+            # Sometimes host_is_valid returns False even if valid if /api is missing or present unexpectedly
+            # We'll try setting it anyway and catch connection errors later
+            pass
 
         gazu.set_host(host)
 
@@ -55,6 +56,7 @@ def get_connection():
     except Exception as e:
         console.print(f"[red]Failed to connect to Kitsu: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("login")
 def login_cmd(
@@ -78,6 +80,7 @@ def login_cmd(
         console.print(f"[red]Login failed: {e}[/red]")
         raise typer.Exit(code=1)
 
+
 @app.command("list-projects")
 def list_projects():
     """List all projects in Kitsu."""
@@ -96,17 +99,14 @@ def list_projects():
         table.add_column("Status", style="magenta")
 
         for project in projects:
-            table.add_row(
-                project["name"],
-                project.get("code", "N/A"),
-                project.get("status", "Open")
-            )
+            table.add_row(project["name"], project.get("code", "N/A"), project.get("status", "Open"))
 
         console.print(table)
 
     except Exception as e:
         console.print(f"[red]Error fetching projects: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("get-project")
 def get_project(project_name: str):
@@ -119,18 +119,21 @@ def get_project(project_name: str):
             console.print(f"[red]Project '{project_name}' not found.[/red]")
             raise typer.Exit(code=1)
 
-        console.print(Panel(
-            f"Name: {project['name']}\n"
-            f"Code: {project.get('code', 'N/A')}\n"
-            f"Status: {project.get('status', 'N/A')}\n"
-            f"ID: {project['id']}",
-            title=f"Project Details: {project_name}",
-            border_style="blue"
-        ))
+        console.print(
+            Panel(
+                f"Name: {project['name']}\n"
+                f"Code: {project.get('code', 'N/A')}\n"
+                f"Status: {project.get('status', 'N/A')}\n"
+                f"ID: {project['id']}",
+                title=f"Project Details: {project_name}",
+                border_style="blue",
+            )
+        )
 
     except Exception as e:
         console.print(f"[red]Error fetching project: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("create-project")
 def create_project(
@@ -148,6 +151,7 @@ def create_project(
     except Exception as e:
         console.print(f"[red]Error creating project: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("update-project")
 def update_project(
@@ -185,6 +189,7 @@ def update_project(
     except Exception as e:
         console.print(f"[red]Error updating project: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 # Import batch data generator commands (lazy import to avoid circular dependencies)
 def _register_batch_commands():

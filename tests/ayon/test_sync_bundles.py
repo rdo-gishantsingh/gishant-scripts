@@ -227,21 +227,15 @@ class TestSyncAddonVersions:
             },
         }
 
-    def test_sync_addon_versions_success(
-        self, mock_console, sample_bundle_data, dev_bundle_data, sample_bundles_data
-    ):
+    def test_sync_addon_versions_success(self, mock_console, sample_bundle_data, dev_bundle_data, sample_bundles_data):
         """Test successful addon version sync with version differences."""
         with patch("gishant_scripts.ayon.sync_bundles.ayon_api") as mock_api:
             mock_con = MagicMock()
             mock_api.get_server_api_connection.return_value = mock_con
 
             # Mock fetch_all_bundles and get_bundle_by_name
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = dev_bundle_data
 
@@ -276,12 +270,8 @@ class TestSyncAddonVersions:
             mock_con = MagicMock()
             mock_api.get_server_api_connection.return_value = mock_con
 
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = dev_bundle_data
 
@@ -296,20 +286,14 @@ class TestSyncAddonVersions:
                     mock_con.update_bundle.assert_not_called()
                     assert result is True
 
-    def test_sync_addon_versions_dry_run(
-        self, mock_console, sample_bundle_data, dev_bundle_data, sample_bundles_data
-    ):
+    def test_sync_addon_versions_dry_run(self, mock_console, sample_bundle_data, dev_bundle_data, sample_bundles_data):
         """Test addon version sync in dry run mode."""
         with patch("gishant_scripts.ayon.sync_bundles.ayon_api") as mock_api:
             mock_con = MagicMock()
             mock_api.get_server_api_connection.return_value = mock_con
 
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = dev_bundle_data
 
@@ -332,12 +316,8 @@ class TestSyncAddonVersions:
             mock_con = MagicMock()
             mock_api.get_server_api_connection.return_value = mock_con
 
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = dev_bundle_data
 
@@ -366,12 +346,8 @@ class TestSyncAddonVersions:
             mock_con = MagicMock()
             mock_api.get_server_api_connection.return_value = mock_con
 
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = non_dev_bundle_data
 
@@ -387,9 +363,7 @@ class TestSyncAddonVersions:
                     # No API call should be made
                     mock_con.update_bundle.assert_not_called()
 
-    def test_sync_addon_versions_missing_ayon_api(
-        self, mock_console, sample_bundle_data
-    ):
+    def test_sync_addon_versions_missing_ayon_api(self, mock_console, sample_bundle_data):
         """Test addon version sync fails when ayon_api is not installed."""
         with patch("gishant_scripts.ayon.sync_bundles.ayon_api", None):
             with pytest.raises(SyncError) as exc_info:
@@ -412,12 +386,8 @@ class TestSyncAddonVersions:
             mock_con.update_bundle.side_effect = Exception("API Error")
             mock_api.get_server_api_connection.return_value = mock_con
 
-            with patch(
-                "gishant_scripts.ayon.sync_bundles.fetch_all_bundles"
-            ) as mock_fetch:
-                with patch(
-                    "gishant_scripts.ayon.sync_bundles.get_bundle_by_name"
-                ) as mock_get:
+            with patch("gishant_scripts.ayon.sync_bundles.fetch_all_bundles") as mock_fetch:
+                with patch("gishant_scripts.ayon.sync_bundles.get_bundle_by_name") as mock_get:
                     mock_fetch.return_value = sample_bundles_data
                     mock_get.return_value = dev_bundle_data
 

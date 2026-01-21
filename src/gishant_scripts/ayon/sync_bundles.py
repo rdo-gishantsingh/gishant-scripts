@@ -159,7 +159,8 @@ def preview_changes(
                 items = [i for i in items if i.get("key") in addon_filter]
             else:
                 items = [
-                    i for i in items
+                    i
+                    for i in items
                     if any(i.get("key", "").startswith(f"{a}.") or i.get("key") == a for a in addon_filter)
                 ]
 
@@ -240,10 +241,7 @@ def sync_addon_versions(
     target_addons = target_bundle.get("addons", {})
 
     # Find differences
-    addons_to_update = {
-        name: ver for name, ver in addons_to_sync.items()
-        if target_addons.get(name) != ver
-    }
+    addons_to_update = {name: ver for name, ver in addons_to_sync.items() if target_addons.get(name) != ver}
 
     if not addons_to_update:
         console.print("[green]✓[/green] Addon versions already match")
@@ -656,7 +654,8 @@ def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, 
 @click.argument("source", required=False)
 @click.argument("target", required=False)
 @click.option(
-    "--operation", "-op",
+    "--operation",
+    "-op",
     type=click.Choice(["bundle", "project-bundle", "project"], case_sensitive=False),
     default="bundle",
     help="Sync operation type",
@@ -675,7 +674,9 @@ def interactive_sync_mode(console: Console) -> tuple[str, str, str, str | None, 
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode")
 @click.option("--local", is_flag=True, help="Use local environment")
 @click.option("--dev", is_flag=True, help="Use dev environment")
-def sync_bundles_cli(source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive, local, dev):
+def sync_bundles_cli(
+    source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive, local, dev
+):
     """
     Sync AYON bundle and project settings.
 
@@ -757,6 +758,7 @@ def sync_bundles_cli(source, target, operation, project, bundle, sync_mode, addo
     except Exception as err:
         console.print(f"\n[red]Error:[/red] {err}")
         import traceback
+
         console.print(f"\n[dim]{traceback.format_exc()}[/dim]")
         sys.exit(1)
 

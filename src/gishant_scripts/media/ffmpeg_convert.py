@@ -601,9 +601,7 @@ def presets():
         )
 
     console.print(table)
-    console.print(
-        "\n[dim]Use 'ffmpeg-convert convert INPUT -p PRESET' to convert a file[/dim]"
-    )
+    console.print("\n[dim]Use 'ffmpeg-convert convert INPUT -p PRESET' to convert a file[/dim]")
 
 
 @cli.command()
@@ -645,9 +643,7 @@ def info(input_file, output_json):
             console.print(f"  Format: {format_info.get('format_name', 'N/A')}")
             console.print(f"  Duration: {float(format_info.get('duration', 0)):.2f}s")
             console.print(f"  Size: {int(format_info.get('size', 0)) / 1024 / 1024:.2f} MB")
-            console.print(
-                f"  Bitrate: {int(format_info.get('bit_rate', 0)) / 1000:.0f} kbps"
-            )
+            console.print(f"  Bitrate: {int(format_info.get('bit_rate', 0)) / 1000:.0f} kbps")
 
             # Stream info
             streams = file_info.get("streams", [])

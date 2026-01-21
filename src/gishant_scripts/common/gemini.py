@@ -120,7 +120,5 @@ def validate_model(model: str) -> str:
         ValueError: If model is not in available models
     """
     if model not in AVAILABLE_MODELS:
-        raise ValueError(
-            f"Invalid model '{model}'. Available models: {', '.join(AVAILABLE_MODELS)}"
-        )
+        raise ValueError(f"Invalid model '{model}'. Available models: {', '.join(AVAILABLE_MODELS)}")
     return model

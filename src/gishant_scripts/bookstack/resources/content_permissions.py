@@ -109,13 +109,15 @@ class ContentPermissionsResource(BaseResource):
                 break
 
         if not found:
-            role_perms.append({
-                "role_id": role_id,
-                "view": view,
-                "create": create,
-                "update": update,
-                "delete": delete,
-            })
+            role_perms.append(
+                {
+                    "role_id": role_id,
+                    "view": view,
+                    "create": create,
+                    "update": update,
+                    "delete": delete,
+                }
+            )
 
         return self.update(content_type, content_id, role_permissions=role_perms)
 

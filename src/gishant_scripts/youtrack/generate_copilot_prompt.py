@@ -315,7 +315,9 @@ def main(issue_id: str, output: Path | None, model: str):
         config.require_valid("youtrack", "google_ai")
     except ConfigurationError as err:
         console.print(f"[red]Configuration Error:[/red] {err}")
-        console.print("\n[yellow]Please ensure YOUTRACK_URL, YOUTRACK_API_TOKEN, and GOOGLE_AI_API_KEY are set.[/yellow]")
+        console.print(
+            "\n[yellow]Please ensure YOUTRACK_URL, YOUTRACK_API_TOKEN, and GOOGLE_AI_API_KEY are set.[/yellow]"
+        )
         console.print("[yellow]You can set them in a .env file or as environment variables.[/yellow]")
         sys.exit(1)
 

@@ -26,6 +26,7 @@ try:
         get_representation_path_with_anatomy,
         InvalidRepresentationContext,
     )
+
     AYON_CORE_AVAILABLE = True
 except ImportError:
     AYON_CORE_AVAILABLE = False
@@ -95,7 +96,9 @@ def _resolve_representation_path(representation, project_name, debug=False):
                     if root_value and resolved_path_str.startswith(root_value):
                         # Replace with work root
                         if debug:
-                            console.print(f"[cyan]DEBUG: Found matching root '{root_name}', replacing {root_value} with {work_root}[/cyan]")
+                            console.print(
+                                f"[cyan]DEBUG: Found matching root '{root_name}', replacing {root_value} with {work_root}[/cyan]"
+                            )
                         resolved_path_str = resolved_path_str.replace(root_value, work_root, 1)
                         break
             else:
@@ -105,14 +108,18 @@ def _resolve_representation_path(representation, project_name, debug=False):
                     console.print(f"[cyan]DEBUG: Single root setup, root value: {root_value}[/cyan]")
                 if root_value and resolved_path_str.startswith(root_value):
                     if debug:
-                        console.print(f"[cyan]DEBUG: Found matching root, replacing {root_value} with {work_root}[/cyan]")
+                        console.print(
+                            f"[cyan]DEBUG: Found matching root, replacing {root_value} with {work_root}[/cyan]"
+                        )
                     resolved_path_str = resolved_path_str.replace(root_value, work_root, 1)
 
             # If path still doesn't start with work root, try to detect and replace root prefix
             # This handles cases like /shows, /projects, etc.
             if not resolved_path_str.startswith(work_root) and resolved_path_str.startswith("/"):
                 if debug:
-                    console.print(f"[cyan]DEBUG: Path doesn't start with work root, attempting prefix replacement[/cyan]")
+                    console.print(
+                        f"[cyan]DEBUG: Path doesn't start with work root, attempting prefix replacement[/cyan]"
+                    )
                 # Extract first path segment (e.g., /shows, /projects)
                 path_parts = resolved_path_str.split("/", 2)
                 if len(path_parts) >= 2:
@@ -131,6 +138,7 @@ def _resolve_representation_path(representation, project_name, debug=False):
         if debug:
             console.print(f"[red]DEBUG: Exception in path resolution: {e}[/red]")
             import traceback
+
             console.print(f"[red]DEBUG: Traceback: {traceback.format_exc()}[/red]")
 
         # Fallback: try to manually resolve hardcoded path
@@ -160,7 +168,9 @@ def _resolve_representation_path(representation, project_name, debug=False):
         return hardcoded_path
 
 
-def _format_representation_as_dict(representation, project_name, folder_path, product_name, representation_name, version_info=None, resolved_path=None):
+def _format_representation_as_dict(
+    representation, project_name, folder_path, product_name, representation_name, version_info=None, resolved_path=None
+):
     """Format representation data as a structured dictionary.
 
     Args:
@@ -202,12 +212,16 @@ def _format_representation_as_dict(representation, project_name, folder_path, pr
         if isinstance(file_info, str):
             formatted_files.append({"path": file_info})
         elif isinstance(file_info, dict):
-            formatted_files.append({
-                "path": file_info.get("path", file_info.get("name", "N/A")),
-                "name": file_info.get("name", os.path.basename(file_info.get("path", "")) if file_info.get("path") else "N/A"),
-                "size": file_info.get("size"),
-                "id": file_info.get("id"),
-            })
+            formatted_files.append(
+                {
+                    "path": file_info.get("path", file_info.get("name", "N/A")),
+                    "name": file_info.get(
+                        "name", os.path.basename(file_info.get("path", "")) if file_info.get("path") else "N/A"
+                    ),
+                    "size": file_info.get("size"),
+                    "id": file_info.get("id"),
+                }
+            )
         else:
             formatted_files.append({"value": str(file_info)})
 
@@ -270,24 +284,16 @@ def get_representation_cli(
     project_name: str = typer.Argument(..., help="Project name"),
     folder_path: str = typer.Argument(..., help="Folder path (can be partial)"),
     product_name: str = typer.Argument(..., help="Product name (e.g., audioMain)"),
-    representation_name: str = typer.Option(
-        "wav", "--rep", "-r", help="Representation name"
-    ),
+    representation_name: str = typer.Option("wav", "--rep", "-r", help="Representation name"),
     local: bool = typer.Option(
         False, "--local", help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)"
     ),
-    dev: bool = typer.Option(
-        False, "--dev", help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)"
-    ),
+    dev: bool = typer.Option(False, "--dev", help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)"),
     format: Literal["table", "dict"] = typer.Option(
         "table", "--format", "-f", help="Output format: 'table' (default) or 'dict' (formatted dictionary)"
     ),
-    path_only: bool = typer.Option(
-        False, "--path-only", "-p", help="Output only the resolved file path"
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", help="Print debug information for path resolution"
-    ),
+    path_only: bool = typer.Option(False, "--path-only", "-p", help="Output only the resolved file path"),
+    debug: bool = typer.Option(False, "--debug", help="Print debug information for path resolution"),
 ):
     """Get representation for a product in a folder."""
     try:
@@ -314,9 +320,7 @@ def get_representation_cli(
             # Try to get folder to show available products
             if ayon_api is not None:
                 try:
-                    folder = ayon_api.get_folder_by_path(
-                        project_name, folder_path, fields=["id", "name", "path"]
-                    )
+                    folder = ayon_api.get_folder_by_path(project_name, folder_path, fields=["id", "name", "path"])
 
                     # If folder not found, try by name
                     if not folder:
@@ -351,7 +355,9 @@ def get_representation_cli(
                             )
                         )
                         if products:
-                            console.print(f"\n[yellow]Available products in folder '{folder.get('path', 'N/A')}':[/yellow]")
+                            console.print(
+                                f"\n[yellow]Available products in folder '{folder.get('path', 'N/A')}':[/yellow]"
+                            )
                             table = Table(show_header=True, header_style="bold magenta")
                             table.add_column("Name", style="cyan")
                             table.add_column("Type", style="green")
@@ -397,7 +403,13 @@ def get_representation_cli(
         # If dict format requested, print and exit
         if format == "dict":
             formatted_dict = _format_representation_as_dict(
-                representation, project_name, folder_path, product_name, representation_name, version_info, resolved_path
+                representation,
+                project_name,
+                folder_path,
+                product_name,
+                representation_name,
+                version_info,
+                resolved_path,
             )
             _print_dict_formatted(formatted_dict)
             return
@@ -451,7 +463,9 @@ def get_representation_cli(
 
             # Show summary if many None values
             if len(non_none_attrib) < len(all_attrib):
-                console.print(f"\n[dim]Note: {len(all_attrib) - len(non_none_attrib)} attributes are not set (None)[/dim]")
+                console.print(
+                    f"\n[dim]Note: {len(all_attrib) - len(non_none_attrib)} attributes are not set (None)[/dim]"
+                )
         else:
             console.print("\n[yellow]No attributes found.[/yellow]")
 
@@ -567,4 +581,3 @@ def get_representation_cli(
     except Exception as e:
         console.print(f"[red]Unexpected error: {e}[/red]")
         raise typer.Exit(code=1)
-
