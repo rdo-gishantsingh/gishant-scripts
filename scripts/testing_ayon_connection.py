@@ -18,6 +18,7 @@ def set_connection():
     os.environ["AYON_API_KEY"] = "cf939d4d8fe44909afbb40a10660c5e4"
     return ayon_api.get_server_api_connection()
 
+
 ayon_connection = set_connection()
 
 
@@ -64,7 +65,7 @@ def main():
         for i in range(iterations):
             progress.update(
                 task,
-                description=f"Testing Ayon connection ({i+1}/{iterations})...",
+                description=f"Testing Ayon connection ({i + 1}/{iterations})...",
             )
             try:
                 test_ayon_connection()
@@ -73,7 +74,7 @@ def main():
                 failed += 1
                 error_msg = str(err)
                 errors.append((i + 1, error_msg))
-                console.print(f"[red]✗ Iteration {i+1} failed: {error_msg}[/red]")
+                console.print(f"[red]✗ Iteration {i + 1} failed: {error_msg}[/red]")
 
             progress.update(task, advance=1)
 

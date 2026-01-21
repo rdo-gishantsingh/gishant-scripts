@@ -149,9 +149,7 @@ class TestFFmpegConverter:
     def test_convert_ffmpeg_failure(self, mock_run, converter, sample_video_path, tmp_path):
         """Test conversion handles FFmpeg failure."""
         mock_run.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["ffmpeg"],
-            stderr="FFmpeg error message"
+            returncode=1, cmd=["ffmpeg"], stderr="FFmpeg error message"
         )
         output = tmp_path / "output.mp4"
 
@@ -162,24 +160,10 @@ class TestFFmpegConverter:
     def test_get_info_success(self, mock_run, converter, sample_video_path):
         """Test getting file info successfully."""
         mock_info = {
-            "format": {
-                "duration": "120.5",
-                "size": "10485760",
-                "bit_rate": "696320"
-            },
-            "streams": [
-                {
-                    "codec_type": "video",
-                    "codec_name": "h264",
-                    "width": 1920,
-                    "height": 1080
-                }
-            ]
+            "format": {"duration": "120.5", "size": "10485760", "bit_rate": "696320"},
+            "streams": [{"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}],
         }
-        mock_run.return_value = Mock(
-            returncode=0,
-            stdout=json.dumps(mock_info)
-        )
+        mock_run.return_value = Mock(returncode=0, stdout=json.dumps(mock_info))
 
         result = converter.get_info(sample_video_path)
 
@@ -190,11 +174,7 @@ class TestFFmpegConverter:
     @patch("subprocess.run")
     def test_get_info_ffprobe_failure(self, mock_run, converter, sample_video_path):
         """Test get_info handles ffprobe failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["ffprobe"],
-            stderr="FFprobe error"
-        )
+        mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=["ffprobe"], stderr="FFprobe error")
 
         with pytest.raises(RuntimeError, match="FFprobe failed"):
             converter.get_info(sample_video_path)
@@ -217,6 +197,7 @@ class TestFFmpegConverter:
         output = tmp_path / "output.mp4"
 
         from rich.console import Console
+
         console = Console()
 
         result = converter.convert_with_progress(
@@ -308,21 +289,10 @@ class TestCLI:
         input_file.touch()
 
         mock_info = {
-            "format": {
-                "format_name": "mov,mp4",
-                "duration": "120.5",
-                "size": "10485760",
-                "bit_rate": "696320"
-            },
+            "format": {"format_name": "mov,mp4", "duration": "120.5", "size": "10485760", "bit_rate": "696320"},
             "streams": [
-                {
-                    "codec_type": "video",
-                    "codec_name": "h264",
-                    "width": 1920,
-                    "height": 1080,
-                    "r_frame_rate": "30/1"
-                }
-            ]
+                {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "r_frame_rate": "30/1"}
+            ],
         }
 
         mock_converter = Mock()
@@ -388,9 +358,12 @@ class TestIntegration:
         subprocess.run(
             [
                 "ffmpeg",
-                "-f", "lavfi",
-                "-i", "testsrc=duration=1:size=320x240:rate=1",
-                "-pix_fmt", "yuv420p",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=1:size=320x240:rate=1",
+                "-pix_fmt",
+                "yuv420p",
                 str(input_file),
             ],
             capture_output=True,

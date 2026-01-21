@@ -12,4 +12,3 @@ spec.loader.exec_module(cli_module)
 
 if __name__ == "__main__":
     cli_module.app()
-

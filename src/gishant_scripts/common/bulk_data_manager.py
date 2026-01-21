@@ -32,14 +32,16 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
     }
 
     if not dry_run and not skip_confirmation:
-        console.print(Panel(
-            f"[bold yellow]WARNING: This will delete ALL test data with prefix '{prefix}' from:[/bold yellow]\n"
-            "  • AYON (projects, users)\n"
-            "  • Kitsu (projects, users)\n\n"
-            "[bold red]This action cannot be undone![/bold red]",
-            title="⚠️  Cleanup Confirmation",
-            border_style="red"
-        ))
+        console.print(
+            Panel(
+                f"[bold yellow]WARNING: This will delete ALL test data with prefix '{prefix}' from:[/bold yellow]\n"
+                "  • AYON (projects, users)\n"
+                "  • Kitsu (projects, users)\n\n"
+                "[bold red]This action cannot be undone![/bold red]",
+                title="⚠️  Cleanup Confirmation",
+                border_style="red",
+            )
+        )
         response = typer.confirm("Are you absolutely sure you want to continue?")
         if not response:
             console.print("[yellow]Cleanup cancelled.[/yellow]")
@@ -61,7 +63,9 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
         if dry_run:
             console.print("[yellow]AYON dry run completed[/yellow]")
         else:
-            console.print(f"[green]✓ AYON cleanup completed: {ayon_results['projects_deleted']} projects, {ayon_results['users_deleted']} users deleted[/green]")
+            console.print(
+                f"[green]✓ AYON cleanup completed: {ayon_results['projects_deleted']} projects, {ayon_results['users_deleted']} users deleted[/green]"
+            )
     except Exception as e:
         error_msg = f"Error during AYON cleanup: {e}"
         results["ayon"]["errors"].append(error_msg)
@@ -83,7 +87,9 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
         if dry_run:
             console.print("[yellow]Kitsu dry run completed[/yellow]")
         else:
-            console.print(f"[green]✓ Kitsu cleanup completed: {kitsu_results['projects_deleted']} projects, {kitsu_results['users_deleted']} users deleted[/green]")
+            console.print(
+                f"[green]✓ Kitsu cleanup completed: {kitsu_results['projects_deleted']} projects, {kitsu_results['users_deleted']} users deleted[/green]"
+            )
     except Exception as e:
         error_msg = f"Error during Kitsu cleanup: {e}"
         results["kitsu"]["errors"].append(error_msg)
@@ -122,7 +128,9 @@ def generate_all(
 
     # Generate in AYON
     console.print("\n[bold cyan]━━━ Generating data in AYON ━━━[/bold cyan]")
-    console.print(f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}")
+    console.print(
+        f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
+    )
     try:
         from gishant_scripts.ayon.batch_data_generator import get_connection as get_ayon_connection
         from gishant_scripts.ayon.batch_data_generator import generate_batch_data as generate_ayon
@@ -141,21 +149,26 @@ def generate_all(
         results["ayon"]["success"] = True
         results["ayon"]["data"] = ayon_data
 
-        console.print(f"[green]✓ AYON data generated: {len(ayon_data.get('projects', []))} projects, "
-                     f"{len(ayon_data.get('sequences', []))} sequences, "
-                     f"{len(ayon_data.get('shots', []))} shots, "
-                     f"{len(ayon_data.get('tasks', []))} tasks, "
-                     f"{len(ayon_data.get('users', []))} users[/green]")
+        console.print(
+            f"[green]✓ AYON data generated: {len(ayon_data.get('projects', []))} projects, "
+            f"{len(ayon_data.get('sequences', []))} sequences, "
+            f"{len(ayon_data.get('shots', []))} shots, "
+            f"{len(ayon_data.get('tasks', []))} tasks, "
+            f"{len(ayon_data.get('users', []))} users[/green]"
+        )
     except Exception as e:
         error_msg = f"Error during AYON data generation: {e}"
         results["ayon"]["errors"].append(error_msg)
         console.print(f"[red]✗ {error_msg}[/red]")
         import traceback
+
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
     # Generate in Kitsu
     console.print("\n[bold cyan]━━━ Generating data in Kitsu ━━━[/bold cyan]")
-    console.print(f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}")
+    console.print(
+        f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
+    )
     try:
         from gishant_scripts.kitsu.batch_data_generator import get_connection as get_kitsu_connection
         from gishant_scripts.kitsu.batch_data_generator import generate_batch_data as generate_kitsu
@@ -173,16 +186,19 @@ def generate_all(
         results["kitsu"]["success"] = True
         results["kitsu"]["data"] = kitsu_data
 
-        console.print(f"[green]✓ Kitsu data generated: {len(kitsu_data.get('projects', []))} projects, "
-                     f"{len(kitsu_data.get('sequences', []))} sequences, "
-                     f"{len(kitsu_data.get('shots', []))} shots, "
-                     f"{len(kitsu_data.get('tasks', []))} tasks, "
-                     f"{len(kitsu_data.get('users', []))} users[/green]")
+        console.print(
+            f"[green]✓ Kitsu data generated: {len(kitsu_data.get('projects', []))} projects, "
+            f"{len(kitsu_data.get('sequences', []))} sequences, "
+            f"{len(kitsu_data.get('shots', []))} shots, "
+            f"{len(kitsu_data.get('tasks', []))} tasks, "
+            f"{len(kitsu_data.get('users', []))} users[/green]"
+        )
     except Exception as e:
         error_msg = f"Error during Kitsu data generation: {e}"
         results["kitsu"]["errors"].append(error_msg)
         console.print(f"[red]✗ {error_msg}[/red]")
         import traceback
+
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
     return results
@@ -197,12 +213,12 @@ def cleanup_cmd(
     kitsu_only: bool = typer.Option(False, "--kitsu-only", help="Only cleanup Kitsu"),
 ):
     """Clean up test data from AYON and Kitsu."""
-    console.print(Panel(
-        f"[bold cyan]Bulk Data Cleanup[/bold cyan]\n"
-        f"Prefix: {prefix}\n"
-        f"Mode: {'Dry Run' if dry_run else 'LIVE'}",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]Bulk Data Cleanup[/bold cyan]\nPrefix: {prefix}\nMode: {'Dry Run' if dry_run else 'LIVE'}",
+            border_style="cyan",
+        )
+    )
 
     if ayon_only and kitsu_only:
         console.print("[red]Error: Cannot specify both --ayon-only and --kitsu-only[/red]")
@@ -213,11 +229,14 @@ def cleanup_cmd(
         console.print("\n[bold cyan]━━━ Cleaning up AYON only ━━━[/bold cyan]")
         try:
             from gishant_scripts.ayon.batch_data_generator import get_connection, cleanup_test_data
+
             api = get_connection()
             results = cleanup_test_data(api, prefix, dry_run)
 
             if not dry_run:
-                console.print(f"\n[green]✓ Cleanup completed: {results['projects_deleted']} projects, {results['users_deleted']} users deleted[/green]")
+                console.print(
+                    f"\n[green]✓ Cleanup completed: {results['projects_deleted']} projects, {results['users_deleted']} users deleted[/green]"
+                )
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
@@ -227,11 +246,14 @@ def cleanup_cmd(
         console.print("\n[bold cyan]━━━ Cleaning up Kitsu only ━━━[/bold cyan]")
         try:
             from gishant_scripts.kitsu.batch_data_generator import get_connection, cleanup_test_data
+
             get_connection()
             results = cleanup_test_data(prefix, dry_run)
 
             if not dry_run:
-                console.print(f"\n[green]✓ Cleanup completed: {results['projects_deleted']} projects, {results['users_deleted']} users deleted[/green]")
+                console.print(
+                    f"\n[green]✓ Cleanup completed: {results['projects_deleted']} projects, {results['users_deleted']} users deleted[/green]"
+                )
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
@@ -260,7 +282,7 @@ def cleanup_cmd(
                 f"[{style}]{status}[/{style}]",
                 str(results[system]["projects_deleted"]),
                 str(results[system]["users_deleted"]),
-                str(len(results[system]["errors"]))
+                str(len(results[system]["errors"])),
             )
 
         console.print(table)
@@ -284,16 +306,18 @@ def generate_cmd(
     kitsu_only: bool = typer.Option(False, "--kitsu-only", help="Only generate in Kitsu"),
 ):
     """Generate bulk test data in AYON and Kitsu."""
-    console.print(Panel(
-        f"[bold cyan]Bulk Data Generation[/bold cyan]\n"
-        f"Projects: {num_projects}\n"
-        f"Sequences per project: {num_sequences}\n"
-        f"Shots per sequence: {num_shots}\n"
-        f"Tasks per shot: {num_tasks}\n"
-        f"Users: {num_users}\n"
-        f"Prefix: {prefix}",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]Bulk Data Generation[/bold cyan]\n"
+            f"Projects: {num_projects}\n"
+            f"Sequences per project: {num_sequences}\n"
+            f"Shots per sequence: {num_shots}\n"
+            f"Tasks per shot: {num_tasks}\n"
+            f"Users: {num_users}\n"
+            f"Prefix: {prefix}",
+            border_style="cyan",
+        )
+    )
 
     if ayon_only and kitsu_only:
         console.print("[red]Error: Cannot specify both --ayon-only and --kitsu-only[/red]")
@@ -304,6 +328,7 @@ def generate_cmd(
         console.print("\n[bold cyan]━━━ Generating data in AYON only ━━━[/bold cyan]")
         try:
             from gishant_scripts.ayon.batch_data_generator import get_connection, generate_batch_data
+
             api = get_connection()
             results = generate_batch_data(
                 api=api,
@@ -331,6 +356,7 @@ def generate_cmd(
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
             raise typer.Exit(code=1)
         return
@@ -339,6 +365,7 @@ def generate_cmd(
         console.print("\n[bold cyan]━━━ Generating data in Kitsu only ━━━[/bold cyan]")
         try:
             from gishant_scripts.kitsu.batch_data_generator import get_connection, generate_batch_data
+
             get_connection()
             results = generate_batch_data(
                 num_projects=num_projects,
@@ -365,6 +392,7 @@ def generate_cmd(
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
             raise typer.Exit(code=1)
         return
@@ -402,7 +430,7 @@ def generate_cmd(
             str(len(data.get("sequences", []))),
             str(len(data.get("shots", []))),
             str(len(data.get("tasks", []))),
-            str(len(data.get("users", [])))
+            str(len(data.get("users", []))),
         )
 
     console.print(table)
@@ -425,18 +453,20 @@ def reset_and_generate_cmd(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Clean up existing test data and generate fresh bulk data in both systems."""
-    console.print(Panel(
-        f"[bold yellow]⚠️  Reset and Generate[/bold yellow]\n\n"
-        f"This will:\n"
-        f"1. [red]DELETE[/red] all test data with prefix '{prefix}'\n"
-        f"2. [green]GENERATE[/green] fresh test data:\n"
-        f"   • {num_projects} projects\n"
-        f"   • {num_sequences} sequences per project\n"
-        f"   • {num_shots} shots per sequence\n"
-        f"   • {num_tasks} tasks per shot\n"
-        f"   • {num_users} users",
-        border_style="yellow"
-    ))
+    console.print(
+        Panel(
+            f"[bold yellow]⚠️  Reset and Generate[/bold yellow]\n\n"
+            f"This will:\n"
+            f"1. [red]DELETE[/red] all test data with prefix '{prefix}'\n"
+            f"2. [green]GENERATE[/green] fresh test data:\n"
+            f"   • {num_projects} projects\n"
+            f"   • {num_sequences} sequences per project\n"
+            f"   • {num_shots} shots per sequence\n"
+            f"   • {num_tasks} tasks per shot\n"
+            f"   • {num_users} users",
+            border_style="yellow",
+        )
+    )
 
     if not yes:
         response = typer.confirm("\nAre you sure you want to continue?")
@@ -462,21 +492,22 @@ def reset_and_generate_cmd(
 
     # Display combined summary
     console.print("\n" + "=" * 60)
-    console.print(Panel(
-        "[bold green]✓ Reset and Generate Completed![/bold green]\n\n"
-        f"[cyan]Cleanup Summary:[/cyan]\n"
-        f"  AYON: {cleanup_results['ayon']['projects_deleted']} projects, {cleanup_results['ayon']['users_deleted']} users deleted\n"
-        f"  Kitsu: {cleanup_results['kitsu']['projects_deleted']} projects, {cleanup_results['kitsu']['users_deleted']} users deleted\n\n"
-        f"[cyan]Generation Summary:[/cyan]\n"
-        f"  AYON: {len(generate_results['ayon'].get('data', {}).get('projects', []))} projects, "
-        f"{len(generate_results['ayon'].get('data', {}).get('shots', []))} shots created\n"
-        f"  Kitsu: {len(generate_results['kitsu'].get('data', {}).get('projects', []))} projects, "
-        f"{len(generate_results['kitsu'].get('data', {}).get('shots', []))} shots created",
-        title="🎉 Operation Complete",
-        border_style="green"
-    ))
+    console.print(
+        Panel(
+            "[bold green]✓ Reset and Generate Completed![/bold green]\n\n"
+            f"[cyan]Cleanup Summary:[/cyan]\n"
+            f"  AYON: {cleanup_results['ayon']['projects_deleted']} projects, {cleanup_results['ayon']['users_deleted']} users deleted\n"
+            f"  Kitsu: {cleanup_results['kitsu']['projects_deleted']} projects, {cleanup_results['kitsu']['users_deleted']} users deleted\n\n"
+            f"[cyan]Generation Summary:[/cyan]\n"
+            f"  AYON: {len(generate_results['ayon'].get('data', {}).get('projects', []))} projects, "
+            f"{len(generate_results['ayon'].get('data', {}).get('shots', []))} shots created\n"
+            f"  Kitsu: {len(generate_results['kitsu'].get('data', {}).get('projects', []))} projects, "
+            f"{len(generate_results['kitsu'].get('data', {}).get('shots', []))} shots created",
+            title="🎉 Operation Complete",
+            border_style="green",
+        )
+    )
 
 
 if __name__ == "__main__":
     app()
-

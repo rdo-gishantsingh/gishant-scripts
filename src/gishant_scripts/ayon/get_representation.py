@@ -35,19 +35,13 @@ def get_representation(
         RuntimeError: If AYON connection is not established
     """
     if ayon_api is None:
-        raise ImportError(
-            "ayon-python-api not installed. Install it with: pip install ayon-python-api"
-        )
+        raise ImportError("ayon-python-api not installed. Install it with: pip install ayon-python-api")
 
     if not ayon_api.is_connection_created():
-        raise RuntimeError(
-            "AYON connection not established. Call setup_ayon_connection() first."
-        )
+        raise RuntimeError("AYON connection not established. Call setup_ayon_connection() first.")
 
     # Get folder entity - try the provided path first
-    folder = ayon_api.get_folder_by_path(
-        project_name, folder_path, fields=["id", "name", "path"]
-    )
+    folder = ayon_api.get_folder_by_path(project_name, folder_path, fields=["id", "name", "path"])
 
     # If not found, try to find by folder name (last part of path)
     if not folder:
@@ -118,9 +112,6 @@ def get_representation(
     if len(representations) == 0:
         return None
     elif len(representations) > 1:
-        raise ValueError(
-            f"Multiple '{representation_name}' representations found for version {last_version['id']}"
-        )
+        raise ValueError(f"Multiple '{representation_name}' representations found for version {last_version['id']}")
     else:
         return representations[0]
-

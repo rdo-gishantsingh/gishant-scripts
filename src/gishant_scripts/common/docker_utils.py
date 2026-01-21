@@ -32,9 +32,7 @@ def check_docker_compose() -> None:
             check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        raise DockerComposeError(
-            "docker compose not found. Please install Docker with Compose plugin."
-        ) from err
+        raise DockerComposeError("docker compose not found. Please install Docker with Compose plugin.") from err
 
 
 def docker_compose_cmd(
@@ -72,9 +70,7 @@ def docker_compose_cmd(
         )
     except subprocess.CalledProcessError as err:
         raise DockerComposeError(
-            f"Docker compose command failed: {' '.join(cmd)}\n"
-            f"Exit code: {err.returncode}\n"
-            f"stderr: {err.stderr}"
+            f"Docker compose command failed: {' '.join(cmd)}\nExit code: {err.returncode}\nstderr: {err.stderr}"
         ) from err
 
 
@@ -108,9 +104,7 @@ def start_services(compose_file: Path, services: list[str]) -> None:
     docker_compose_cmd(compose_file, ["start"] + services)
 
 
-def ensure_service_running(
-    compose_file: Path, service: str, wait_seconds: int = 5
-) -> None:
+def ensure_service_running(compose_file: Path, service: str, wait_seconds: int = 5) -> None:
     """Ensure a service is running, starting it if necessary.
 
     Args:
@@ -165,9 +159,7 @@ def exec_in_service(
     return result
 
 
-def copy_to_container(
-    compose_file: Path, service: str, local_path: Path, container_path: str
-) -> None:
+def copy_to_container(compose_file: Path, service: str, local_path: Path, container_path: str) -> None:
     """Copy a file to a container.
 
     Args:
@@ -179,9 +171,7 @@ def copy_to_container(
     Raises:
         DockerComposeError: If copy fails
     """
-    docker_compose_cmd(
-        compose_file, ["cp", str(local_path), f"{service}:{container_path}"]
-    )
+    docker_compose_cmd(compose_file, ["cp", str(local_path), f"{service}:{container_path}"])
 
 
 def detect_backup_format(backup_file: Path) -> BackupFormat:

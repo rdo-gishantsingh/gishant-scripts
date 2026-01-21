@@ -127,7 +127,9 @@ def resolve_to_ipv4(host: str) -> tuple[str, bool, list[str]]:
         if addrinfo_v6:
             ipv6_addresses = list(set(info[4][0] for info in addrinfo_v6))
             if ipv6_addresses:
-                console.print(f"[yellow]Note: '{host}' also has IPv6 addresses: {', '.join(ipv6_addresses[:3])}[/yellow]")
+                console.print(
+                    f"[yellow]Note: '{host}' also has IPv6 addresses: {', '.join(ipv6_addresses[:3])}[/yellow]"
+                )
                 if not ipv4_addr:
                     console.print(
                         "[bold yellow]Warning: No IPv4 address found but IPv6 exists. "
@@ -732,9 +734,7 @@ def add_relay(
 
         # Display summary of resolution
         if final_host != host:
-            console.print(
-                f"[green]Using IPv4 address: {final_host} (resolved from {host})[/green]"
-            )
+            console.print(f"[green]Using IPv4 address: {final_host} (resolved from {host})[/green]")
     else:
         # Just check if it's already an IP
         is_ipv4 = is_valid_ipv4(host)
@@ -779,6 +779,7 @@ def add_relay(
     # Validate relay URL format
     try:
         from urllib.parse import urlparse, parse_qs
+
         parsed = urlparse(relay_str)
         if parsed.scheme != "smtp":
             raise ValueError("Scheme must be 'smtp'")
@@ -821,10 +822,8 @@ def add_relay(
         normalized_mode = tls_map.get(ssl_mode_lower, "None")
 
         if normalized_mode != "None":
-             console.print(f"[dim]Updating global SMTP client TLS mode: {normalized_mode}[/dim]")
-             update_postal_config_yaml({
-                "smtp_client.tls_mode": normalized_mode
-             })
+            console.print(f"[dim]Updating global SMTP client TLS mode: {normalized_mode}[/dim]")
+            update_postal_config_yaml({"smtp_client.tls_mode": normalized_mode})
 
         # Read the file
         temp_path = "/tmp/postal.yml.tmp"
@@ -836,9 +835,7 @@ def add_relay(
 
         # Verify configuration version
         if config.get("version") != 2:
-            console.print(
-                "[yellow]Warning: Configuration version is not 2. Postal v3 requires version 2.[/yellow]"
-            )
+            console.print("[yellow]Warning: Configuration version is not 2. Postal v3 requires version 2.[/yellow]")
             if not Confirm.ask("Continue anyway?", default=True):
                 raise typer.Exit(1)
 
@@ -863,6 +860,7 @@ def add_relay(
             # Parse existing relay to get base URL
             try:
                 from urllib.parse import urlparse
+
                 existing_parsed = urlparse(existing)
                 existing_base = f"smtp://{existing_parsed.hostname}:{existing_parsed.port}?ssl_mode={url_ssl_mode}"
 
@@ -873,6 +871,7 @@ def add_relay(
                     if safe_pass:
                         # Try to mask password in existing URL too
                         import re
+
                         display_existing = re.sub(r":([^:@]+)@", r":***@", existing)
 
                     console.print(
@@ -892,9 +891,7 @@ def add_relay(
             except Exception:
                 # If parsing fails, do simple string comparison
                 if f"{final_host}:{port}" in existing:
-                    console.print(
-                        f"[yellow]Warning: Found similar relay: {existing}[/yellow]"
-                    )
+                    console.print(f"[yellow]Warning: Found similar relay: {existing}[/yellow]")
 
         # Append new relay string
         config["postal"]["smtp_relays"].append(relay_str)
@@ -919,7 +916,9 @@ def add_relay(
 @app.command()
 def add_postfix_relay(
     postfix_host: str = typer.Option("127.0.0.1", help="Postfix hostname (default: localhost)"),
-    postfix_port: int = typer.Option(2525, help="Postfix port (default: 2525 to avoid conflict with Postal on port 25)"),
+    postfix_port: int = typer.Option(
+        2525, help="Postfix port (default: 2525 to avoid conflict with Postal on port 25)"
+    ),
 ):
     """
     Configure Postal to use local Postfix as SMTP relay.
@@ -963,15 +962,14 @@ def add_postfix_relay(
 
     # Test Postfix connectivity
     import socket
+
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)
         result = sock.connect_ex((postfix_host, postfix_port))
         sock.close()
         if result != 0:
-            console.print(
-                f"[yellow]Warning: Could not connect to Postfix at {postfix_host}:{postfix_port}[/yellow]"
-            )
+            console.print(f"[yellow]Warning: Could not connect to Postfix at {postfix_host}:{postfix_port}[/yellow]")
             if not Confirm.ask("Continue anyway?", default=False):
                 raise typer.Exit(0)
         else:
@@ -1000,9 +998,7 @@ def add_postfix_relay(
 
         # Verify configuration version
         if config.get("version") != 2:
-            console.print(
-                "[yellow]Warning: Configuration version is not 2. Postal v3 requires version 2.[/yellow]"
-            )
+            console.print("[yellow]Warning: Configuration version is not 2. Postal v3 requires version 2.[/yellow]")
 
         # Ensure 'postal' key exists
         if "postal" not in config:
@@ -1100,15 +1096,17 @@ def setup_tls(
         # Docs say: smtp_server: ... tls_enabled: true
         # So "smtp_server.tls_enabled" work.
 
-        update_postal_config_yaml({
-            "smtp_server.tls_enabled": True,
-            # Docs say: tls_certificate_path: other/path/to/cert/within/container
-            # We are putting it in /opt/postal/config/smtp.cert
-            # Default mounts usually map /opt/postal/config to /config in container
-            # So path inside container is `/config/smtp.cert`
-            "smtp_server.tls_certificate_path": "/config/smtp.cert",
-            "smtp_server.tls_private_key_path": "/config/smtp.key"
-        })
+        update_postal_config_yaml(
+            {
+                "smtp_server.tls_enabled": True,
+                # Docs say: tls_certificate_path: other/path/to/cert/within/container
+                # We are putting it in /opt/postal/config/smtp.cert
+                # Default mounts usually map /opt/postal/config to /config in container
+                # So path inside container is `/config/smtp.cert`
+                "smtp_server.tls_certificate_path": "/config/smtp.cert",
+                "smtp_server.tls_private_key_path": "/config/smtp.key",
+            }
+        )
     except Exception as e:
         console.print(f"[bold red]Failed to update postal config: {e}[/bold red]")
 
@@ -1121,14 +1119,22 @@ def setup_tls(
     # Run new with /certs mount
     # We mount /opt/postal/config to /certs in Caddy to access the same files cleanly
     cmd = [
-        "docker", "run", "-d",
-        "--name", "postal-caddy",
-        "--restart", "always",
-        "--network", "host",
-        "-v", "/opt/postal/config/Caddyfile:/etc/caddy/Caddyfile",
-        "-v", "/opt/postal/caddy-data:/data",
-        "-v", "/opt/postal/config:/certs:ro",
-        "caddy"
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        "postal-caddy",
+        "--restart",
+        "always",
+        "--network",
+        "host",
+        "-v",
+        "/opt/postal/config/Caddyfile:/etc/caddy/Caddyfile",
+        "-v",
+        "/opt/postal/caddy-data:/data",
+        "-v",
+        "/opt/postal/config:/certs:ro",
+        "caddy",
     ]
     run_command(cmd)
 
@@ -1388,9 +1394,7 @@ def analyze_relay_string(relay_str: str) -> dict[str, Any]:
         # If not an IP, it's a hostname
         if not result["is_ipv4"] and not result["is_ipv6"]:
             result["is_hostname"] = True
-            result["warnings"].append(
-                "Using hostname instead of IP - Postal may resolve to IPv6 and fail"
-            )
+            result["warnings"].append("Using hostname instead of IP - Postal may resolve to IPv6 and fail")
 
     except Exception as e:
         result["warnings"].append(f"Could not parse relay string: {e}")
@@ -1431,6 +1435,7 @@ def show_config(
             for relay in relays:
                 # Redact password portion (between : and @ after //)
                 import re
+
                 redacted = re.sub(r"(://[^:]*:)[^@]*(@)", r"\1***\2", relay)
                 redacted_relays.append(redacted)
             config["postal"]["smtp_relays"] = redacted_relays
@@ -1531,11 +1536,9 @@ def show_config(
         console.print(f"[bold red]Failed to read config: {e}[/bold red]")
 
 
-
 @app.command()
 def verify_access(
-    url: str = typer.Option(..., help="URL to check"),
-    timeout: int = typer.Option(5, help="Timeout in seconds")
+    url: str = typer.Option(..., help="URL to check"), timeout: int = typer.Option(5, help="Timeout in seconds")
 ):
     """
     Verify if a URL is accessible (e.g. checks if Caddy is serving).
@@ -1544,11 +1547,11 @@ def verify_access(
         response = requests.get(url, timeout=timeout, verify=False)
         console.print(f"Status Code: {response.status_code}")
         if response.status_code < 400:
-             console.print(f"[green]Success: {url} is reachable.[/green]")
+            console.print(f"[green]Success: {url} is reachable.[/green]")
         else:
-             console.print(f"[yellow]Warning: {url} returned {response.status_code}[/yellow]")
+            console.print(f"[yellow]Warning: {url} returned {response.status_code}[/yellow]")
     except Exception as e:
-         console.print(f"[red]Error reaching {url}: {e}[/red]")
+        console.print(f"[red]Error reaching {url}: {e}[/red]")
 
 
 if __name__ == "__main__":

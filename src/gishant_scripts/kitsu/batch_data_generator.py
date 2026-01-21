@@ -60,7 +60,9 @@ def get_connection():
             try:
                 user = gazu.client.get_current_user()
                 if user:
-                    console.print(f"[green]Authenticated to Kitsu using API token (user: {user.get('email', 'unknown')})[/green]")
+                    console.print(
+                        f"[green]Authenticated to Kitsu using API token (user: {user.get('email', 'unknown')})[/green]"
+                    )
                     return gazu
             except Exception as e:
                 console.print(f"[yellow]Warning: Token set but verification failed: {e}[/yellow]")
@@ -82,7 +84,9 @@ def get_connection():
             try:
                 user = gazu.client.get_current_user()
                 if user:
-                    console.print(f"[green]Authenticated to Kitsu using login/password (user: {user.get('email', login)})[/green]")
+                    console.print(
+                        f"[green]Authenticated to Kitsu using login/password (user: {user.get('email', login)})[/green]"
+                    )
                 else:
                     console.print("[green]Authenticated to Kitsu using login/password[/green]")
             except Exception:
@@ -99,6 +103,7 @@ def get_connection():
             raise RuntimeError(f"Failed to authenticate to Kitsu: {e}")
     else:
         raise RuntimeError("KITSU_API_KEY or KITSU_LOGIN/KITSU_PASSWORD must be set")
+
 
 console = Console()
 
@@ -122,8 +127,16 @@ def generate_project_name(index: int, prefix: str = "test") -> tuple[str, str]:
     """
     # Generate a realistic project name
     project_names = [
-        "Bollywoof", "MysticRealm", "CyberCity", "NeonDreams", "ShadowRun",
-        "StarQuest", "DarkMatter", "LightSpeed", "QuantumLeap", "CosmicDrift"
+        "Bollywoof",
+        "MysticRealm",
+        "CyberCity",
+        "NeonDreams",
+        "ShadowRun",
+        "StarQuest",
+        "DarkMatter",
+        "LightSpeed",
+        "QuantumLeap",
+        "CosmicDrift",
     ]
     if index <= len(project_names):
         name = project_names[index - 1]
@@ -210,7 +223,9 @@ def create_shot(project_id: str, sequence_id: str, shot_name: str) -> dict[str, 
         return None
 
 
-def create_task(project_id: str, entity_id: str, task_type_id: str, person_id: str | None = None) -> dict[str, Any] | None:
+def create_task(
+    project_id: str, entity_id: str, task_type_id: str, person_id: str | None = None
+) -> dict[str, Any] | None:
     """Create a task in Kitsu.
 
     Args:
@@ -308,11 +323,15 @@ def create_person(username: str, email: str, first_name: str = "", last_name: st
             try:
                 existing_person = gazu.person.get_person_by_email(email)
                 if existing_person is not None:
-                    console.print(f"[yellow]Person with email {email} already exists (detected via error), skipping creation[/yellow]")
+                    console.print(
+                        f"[yellow]Person with email {email} already exists (detected via error), skipping creation[/yellow]"
+                    )
                     return {"id": existing_person["id"], "name": username, "status": "exists"}
             except Exception:
                 pass
-            console.print(f"[red]Error creating person {username}: Server validation error - person may already exist or have invalid data[/red]")
+            console.print(
+                f"[red]Error creating person {username}: Server validation error - person may already exist or have invalid data[/red]"
+            )
         else:
             console.print(f"[red]Error creating person {username}: {e}[/red]")
         return None
@@ -340,9 +359,7 @@ def process_batch(
             elif operation == "shot":
                 result = create_shot(item["project_id"], item["sequence_id"], item["name"])
             elif operation == "task":
-                result = create_task(
-                    item["project_id"], item["entity_id"], item["task_type_id"], item.get("person_id")
-                )
+                result = create_task(item["project_id"], item["entity_id"], item["task_type_id"], item.get("person_id"))
             elif operation == "person":
                 result = create_person(
                     item["username"], item["email"], item.get("first_name", ""), item.get("last_name", "")
@@ -459,7 +476,9 @@ def generate_batch_data(
                     try:
                         ep_seq = gazu.shot.new_sequence(project_id, {"name": ep_name})
                         if ep_seq is None:
-                            console.print(f"[yellow]Warning: Could not create episode {ep_name}: gazu returned None[/yellow]")
+                            console.print(
+                                f"[yellow]Warning: Could not create episode {ep_name}: gazu returned None[/yellow]"
+                            )
                         else:
                             episodes.append({"id": ep_seq["id"], "name": ep_name, "index": ep_idx})
                     except Exception as e:
@@ -616,9 +635,12 @@ def cleanup_test_data(prefix: str = "test", dry_run: bool = False) -> dict[str, 
             else:
                 # Filter test users by prefix in email or first_name
                 test_persons = [
-                    p for p in all_persons
-                    if (p.get("email", "").startswith(f"{prefix}user") or
-                        p.get("first_name", "").lower() == prefix.lower())
+                    p
+                    for p in all_persons
+                    if (
+                        p.get("email", "").startswith(f"{prefix}user")
+                        or p.get("first_name", "").lower() == prefix.lower()
+                    )
                 ]
 
                 if not test_persons:
@@ -629,7 +651,9 @@ def cleanup_test_data(prefix: str = "test", dry_run: bool = False) -> dict[str, 
                     if dry_run:
                         console.print("[yellow]Dry run mode - listing users that would be deleted:[/yellow]")
                         for person in test_persons:
-                            console.print(f"  - {person.get('email', 'N/A')} ({person.get('first_name', '')} {person.get('last_name', '')})")
+                            console.print(
+                                f"  - {person.get('email', 'N/A')} ({person.get('first_name', '')} {person.get('last_name', '')})"
+                            )
                     else:
                         with Progress(
                             SpinnerColumn(),
@@ -775,7 +799,9 @@ def generate_data_cli(
 
     get_connection()
     console.print(f"[bold cyan]Generating Kitsu test data...[/bold cyan]")
-    console.print(f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}")
+    console.print(
+        f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
+    )
 
     results = generate_batch_data(
         num_projects=num_projects,
@@ -794,9 +820,17 @@ def generate_data_cli(
     table.add_column("Failed", style="red")
 
     table.add_row("Projects", str(len(results["projects"])), str(num_projects - len(results["projects"])))
-    table.add_row("Sequences", str(len(results["sequences"])), str(num_projects * num_sequences - len(results["sequences"])))
-    table.add_row("Shots", str(len(results["shots"])), str(num_projects * num_sequences * num_shots - len(results["shots"])))
-    table.add_row("Tasks", str(len(results["tasks"])), str(num_projects * num_sequences * num_shots * num_tasks - len(results["tasks"])))
+    table.add_row(
+        "Sequences", str(len(results["sequences"])), str(num_projects * num_sequences - len(results["sequences"]))
+    )
+    table.add_row(
+        "Shots", str(len(results["shots"])), str(num_projects * num_sequences * num_shots - len(results["shots"]))
+    )
+    table.add_row(
+        "Tasks",
+        str(len(results["tasks"])),
+        str(num_projects * num_sequences * num_shots * num_tasks - len(results["tasks"])),
+    )
     table.add_row("Users", str(len(results["users"])), str(num_users - len(results["users"])))
 
     console.print(table)
@@ -818,7 +852,9 @@ def simulate_load_cli(
         console.print(f"[red]Error connecting to Kitsu: {e}[/red]")
         raise typer.Exit(code=1)
 
-    console.print(f"[bold cyan]Simulating {num_users} concurrent users with {operations_per_user} operations each...[/bold cyan]")
+    console.print(
+        f"[bold cyan]Simulating {num_users} concurrent users with {operations_per_user} operations each...[/bold cyan]"
+    )
 
     results = simulate_concurrent_users(num_users, operations_per_user, batch_size)
 
@@ -847,7 +883,9 @@ def cleanup_cli(
         raise typer.Exit(code=1)
 
     if not dry_run and not confirm:
-        console.print(f"[bold yellow]WARNING: This will delete ALL projects and users with prefix '{prefix}'[/bold yellow]")
+        console.print(
+            f"[bold yellow]WARNING: This will delete ALL projects and users with prefix '{prefix}'[/bold yellow]"
+        )
         response = typer.confirm("Are you sure you want to continue?")
         if not response:
             console.print("[yellow]Cleanup cancelled.[/yellow]")
@@ -866,8 +904,16 @@ def cleanup_cli(
         table.add_column("Deleted", style="green")
         table.add_column("Errors", style="red")
 
-        table.add_row("Projects", str(results["projects_deleted"]), str(len([e for e in results["errors"] if "project" in e.lower()])))
-        table.add_row("Users", str(results["users_deleted"]), str(len([e for e in results["errors"] if "user" in e.lower() or "person" in e.lower()])))
+        table.add_row(
+            "Projects",
+            str(results["projects_deleted"]),
+            str(len([e for e in results["errors"] if "project" in e.lower()])),
+        )
+        table.add_row(
+            "Users",
+            str(results["users_deleted"]),
+            str(len([e for e in results["errors"] if "user" in e.lower() or "person" in e.lower()])),
+        )
 
         console.print(table)
 
@@ -881,4 +927,3 @@ if __name__ == "__main__":
     app.command("simulate-load")(simulate_load_cli)
     app.command("cleanup")(cleanup_cli)
     app()
-

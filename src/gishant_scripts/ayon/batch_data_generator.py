@@ -42,6 +42,7 @@ def get_connection():
     # Connection will be created on first API call
     return ayon_api
 
+
 console = Console()
 
 
@@ -64,8 +65,16 @@ def generate_project_name(index: int, prefix: str = "test") -> tuple[str, str]:
     """
     # Generate a realistic project name
     project_names = [
-        "Bollywoof", "MysticRealm", "CyberCity", "NeonDreams", "ShadowRun",
-        "StarQuest", "DarkMatter", "LightSpeed", "QuantumLeap", "CosmicDrift"
+        "Bollywoof",
+        "MysticRealm",
+        "CyberCity",
+        "NeonDreams",
+        "ShadowRun",
+        "StarQuest",
+        "DarkMatter",
+        "LightSpeed",
+        "QuantumLeap",
+        "CosmicDrift",
     ]
     # Use prefix if provided and not "test" (default)
     if prefix and prefix != "test":
@@ -181,7 +190,9 @@ def create_task(
             try:
                 all_folders_debug = list(api.get_folders(project_name, folder_types=["Shot"]))
                 folder_names_debug = [f.get("name") for f in all_folders_debug]
-                console.print(f"[yellow]Debug: Available shot folders in '{project_name}': {folder_names_debug[:5]}[/yellow]")
+                console.print(
+                    f"[yellow]Debug: Available shot folders in '{project_name}': {folder_names_debug[:5]}[/yellow]"
+                )
             except Exception:
                 pass
             console.print(f"[red]Error: Folder '{folder_name}' not found in project '{project_name}'[/red]")
@@ -200,6 +211,7 @@ def create_task(
     except Exception as e:
         console.print(f"[red]Error creating task {task_name} in {project_name}/{folder_name}: {e}[/red]")
         import traceback
+
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
         return None
 
@@ -395,7 +407,9 @@ def generate_batch_data(
                 time.sleep(0.5)
 
                 # Generate tasks for each shot
-                project_shots = [s for s in results["shots"] if s.get("status") == "created" and s.get("project") == project_name]
+                project_shots = [
+                    s for s in results["shots"] if s.get("status") == "created" and s.get("project") == project_name
+                ]
                 if project_shots and num_tasks_per_shot > 0:
                     task_types = ["Animation", "Compositing", "Lighting", "Rendering", "Modeling"]
                     task_task = progress.add_task(
@@ -487,9 +501,12 @@ def cleanup_test_data(api: Any, prefix: str = "test", dry_run: bool = False) -> 
             else:
                 # Filter test users by prefix in username or email
                 test_users = [
-                    u for u in all_users
-                    if ((u.get("name") or "").lower().startswith(f"{prefix}") or
-                        (u.get("attrib", {}).get("email") or "").startswith(f"{prefix}user"))
+                    u
+                    for u in all_users
+                    if (
+                        (u.get("name") or "").lower().startswith(f"{prefix}")
+                        or (u.get("attrib", {}).get("email") or "").startswith(f"{prefix}user")
+                    )
                 ]
 
                 if not test_users:
@@ -610,7 +627,9 @@ def generate_data_cli(
 
     api = get_connection()
     console.print(f"[bold cyan]Generating Ayon test data...[/bold cyan]")
-    console.print(f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}")
+    console.print(
+        f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
+    )
 
     results = generate_batch_data(
         api=api,
@@ -630,9 +649,17 @@ def generate_data_cli(
     table.add_column("Failed", style="red")
 
     table.add_row("Projects", str(len(results["projects"])), str(num_projects - len(results["projects"])))
-    table.add_row("Sequences", str(len(results["sequences"])), str(num_projects * num_sequences - len(results["sequences"])))
-    table.add_row("Shots", str(len(results["shots"])), str(num_projects * num_sequences * num_shots - len(results["shots"])))
-    table.add_row("Tasks", str(len(results["tasks"])), str(num_projects * num_sequences * num_shots * num_tasks - len(results["tasks"])))
+    table.add_row(
+        "Sequences", str(len(results["sequences"])), str(num_projects * num_sequences - len(results["sequences"]))
+    )
+    table.add_row(
+        "Shots", str(len(results["shots"])), str(num_projects * num_sequences * num_shots - len(results["shots"]))
+    )
+    table.add_row(
+        "Tasks",
+        str(len(results["tasks"])),
+        str(num_projects * num_sequences * num_shots * num_tasks - len(results["tasks"])),
+    )
     table.add_row("Users", str(len(results["users"])), str(num_users - len(results["users"])))
 
     console.print(table)
@@ -654,7 +681,9 @@ def simulate_load_cli(
         console.print(f"[red]Error connecting to Ayon: {e}[/red]")
         raise typer.Exit(code=1)
 
-    console.print(f"[bold cyan]Simulating {num_users} concurrent users with {operations_per_user} operations each...[/bold cyan]")
+    console.print(
+        f"[bold cyan]Simulating {num_users} concurrent users with {operations_per_user} operations each...[/bold cyan]"
+    )
 
     results = simulate_concurrent_users(api, num_users, operations_per_user, batch_size)
 
@@ -683,7 +712,9 @@ def cleanup_cli(
         raise typer.Exit(code=1)
 
     if not dry_run and not confirm:
-        console.print(f"[bold yellow]WARNING: This will delete ALL projects and users with prefix '{prefix}'[/bold yellow]")
+        console.print(
+            f"[bold yellow]WARNING: This will delete ALL projects and users with prefix '{prefix}'[/bold yellow]"
+        )
         response = typer.confirm("Are you sure you want to continue?")
         if not response:
             console.print("[yellow]Cleanup cancelled.[/yellow]")
@@ -702,8 +733,14 @@ def cleanup_cli(
         table.add_column("Deleted", style="green")
         table.add_column("Errors", style="red")
 
-        table.add_row("Projects", str(results["projects_deleted"]), str(len([e for e in results["errors"] if "project" in e.lower()])))
-        table.add_row("Users", str(results["users_deleted"]), str(len([e for e in results["errors"] if "user" in e.lower()])))
+        table.add_row(
+            "Projects",
+            str(results["projects_deleted"]),
+            str(len([e for e in results["errors"] if "project" in e.lower()])),
+        )
+        table.add_row(
+            "Users", str(results["users_deleted"]), str(len([e for e in results["errors"] if "user" in e.lower()]))
+        )
 
         console.print(table)
 
@@ -717,4 +754,3 @@ if __name__ == "__main__":
     app.command("simulate-load")(simulate_load_cli)
     app.command("cleanup")(cleanup_cli)
     app()
-

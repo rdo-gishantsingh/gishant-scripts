@@ -515,7 +515,9 @@ def display_publish_instances():
         if instance.get("product_type") == "render":
             node_name = f"*** {node_name}"
 
-        print(f"{node_name:<25} {instance.get('product_type', 'N/A'):<15} {instance.get('product_name', 'N/A'):<30} {families_str or 'none':<20} {active_status}")
+        print(
+            f"{node_name:<25} {instance.get('product_type', 'N/A'):<15} {instance.get('product_name', 'N/A'):<30} {families_str or 'none':<20} {active_status}"
+        )
 
     print("=" * 80)
     print()

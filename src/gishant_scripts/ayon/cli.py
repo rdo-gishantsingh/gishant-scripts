@@ -22,7 +22,9 @@ _use_dev = False
 
 @app.callback()
 def main(
-    local: bool = typer.Option(False, "--local", help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)"),
+    local: bool = typer.Option(
+        False, "--local", help="Use local environment (AYON_SERVER_URL_LOCAL, AYON_API_KEY_LOCAL)"
+    ),
     dev: bool = typer.Option(False, "--dev", help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)"),
 ):
     """Ayon CRUD operations with environment selection."""
@@ -39,6 +41,7 @@ def get_connection():
     except AYONConnectionError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("list-projects")
 def list_projects():
@@ -58,17 +61,14 @@ def list_projects():
         table.add_column("Active", style="magenta")
 
         for project in projects:
-            table.add_row(
-                project["name"],
-                project.get("code", "N/A"),
-                str(project.get("active", True))
-            )
+            table.add_row(project["name"], project.get("code", "N/A"), str(project.get("active", True)))
 
         console.print(table)
 
     except Exception as e:
         console.print(f"[red]Error fetching projects: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("get-project")
 def get_project(project_name: str):
@@ -81,18 +81,21 @@ def get_project(project_name: str):
             console.print(f"[red]Project '{project_name}' not found.[/red]")
             raise typer.Exit(code=1)
 
-        console.print(Panel(
-            f"Name: {project['name']}\n"
-            f"Code: {project.get('code', 'N/A')}\n"
-            f"Active: {project.get('active', True)}\n"
-            f"Folder Structure: {len(project.get('folders', []))} folders",
-            title=f"Project Details: {project_name}",
-            border_style="blue"
-        ))
+        console.print(
+            Panel(
+                f"Name: {project['name']}\n"
+                f"Code: {project.get('code', 'N/A')}\n"
+                f"Active: {project.get('active', True)}\n"
+                f"Folder Structure: {len(project.get('folders', []))} folders",
+                title=f"Project Details: {project_name}",
+                border_style="blue",
+            )
+        )
 
     except Exception as e:
         console.print(f"[red]Error fetching project: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("create-project")
 def create_project(
@@ -111,6 +114,7 @@ def create_project(
         console.print(f"[red]Error creating project: {e}[/red]")
         raise typer.Exit(code=1)
 
+
 @app.command("delete-project")
 def delete_project(project_name: str):
     """Delete a project."""
@@ -127,6 +131,7 @@ def delete_project(project_name: str):
     except Exception as e:
         console.print(f"[red]Error deleting project: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command("list-users")
 def list_users():
@@ -160,6 +165,7 @@ def list_users():
     except Exception as e:
         console.print(f"[red]Error fetching users: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 # Import batch data generator commands (lazy import to avoid circular dependencies)
 def _register_batch_commands():

@@ -460,9 +460,7 @@ def get_differences(
             elif val1 != val2:
                 status = "changed"
 
-            differences["dependencies"].append(
-                {"key": platform, "bundle1": val1, "bundle2": val2, "status": status}
-            )
+            differences["dependencies"].append({"key": platform, "bundle1": val1, "bundle2": val2, "status": status})
 
     # Settings differences
     all_keys = set(comparison["settings"]["bundle1"].keys()) | set(comparison["settings"]["bundle2"].keys())
@@ -470,8 +468,7 @@ def get_differences(
     # Apply addon filter if specified
     if addon_filter:
         all_keys = {
-            key for key in all_keys
-            if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
+            key for key in all_keys if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
         }
 
     for key in sorted(all_keys):
@@ -498,8 +495,7 @@ def get_differences(
         # Apply addon filter if specified
         if addon_filter:
             all_keys = {
-                key for key in all_keys
-                if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
+                key for key in all_keys if any(key.startswith(f"{addon}.") or key == addon for addon in addon_filter)
             }
 
         for key in sorted(all_keys):
@@ -515,9 +511,7 @@ def get_differences(
                 elif val1 != val2:
                     status = "changed"
 
-                differences["project_settings"].append(
-                    {"key": key, "bundle1": val1, "bundle2": val2, "status": status}
-                )
+                differences["project_settings"].append({"key": key, "bundle1": val1, "bundle2": val2, "status": status})
 
     # Anatomy differences (if present)
     if "anatomy" in comparison:

@@ -982,7 +982,9 @@ def list_ffmpeg_presets(ctx, format):
     help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)",
 )
 @click.pass_context
-def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev):
+def analyze_bundles_cli(
+    ctx, bundle1, bundle2, only_diff, max_depth, view, output, project, addon, interactive, local, dev
+):
     """
     Compare settings between two AYON bundles.
 
@@ -1125,7 +1127,9 @@ def analyze_bundles_cli(ctx, bundle1, bundle2, only_diff, max_depth, view, outpu
     help="Use dev environment (AYON_SERVER_URL_DEV, AYON_API_KEY_DEV)",
 )
 @click.pass_context
-def sync_bundles_cli(ctx, source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive, local, dev):
+def sync_bundles_cli(
+    ctx, source, target, operation, project, bundle, sync_mode, addon, dry_run, force, interactive, local, dev
+):
     """
     Sync AYON bundle and project settings.
 

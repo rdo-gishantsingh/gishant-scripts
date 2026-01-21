@@ -7,6 +7,7 @@ which can then be used by Postal or other mail servers.
 
 Based on: https://docs.postalserver.io and Postfix documentation
 """
+
 import os
 import shutil
 import subprocess
@@ -152,9 +153,7 @@ def install_postfix_packages():
                             "[yellow]Optional packages not available (this is OK, not required for Postfix).[/yellow]"
                         )
             except Exception as e:
-                console.print(
-                    f"[yellow]Could not install optional packages (this is OK): {e}[/yellow]"
-                )
+                console.print(f"[yellow]Could not install optional packages (this is OK): {e}[/yellow]")
 
 
 def configure_postfix_gmail(
@@ -203,14 +202,14 @@ def configure_postfix_gmail(
     run_command(["mv", "/tmp/sasl_passwd", sasl_passwd], sudo=True)
     run_command(["chmod", "600", sasl_passwd], sudo=True)
     run_command(["chown", "root:root", sasl_passwd], sudo=True)
-    
+
     # Remove existing database file (always, to avoid permission issues)
     sasl_passwd_db = f"{sasl_passwd}.db"
     run_command(["rm", "-f", sasl_passwd_db], sudo=True, check=False)  # Don't fail if doesn't exist
-    
+
     # Create the password map database
     run_command(["postmap", sasl_passwd], sudo=True)
-    
+
     # Ensure the database file has correct permissions
     run_command(["chmod", "600", sasl_passwd_db], sudo=True)
     run_command(["chown", "root:root", sasl_passwd_db], sudo=True)
@@ -252,7 +251,7 @@ def configure_postfix_gmail(
         "smtp_sasl_security_options": "noanonymous",
         "smtp_tls_CAfile": ca_cert,
     }
-    
+
     if relay_port == 465:
         # SMTPS - implicit TLS (wrappermode)
         config_updates = {
@@ -295,7 +294,7 @@ def configure_postfix_gmail(
         key_found = False
         for key in config_updates.keys():
             # Match key at start of line (with optional spaces before =)
-            if stripped.startswith(key) and ("=" in stripped or " " in stripped[:len(key)+5]):
+            if stripped.startswith(key) and ("=" in stripped or " " in stripped[: len(key) + 5]):
                 # Extract just the key part (before = or space)
                 line_key = stripped.split("=")[0].split()[0] if "=" in stripped else stripped.split()[0]
                 if line_key == key:
@@ -344,30 +343,31 @@ def configure_postfix_gmail(
     master_cf = "/etc/postfix/master.cf"
     if listen_port != 25:
         console.print(f"[dim]Configuring Postfix to listen on port {listen_port}...[/dim]")
-        
+
         # Read master.cf
         result = run_command(["cat", master_cf], sudo=True, check=False)
         if result.returncode == 0:
             master_content = result.stdout
-            
+
             # Replace the smtp inet line to use our listen port
             # Original: smtp      inet  n       -       n       -       -       smtpd
             # New: 127.0.0.1:2525 inet  n       -       n       -       -       smtpd
             import re
+
             # Match the smtp inet line (handles various spacing)
-            pattern = r'^smtp\s+inet\s+'
-            replacement = f'127.0.0.1:{listen_port} inet  '
-            
+            pattern = r"^smtp\s+inet\s+"
+            replacement = f"127.0.0.1:{listen_port} inet  "
+
             new_master_content = re.sub(pattern, replacement, master_content, flags=re.MULTILINE)
-            
+
             # Write updated master.cf
             with open("/tmp/master.cf", "w") as f:
                 f.write(new_master_content)
-            
+
             run_command(["mv", "/tmp/master.cf", master_cf], sudo=True)
             run_command(["chown", "root:root", master_cf], sudo=True)
             run_command(["chmod", "644", master_cf], sudo=True)
-            
+
             console.print(f"[green]Postfix configured to listen on 127.0.0.1:{listen_port}[/green]")
         else:
             console.print(f"[yellow]Warning: Could not read {master_cf}, skipping port configuration.[/yellow]")
@@ -472,7 +472,9 @@ def main(
     app_password: str = typer.Option(..., prompt=True, hide_input=True, help="Gmail app password (16 characters)"),
     relay_host: str = typer.Option("smtp.gmail.com", help="Gmail SMTP hostname"),
     relay_port: int = typer.Option(465, help="Gmail SMTP port (465 for SMTPS, 587 for STARTTLS)"),
-    listen_port: int = typer.Option(2525, help="Port for Postfix to listen on (default: 2525 to avoid conflict with Postal on port 25)"),
+    listen_port: int = typer.Option(
+        2525, help="Port for Postfix to listen on (default: 2525 to avoid conflict with Postal on port 25)"
+    ),
     test_recipient: str = typer.Option("", help="Email address to send test email to (optional)"),
     skip_test: bool = typer.Option(False, help="Skip sending test email"),
 ):
@@ -495,16 +497,12 @@ def main(
 
     # Validate inputs
     if "@gmail.com" not in gmail_address.lower() and "@googlemail.com" not in gmail_address.lower():
-        console.print(
-            "[yellow]Warning: Email address doesn't appear to be a Gmail address.[/yellow]"
-        )
+        console.print("[yellow]Warning: Email address doesn't appear to be a Gmail address.[/yellow]")
         if not Confirm.ask("Continue anyway?", default=True):
             raise typer.Exit(0)
 
     if len(app_password.replace(" ", "")) != 16:
-        console.print(
-            "[yellow]Warning: App password should be 16 characters (without spaces).[/yellow]"
-        )
+        console.print("[yellow]Warning: App password should be 16 characters (without spaces).[/yellow]")
         if not Confirm.ask("Continue anyway?", default=True):
             raise typer.Exit(0)
 
