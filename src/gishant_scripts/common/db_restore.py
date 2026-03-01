@@ -261,11 +261,84 @@ def _is_thumbnail_line(line: str) -> bool:
     return False
 
 
+def _filter_thumbnails_from_gzip(
+    input_file: Path,
+    output_file: Path,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+) -> int:
+    """Filter thumbnail data from a gzipped SQL file and write to a new gzipped file.
+
+    Args:
+        input_file: Path to input gzipped SQL file
+        output_file: Path to output gzipped SQL file (will be created)
+        progress_callback: Optional callback(current, total, message) for progress updates
+
+    Returns:
+        Number of thumbnail rows skipped
+
+    Raises:
+        RestoreError: If filtering fails
+    """
+    import gzip
+
+    file_size = input_file.stat().st_size
+    skipped_rows = 0
+    in_copy_block = False
+    bytes_read = 0
+
+    try:
+        if progress_callback:
+            progress_callback(0, 100, "Filtering thumbnails from backup...")
+
+        with gzip.open(input_file, "rt", encoding="utf-8", errors="replace") as gz_input:
+            with gzip.open(output_file, "wt", encoding="utf-8") as gz_output:
+                for line in gz_input:
+                    bytes_read += len(line.encode("utf-8"))
+
+                    # Check if we're exiting a COPY block
+                    if in_copy_block:
+                        if line.strip() == "\\.":
+                            # End of COPY block - skip the terminator too
+                            in_copy_block = False
+                            skipped_rows += 1
+                            continue
+                        # Skip data rows in thumbnail COPY block
+                        skipped_rows += 1
+                        continue
+
+                    # Check if this line starts a thumbnail COPY/INSERT
+                    if _is_thumbnail_line(line):
+                        if line.lower().strip().startswith("copy "):
+                            # COPY block - skip until \.
+                            in_copy_block = True
+                        skipped_rows += 1
+                        continue
+
+                    # Write non-thumbnail lines
+                    gz_output.write(line)
+
+                    # Update progress periodically
+                    if progress_callback and bytes_read % (10 * 1024 * 1024) == 0:  # Every ~10MB
+                        if file_size > 0:
+                            pct = min(int((bytes_read / (file_size * 5)) * 100), 90)  # Estimate
+                            mb_read = bytes_read // (1024 * 1024)
+                            skip_info = f", skipped {skipped_rows} rows" if skipped_rows else ""
+                            progress_callback(pct, 100, f"Filtering ({mb_read} MB{skip_info})...")
+
+        if progress_callback:
+            progress_callback(100, 100, f"Filtered {skipped_rows:,} thumbnail rows")
+
+        return skipped_rows
+
+    except Exception as err:
+        raise RestoreError(f"Failed to filter thumbnails: {err}") from err
+
+
 def restore_gzip_format(
     config: RestoreConfig,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> None:
-    """Restore database from gzip format (.gz, .sql.gz) using gzip + psql.
+    """Restore database from gzip format (.gz, .sql.gz) using zcat/gunzip + psql.
 
     Args:
         config: Restore configuration
@@ -274,7 +347,8 @@ def restore_gzip_format(
     Raises:
         RestoreError: If restore fails
     """
-    import gzip
+    import shutil
+    import tempfile
 
     file_size = config.backup_file.stat().st_size
 
@@ -282,7 +356,65 @@ def restore_gzip_format(
         msg = "Starting restore (skipping thumbnails)..." if config.skip_thumbnails else "Starting restore..."
         progress_callback(0, 100, msg)
 
-    # Start psql process
+    # If thumbnails need to be filtered, create a cleaned temporary file first
+    restore_file = config.backup_file
+    temp_file = None
+    skipped_rows = 0
+
+    if config.skip_thumbnails:
+        # Create temporary file for filtered SQL
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".sql.gz",
+            delete=False,
+            dir=config.backup_file.parent,
+        )
+        temp_file.close()
+        temp_path = Path(temp_file.name)
+
+        try:
+            # Filter thumbnails into temporary file
+            def filter_progress(current: int, total: int, message: str) -> None:
+                """Update progress for filtering step (0-50% of total)."""
+                if progress_callback:
+                    progress_callback(current // 2, 100, message)
+
+            skipped_rows = _filter_thumbnails_from_gzip(
+                config.backup_file,
+                temp_path,
+                progress_callback=filter_progress,
+            )
+
+            restore_file = temp_path
+            if progress_callback:
+                console.print(f"[dim]Skipped {skipped_rows:,} thumbnail rows[/dim]")
+                progress_callback(50, 100, "Starting restore from filtered backup...")
+
+        except Exception:
+            # Clean up temp file on error
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
+
+    # Use subprocess pipeline approach (like the shell script) for restore
+    # Check if zcat is available (preferred), otherwise use gunzip -c
+    zcat_cmd = shutil.which("zcat") or shutil.which("gunzip")
+    if zcat_cmd:
+        # Use the found command with appropriate flags
+        if zcat_cmd.endswith("gunzip"):
+            decompress_cmd = [zcat_cmd, "-c", str(restore_file)]
+        else:
+            decompress_cmd = [zcat_cmd, str(restore_file)]
+    else:
+        # Fallback: use Python gzip as subprocess
+        import sys
+        decompress_cmd = [
+            sys.executable,
+            "-c",
+            "import gzip, sys; sys.stdout.buffer.write(gzip.open(sys.argv[1], 'rb').read())",
+            str(restore_file),
+        ]
+
     psql_cmd = [
         "docker",
         "compose",
@@ -298,102 +430,61 @@ def restore_gzip_format(
         config.db_name,
     ]
 
-    psql_proc = subprocess.Popen(
-        psql_cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=config.compose_file.parent,
-    )
-
-    stdin = psql_proc.stdin
-    assert stdin is not None  # for type checker
-
     try:
-        last_pct = 0
-        skipped_rows = 0
-        in_copy_block = False  # Track if we're inside a COPY data block
+        if progress_callback and not config.skip_thumbnails:
+            progress_callback(20, 100, "Decompressing and restoring...")
+        elif progress_callback:
+            progress_callback(60, 100, "Decompressing and restoring...")
 
-        with open(config.backup_file, "rb") as compressed_file:
-            with gzip.open(compressed_file, "rt", encoding="utf-8", errors="replace") as gz_text:
-                # Use buffered reading for line-by-line processing when filtering
-                if config.skip_thumbnails:
-                    for line in gz_text:
-                        # Check if we're exiting a COPY block
-                        if in_copy_block:
-                            if line.strip() == "\\.":
-                                # End of COPY block - skip the terminator too
-                                in_copy_block = False
-                                skipped_rows += 1
-                                continue
-                            # Skip data rows in thumbnail COPY block
-                            skipped_rows += 1
-                            continue
+        # Create pipeline: decompress | psql
+        decompress_proc = subprocess.Popen(
+            decompress_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
-                        # Check if this line starts a thumbnail COPY/INSERT
-                        if _is_thumbnail_line(line):
-                            if line.lower().strip().startswith("copy "):
-                                # COPY block - skip until \.
-                                in_copy_block = True
-                            skipped_rows += 1
-                            continue
+        psql_proc = subprocess.Popen(
+            psql_cmd,
+            stdin=decompress_proc.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=config.compose_file.parent,
+        )
 
-                        # Write non-thumbnail lines
-                        stdin.write(line.encode("utf-8"))
+        # Close decompress stdout in psql process to allow decompress to receive SIGPIPE
+        decompress_proc.stdout.close()
 
-                        if progress_callback:
-                            compressed_bytes_read = compressed_file.tell()
-                            if file_size > 0:
-                                pct = min(int((compressed_bytes_read / file_size) * 100), 99)
-                                if pct > last_pct:
-                                    last_pct = pct
-                                    mb_read = compressed_bytes_read // (1024 * 1024)
-                                    mb_total = file_size // (1024 * 1024)
-                                    skip_info = f", skipped {skipped_rows} rows" if skipped_rows else ""
-                                    progress_callback(pct, 100, f"Restoring ({mb_read}/{mb_total} MB{skip_info})...")
-                else:
-                    # No filtering - read in chunks for speed
-                    chunk_size = 1024 * 1024  # 1MB
-                    while True:
-                        chunk = gz_text.read(chunk_size)
-                        if not chunk:
-                            break
+        # Wait for both processes
+        if progress_callback:
+            progress_callback(70, 100, "Restoring...")
 
-                        stdin.write(chunk.encode("utf-8"))
-                        stdin.flush()
-
-                        if progress_callback:
-                            compressed_bytes_read = compressed_file.tell()
-                            if file_size > 0:
-                                pct = min(int((compressed_bytes_read / file_size) * 100), 99)
-                                if pct > last_pct:
-                                    last_pct = pct
-                                    mb_read = compressed_bytes_read // (1024 * 1024)
-                                    mb_total = file_size // (1024 * 1024)
-                                    progress_callback(pct, 100, f"Restoring ({mb_read}/{mb_total} MB)...")
-
-        # Close stdin after all data is written
-        stdin.close()
-
-        # Wait for psql to finish
         stdout, stderr = psql_proc.communicate()
+        decompress_stderr = decompress_proc.communicate()[1]
+
+        # Check decompress process (ignore errors if psql closed pipe early)
+        if decompress_proc.returncode not in (0, None, -15):  # 0=success, None=running, -15=SIGTERM
+            decompress_err = decompress_stderr.decode("utf-8", errors="replace") if decompress_stderr else ""
+            if decompress_err and "broken pipe" not in decompress_err.lower():
+                console.print(f"[dim]Decompress warning: {decompress_err}[/dim]")
 
         if psql_proc.returncode != 0:
             stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
             if stderr_text:
                 console.print(f"[dim]{stderr_text}[/dim]")
+            raise RestoreError(f"psql failed with return code {psql_proc.returncode}")
 
         if progress_callback:
-            if config.skip_thumbnails and skipped_rows > 0:
-                console.print(f"[dim]Skipped {skipped_rows:,} thumbnail rows[/dim]")
             progress_callback(100, 100, "Complete")
 
-    except BrokenPipeError:
-        psql_proc.kill()
-        raise RestoreError("psql process terminated unexpectedly")
     except Exception as err:
-        psql_proc.kill()
         raise RestoreError(f"Failed to restore from gzip format: {err}") from err
+    finally:
+        # Clean up temporary file if it was created
+        if temp_file and Path(temp_file.name).exists():
+            try:
+                Path(temp_file.name).unlink()
+            except Exception:
+                pass  # Ignore cleanup errors
 
 
 def restore_sql_format(

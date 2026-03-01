@@ -13,6 +13,13 @@ import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 # --- Classes moved from original scripts ---
@@ -224,6 +231,15 @@ class YouTrackIssuesFetcher:
         response.raise_for_status()
         return response.json()
 
+    def get_user_by_login(self, login: str) -> dict:
+        """Fetch user info by login name."""
+        self._validate_http_method("GET")
+        url = f"{self.base_url}/api/users/{login}"
+        params = {"fields": "id,login,fullName,email"}
+        response = requests.get(url, headers=self.headers, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
     def fetch_issue_by_id(self, issue_id: str) -> dict:
         self._validate_http_method("GET")
         url = f"{self.base_url}/api/issues/{issue_id}"
@@ -247,14 +263,18 @@ class YouTrackIssuesFetcher:
         matches = re.findall(github_pattern, text)
         return list(set(matches))
 
-    def _process_issue(self, issue: dict) -> dict:
-        try:
-            current_user = self.get_current_user()
-            user_login = current_user.get("login", "")
-            user_full_name = current_user.get("fullName", "")
-        except Exception:
-            user_login = ""
-            user_full_name = ""
+    def _process_issue(self, issue: dict, target_user: dict | None = None) -> dict:
+        if target_user is not None:
+            user_login = target_user.get("login", "")
+            user_full_name = target_user.get("fullName", "")
+        else:
+            try:
+                current_user = self.get_current_user()
+                user_login = current_user.get("login", "")
+                user_full_name = current_user.get("fullName", "")
+            except Exception:
+                user_login = ""
+                user_full_name = ""
 
         custom_fields = {}
         assignee = None
@@ -338,13 +358,27 @@ class YouTrackIssuesFetcher:
             "github_links": github_links,
         }
 
-    def fetch_issues_with_details(self, max_results: int = 100) -> list[dict]:
+    def fetch_issues_with_details(
+        self,
+        max_results: int = 100,
+        user_login: str | None = None,
+        *,
+        silent: bool = False,
+    ) -> list[dict]:
         self._validate_http_method("GET")
-        current_user = self.get_current_user()
-        user_login = current_user.get("login", "")
-        user_full_name = current_user.get("fullName", "")
-        self.console.print(f"[cyan]Fetching complete issue data for user:[/cyan] {user_full_name} ({user_login})")
-        query = "Assignee: me or commented by: me"
+        if user_login is None:
+            current_user = self.get_current_user()
+            target_user = current_user
+            query = "Assignee: me or commented by: me"
+        else:
+            target_user = self.get_user_by_login(user_login)
+            query = f"Assignee: {user_login} or commented by: {user_login}"
+        if not silent:
+            user_display = target_user.get("fullName", "") or target_user.get("login", "")
+            login_display = target_user.get("login", "")
+            self.console.print(
+                f"[cyan]Fetching complete issue data for user:[/cyan] {user_display} ({login_display})"
+            )
         url = f"{self.base_url}/api/issues"
         params = {
             "query": query,
@@ -359,11 +393,30 @@ class YouTrackIssuesFetcher:
         response = requests.get(url, headers=self.headers, params=params)
         response.raise_for_status()
         issues = response.json()
-        self.console.print(f"[green]Fetched {len(issues)} issues. Processing details...[/green]")
+        if not silent:
+            self.console.print(f"[green]Fetched {len(issues)} issues. Processing details...[/green]")
         results = []
-        for idx, issue in enumerate(issues, 1):
-            self.console.print(f"[dim]Processing issue {idx}/{len(issues)}: {issue.get('idReadable', 'N/A')}[/dim]")
-            results.append(self._process_issue(issue))
+        if not issues:
+            return results
+        if silent:
+            for issue in issues:
+                results.append(self._process_issue(issue, target_user=target_user))
+        else:
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                console=self.console,
+            ) as progress:
+                task_id = progress.add_task("Processing issues", total=len(issues))
+                for issue in issues:
+                    results.append(self._process_issue(issue, target_user=target_user))
+                    progress.update(
+                        task_id,
+                        advance=1,
+                        description=f"Processing {issue.get('idReadable', 'N/A')}",
+                    )
         return results
 
     def _format_timestamp(self, timestamp: int | None) -> str:
