@@ -119,6 +119,50 @@ Both AYON and Kitsu restore scripts follow this workflow:
    - Display success message
    - Confirm services are running
 
+## Daily Backup Copy (Cron)
+
+A bash script copies the latest hourly backups to local directories for easier restore access. It runs daily at midnight via root cron.
+
+### Setup
+
+1. **Install the cron job** (run as root):
+   ```bash
+   sudo crontab -e
+   ```
+   Add this line (runs at 12:30 AM daily):
+   ```
+   30 0 * * * /home/gisi/dev/repos/gishant-scripts/scripts/copy-database-backups.sh >> /home/gisi/dev/backups/copy.log 2>&1
+   ```
+
+2. **Manual run** (for testing; shows progress bar when run in a terminal):
+   ```bash
+   sudo ./scripts/copy-database-backups.sh
+   ```
+
+3. **Show cron info**:
+   ```bash
+   sudo ./scripts/copy-database-backups.sh --help
+   ```
+
+### Behavior
+
+| Database | Source | Destination |
+|----------|--------|-------------|
+| Ayon | `/tech/backups/database/ayon/1.12.0/hourly` | `/home/gisi/dev/backups/ayon` |
+| Kitsu | `/tech/backups/database/kitsu/0.20.51/hourly` | `/home/gisi/dev/backups/kitsu` |
+
+- Picks the latest backup by modification time (`.sql.gz`, `.dump.gz`, `.dump`, `.backup`, `.sql`)
+- Keeps only one file per database in each destination (removes previous before copying)
+- Does not modify source directories
+- Requires root (Kitsu source is root-only)
+- Logs to `/home/gisi/dev/backups/copy.log`
+
+### Restore from Copied Backups
+
+```bash
+restore-databases restore --ayon-backup-dir /home/gisi/dev/backups/ayon --kitsu-backup-dir /home/gisi/dev/backups/kitsu
+```
+
 ## Architecture
 
 ### Modular Design
