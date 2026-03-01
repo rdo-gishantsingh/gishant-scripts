@@ -17,8 +17,8 @@ import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.prompt import Confirm
+from rich.table import Table
 
 from gishant_scripts.youtrack.fetch_issues import YouTrackIssuesFetcher
 
@@ -215,7 +215,7 @@ class YouTrackEpicProgressUpdater:
                     "exists": True,
                 }
 
-        self.console.print(f"[green]Analysis complete:[/green]")
+        self.console.print("[green]Analysis complete:[/green]")
         self.console.print(f"  • CLI files: {analysis['summary']['total_cli_files']}")
         self.console.print(f"  • Service files: {analysis['summary']['total_service_files']}")
         self.console.print(f"  • Test files: {analysis['summary']['total_test_files']}")

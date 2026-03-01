@@ -82,6 +82,10 @@ uv run gishant analyze-bundles --interactive
 # Bulk data management for AYON and Kitsu
 source .venv/bin/activate
 bulk-data reset-and-generate --projects 2 --sequences 10 --shots 10 --yes
+
+# Publish test asset (Bollywoof/test episode only; requires ffmpeg)
+uv run publish-test-asset --dry-run
+uv run publish-test-asset --folder-path /test
 ```
 
 ### Python Scripts
@@ -129,6 +133,7 @@ from gishant_scripts.github.fetch_prs import GitHubPRFetcher
 - **`check_bundles.py`**: Check AYON bundle configurations
 - **`kitsu_integration_demo.py`**: Kitsu integration examples
 - **`search_executable.py`**: Find executables in system PATH
+- **`publish-test-asset`**: Publish a test movie to AYON with Kitsu linking (Bollywoof/test episode only; safeguards enforced)
 
 ### Bulk Data Management (NEW! 🎉)
 Unified tool for managing test data across AYON and Kitsu systems.
@@ -171,6 +176,20 @@ bulk-data reset-and-generate --yes       # Clean + generate (recommended)
 - **Full Guide:** [BULK_DATA_MANAGER_GUIDE.md](BULK_DATA_MANAGER_GUIDE.md)
 - **Usage Summary:** [USAGE_SUMMARY.md](USAGE_SUMMARY.md)
 - **Test Results:** [TEST_RESULTS.md](TEST_RESULTS.md)
+
+### publish-test-asset (AYON-Kitsu linking test)
+Publishes a minimal movie to AYON in **Bollywoof/test** with Kitsu linking for validating USER-319 / PIPE-523.
+
+**Safeguards:** Only project `Bollywoof` and episode `test` are allowed. All target folders must be under that episode.
+
+```bash
+uv run publish-test-asset --dry-run           # Validate context only
+uv run publish-test-asset                    # Publish to /test (generates placeholder)
+uv run publish-test-asset -f /test/sq001/sh1 # Publish to a specific shot
+uv run publish-test-asset --file ./video.mov # Use custom video file
+```
+
+**Requires:** ffmpeg (for placeholder), AYON + Kitsu credentials (~/.rdo/.env or env vars).
 
 ## Development
 

@@ -14,8 +14,13 @@ dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
     "ayon-python-api>=1.0.9,<2",
-    "gazu>=0.9.0",
+    "gazu>=0.10.13,<1",
     "pyyaml>=6.0.3",
+    "rdo-ayon-utils>=0.5.0,<1",
+    "rdo-kitsu-utils>=0.3.0,<1",
+    "rdo-pms-bridge>=0.2.0,<1",
+    "imageio>=2.31.0",
+    "imageio-ffmpeg>=0.4.9",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +43,7 @@ bulk-data = "gishant_scripts.common.bulk_data_manager:app"
 # Database restore CLIs
 restore-ayon-db = "gishant_scripts.ayon.restore_db_cli:app"
 restore-kitsu-db = "gishant_scripts.kitsu.restore_db_cli:app"
+restore-databases = "gishant_scripts.restore_databases_cli:app"
 
 # Postal Server installation CLI
 postal-install = "gishant_scripts.postal.install:app"
@@ -56,6 +62,23 @@ fetch-github-prs = "gishant_scripts.github.fetch_prs:main"
 generate-copilot-prompt = "gishant_scripts.youtrack.generate_copilot_prompt:main"
 generate-report = "gishant_scripts.utils.generate_report:main"
 generate-work-summary = "gishant_scripts.youtrack.generate_work_summary:main"
+
+# AYON-Kitsu test publisher (Bollywoof/test episode only)
+publish-test-asset = "gishant_scripts.ayon.publish_test_asset:main"
+
+[tool.uv]
+override-dependencies = [
+    "rdo-ayon-utils",
+    "rdo-kitsu-utils",
+    "rdo-pms-bridge",
+    "rdo-logging",
+]
+
+[tool.uv.sources]
+rdo-ayon-utils = { path = "/home/gisi/dev/worktrees/pipe-671_kitsu-version-linking/rdo-core-ayon-utils", editable = false }
+rdo-kitsu-utils = { path = "/home/gisi/dev/worktrees/pipe-693_edl-ingester_refactor/rdo-core-kitsu-utils", editable = false }
+rdo-pms-bridge = { path = "/home/gisi/dev/worktrees/pipe-671_kitsu-version-linking/rdo-core-pms-bridge", editable = false }
+rdo-logging = { path = "/home/gisi/dev/worktrees/structlog-redesign/rdo-core-logging", editable = true }
 
 [build-system]
 requires = ["hatchling"]
