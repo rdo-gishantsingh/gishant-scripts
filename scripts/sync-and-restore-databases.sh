@@ -70,6 +70,16 @@ if ! docker compose version &>/dev/null; then
     exit 1
 fi
 
+# Check for pv (pipe viewer) – used to show restore progress.
+# Install with: sudo apt install pv
+USE_PV=false
+if command -v pv &>/dev/null; then
+    USE_PV=true
+else
+    echo "[WARNING] pv not found – restore will run without a progress bar"
+    echo "[WARNING] Install with: sudo apt install pv"
+fi
+
 ################################################################################
 # Helpers
 ################################################################################
@@ -175,6 +185,12 @@ restore_database() {
 
     local file_size
     file_size=$(stat -c%s "$backup_file" 2>/dev/null)
+    
+    if [[ "$file_size" -eq 0 ]]; then
+        error "$label: Backup file $(basename "$backup_file") is 0 bytes! Skipping restore to prevent errors."
+        return 1
+    fi
+    
     log "$label: Restoring from $(basename "$backup_file") ($(format_size "$file_size"))"
 
     # All docker compose commands run from inside the compose directory
@@ -207,20 +223,25 @@ restore_database() {
     success "$label: Database is in clean state, starting restore..."
 
     # ── Restore ────────────────────────────────────────────────────────────────
-    if [[ "$backup_file" == *.dump ]] || [[ "$backup_file" == *.backup ]]; then
+    if [[ "$backup_file" == *.dump ]] || [[ "$backup_file" == *.dump.gz ]] || [[ "$backup_file" == *.backup ]] || [[ "$backup_file" == *.backup.gz ]]; then
         log "$label: Detected custom format – using pg_restore..."
 
         # Check whether the custom-format dump is gzip-compressed
         if file "$backup_file" | grep -q "gzip compressed"; then
             log "$label: Decompressing custom format dump first..."
             local temp_dump="/tmp/${label,,}_restore_temp.dump"
-            gunzip -c "$backup_file" > "$temp_dump"
+            if [[ "$USE_PV" == true ]]; then
+                pv "$backup_file" | gunzip > "$temp_dump"
+            else
+                gunzip -c "$backup_file" > "$temp_dump"
+            fi
             docker compose cp "$temp_dump" "${db_service}:/tmp/restore.dump"
             rm -f "$temp_dump"
         else
             docker compose cp "$backup_file" "${db_service}:/tmp/restore.dump"
         fi
 
+        log "$label: Restoring with pg_restore (objects logged as they are restored)..."
         docker compose exec -T "$db_service" pg_restore \
             -U "$db_user" \
             -d "$db_name" \
@@ -234,11 +255,19 @@ restore_database() {
 
     elif [[ "$backup_file" == *.gz ]]; then
         log "$label: Detected gzip SQL format – streaming restore..."
-        gunzip -c "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name"
+        if [[ "$USE_PV" == true ]]; then
+            pv "$backup_file" | gunzip | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+        else
+            gunzip -c "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+        fi
 
     else
         log "$label: Detected plain SQL format..."
-        docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" < "$backup_file"
+        if [[ "$USE_PV" == true ]]; then
+            pv "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+        else
+            docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q < "$backup_file"
+        fi
     fi
 
     success "$label: Database restore completed"
