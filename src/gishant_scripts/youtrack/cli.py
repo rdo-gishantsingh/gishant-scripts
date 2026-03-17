@@ -4,10 +4,13 @@ This module combines functionality to manage YouTrack issues programmatically
 via the API, supporting create, fetch, and update operations.
 """
 
+import enum
 import json
 import re
+import sys
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Annotated, Any
 
 import requests
 import typer
@@ -793,6 +796,127 @@ def update(
     except Exception as err:
         console.print(f"[red]❌ Error:[/red] {err}")
         raise typer.Exit(1)
+
+
+class YTSummaryModel(enum.StrEnum):
+    """Gemini model for YouTrack summary generation."""
+
+    flash_25 = "gemini-2.5-flash"
+    pro_25 = "gemini-2.5-pro"
+    flash_exp = "gemini-2.0-flash-exp"
+
+
+@app.command()
+def summary(
+    weeks: Annotated[
+        int,
+        typer.Option("--weeks", help="Number of weeks to look back for issues"),
+    ],
+    model: Annotated[
+        YTSummaryModel,
+        typer.Option("--model", help="Gemini model to use for generation"),
+    ] = YTSummaryModel.flash_25,
+    save_to_file: Annotated[
+        Path | None,
+        typer.Option("--save-to-file", help="Save output to specified file"),
+    ] = None,
+    max_issues: Annotated[
+        int,
+        typer.Option("--max-issues", help="Maximum number of issues to fetch"),
+    ] = 100,
+) -> None:
+    """Generate work summary from YouTrack issues using Gemini AI.
+
+    Fetches issues where you are involved (assigned or commented) from the last N weeks
+    and generates a structured summary with Done/Current Work/Pending/Blockers sections.
+
+    Requires YOUTRACK_URL, YOUTRACK_API_TOKEN, and GOOGLE_AI_API_KEY in environment.
+    """
+    console = Console()
+
+    try:
+        from gishant_scripts.common.config import AppConfig, ConfigurationError
+        from gishant_scripts.youtrack.generate_work_summary import (
+            filter_issues_by_time,
+            generate_work_summary_with_gemini,
+            prepare_issues_for_summary,
+        )
+
+        console.print(
+            Panel.fit(
+                f"[bold cyan]YouTrack Work Summary Generator[/bold cyan]\n"
+                f"Time period: Last {weeks} weeks\n"
+                f"Model: {model.value}",
+                border_style="cyan",
+            )
+        )
+
+        app_config = AppConfig()
+        app_config.require_valid("youtrack", "google_ai")
+
+        console.print("\n[cyan]Step 1: Connecting to YouTrack...[/cyan]")
+        fetcher = YouTrackIssuesFetcher(
+            base_url=app_config.youtrack.url,
+            token=app_config.youtrack.api_token,
+        )
+
+        console.print(f"[cyan]Step 2: Fetching issues (max {max_issues})...[/cyan]")
+        issues = fetcher.fetch_issues_with_details(max_results=max_issues)
+
+        if not issues:
+            console.print("[yellow]No issues found where you are involved.[/yellow]")
+            return
+
+        console.print(f"[green]Found {len(issues)} total issues[/green]")
+
+        console.print(f"\n[cyan]Step 3: Filtering issues from last {weeks} weeks...[/cyan]")
+        filtered_issues = filter_issues_by_time(issues, weeks)
+
+        if not filtered_issues:
+            console.print(f"[yellow]No issues updated in the last {weeks} weeks.[/yellow]")
+            return
+
+        console.print("[cyan]Step 4: Preparing data for Gemini...[/cyan]")
+        prepared_data = prepare_issues_for_summary(filtered_issues, weeks)
+
+        if prepared_data["total_issues"] == 0:
+            console.print(f"[yellow]No issues with activity in the last {weeks} weeks.[/yellow]")
+            return
+
+        console.print("\n[cyan]Step 5: Generating work summary with Gemini...[/cyan]")
+        summary_text = generate_work_summary_with_gemini(
+            data=prepared_data,
+            api_key=app_config.google_ai.api_key,
+            model=model.value,
+        )
+
+        console.print("\n" + "=" * 80)
+        console.print(Panel.fit("[bold green]WORK SUMMARY GENERATED[/bold green]", border_style="green"))
+        console.print("=" * 80 + "\n")
+        console.print(summary_text)
+        console.print("\n" + "=" * 80)
+
+        if save_to_file:
+            save_path = save_to_file if save_to_file.is_absolute() else Path.cwd() / save_to_file
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(summary_text)
+            console.print(f"\n[green]Saved to: {save_path}[/green]")
+
+        console.print(f"\n[dim]Generated from {prepared_data['total_issues']} issues over {weeks} weeks[/dim]")
+        console.print(f"[dim]Model: {model.value}[/dim]")
+
+    except ConfigurationError as e:
+        err_console = Console(stderr=True)
+        err_console.print(f"\n[bold red]Configuration Error:[/bold red] {e}")
+        err_console.print("\n[yellow]Please ensure the following are set in your .env file:[/yellow]")
+        err_console.print("  - YOUTRACK_URL")
+        err_console.print("  - YOUTRACK_API_TOKEN")
+        err_console.print("  - GOOGLE_AI_API_KEY")
+        sys.exit(1)
+
+    except Exception as e:
+        Console(stderr=True).print(f"\n[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
 
 
 def main():
