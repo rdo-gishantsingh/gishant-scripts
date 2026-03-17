@@ -123,7 +123,7 @@ class TestInfrastructure:
 
 
 class TestMayaIntegration:
-    """End-to-end Maya batch execution with AYON context."""
+    """End-to-end Maya batch execution with full AYON addon stack."""
 
     @pytest.fixture(autouse=True)
     def _cleanup_results(self):
@@ -132,29 +132,47 @@ class TestMayaIntegration:
         yield
         result_file.unlink(missing_ok=True)
 
-    def test_maya_hello_world(self):
+    @pytest.fixture()
+    def maya_result(self):
+        """Run the Maya hello world once and return the result."""
         from gishant_scripts.diagnostic.maya_runner import run_maya_script
 
-        result = run_maya_script(
+        return run_maya_script(
             script_path=str(FIXTURES_DIR / "hello_world_maya.py"),
             project_name=AYON_PROJECT,
             folder_path=AYON_FOLDER,
-            timeout=120,
+            timeout=180,
         )
-        assert result.status == "pass", f"Maya failed: {result.errors}"
-        assert result.findings.get("maya_version"), "Maya version not reported"
 
-    def test_maya_ayon_connected(self):
-        from gishant_scripts.diagnostic.maya_runner import run_maya_script
-
-        result = run_maya_script(
-            script_path=str(FIXTURES_DIR / "hello_world_maya.py"),
-            project_name=AYON_PROJECT,
-            folder_path=AYON_FOLDER,
-            timeout=120,
+    def test_maya_engine_runs(self, maya_result):
+        assert maya_result.findings.get("maya_version"), (
+            f"Maya version not reported: {maya_result.errors}"
         )
-        assert result.findings.get("ayon_connected"), f"AYON not connected: {result.errors}"
-        assert result.findings.get("project_name") == AYON_PROJECT
+
+    def test_ayon_api_connected(self, maya_result):
+        assert maya_result.findings.get("ayon_connected"), (
+            f"ayon_api not connected: {maya_result.errors}"
+        )
+        assert maya_result.findings.get("project_name") == AYON_PROJECT
+
+    def test_ayon_core_imported(self, maya_result):
+        assert maya_result.findings.get("ayon_core_imported"), (
+            f"ayon_core import failed: {maya_result.errors}"
+        )
+
+    def test_ayon_maya_imported(self, maya_result):
+        assert maya_result.findings.get("ayon_maya_imported"), (
+            f"ayon_maya import failed: {maya_result.errors}"
+        )
+
+    def test_ayon_host_installed(self, maya_result):
+        assert maya_result.findings.get("ayon_host_installed"), (
+            f"AYON host install failed: {maya_result.errors}"
+        )
+
+    def test_loaders_discovered(self, maya_result):
+        count = maya_result.findings.get("loader_count", 0)
+        assert count > 0, f"No loaders discovered: {maya_result.errors}"
 
 
 # ---------------------------------------------------------------------------

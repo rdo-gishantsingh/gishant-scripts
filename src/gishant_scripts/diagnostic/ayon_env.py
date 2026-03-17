@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 _ADDONS_JSON = "addons.json"
 
 
+def _read_site_id(is_windows: bool) -> str:
+    """Read the AYON site ID from the launcher storage dir."""
+    storage = _launcher_storage_dir()
+    site_id_file = storage / "site_id"
+    if site_id_file.exists():
+        return site_id_file.read_text(encoding="utf-8").strip()
+    return ""
+
+
 def _launcher_storage_dir() -> Path:
     """Return the AYON Launcher local storage directory."""
     return LINUX.ayon_storage_dir
@@ -226,8 +235,12 @@ def resolve_ayon_env(
         "AYON_BUNDLE_NAME": bundle_name,
         "AYON_PROJECT_NAME": project_name,
         "AYON_FOLDER_PATH": folder_path,
-        "AYON_UNREAL_VERSION": "5.4",
-        "AYON_SITE_ID": "puzzling-tiger-from-tartarus" if is_windows else "",
+        "AYON_UNREAL_VERSION": "5.4" if is_windows else "",
+        "AYON_MAYA_VERSION": "2025" if not is_windows else "",
+        "AYON_SITE_ID": _read_site_id(is_windows),
+        "AYON_WORKDIR": str(Path(LINUX.diagnostic_base) / "_workdir") if not is_windows
+        else r"C:\Users\gisi\.ayon_diagnostic_workdir",
+        "AYON_APP_NAME": "maya/2025" if not is_windows else "unreal/5.4",
         "PYTHONPATH": path_sep.join(python_paths),
         "AYON_LAUNCHER_STORAGE_DIR": storage_dir,
         "AYON_LAUNCHER_LOCAL_DIR": storage_dir,
