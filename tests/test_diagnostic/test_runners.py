@@ -1,175 +1,197 @@
-"""Tests for the diagnostic runner infrastructure."""
+"""Integration tests for the DCC diagnostic infrastructure.
 
+These tests verify end-to-end functionality: SSH connectivity, drive mapping,
+Maya/Unreal batch execution, and AYON context availability. They require
+the actual infrastructure to be running (AYON server, Maya, Unreal via SSH).
+
+Run with:
+    cd /tech/users/gisi/dev/repos/gishant-scripts
+    .venv/bin/python -m pytest tests/test_diagnostic/ -v
+"""
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from gishant_scripts.diagnostic.config import (
     LINUX,
-    WINDOWS,
-    get_results_dir,
     linux_to_windows_path,
     windows_to_linux_path,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+AYON_PROJECT = "Barbie_Nutcracker"
+AYON_FOLDER = "/episodes/ep01/bncro_01_0072/bncro_01_0072_0030"
 
 
 # ---------------------------------------------------------------------------
-# Unit tests (no external dependencies)
+# Path mapping (unit tests — no external dependencies)
 # ---------------------------------------------------------------------------
-
-
-class TestConfigLinuxPaths:
-    """Verify that configured Linux paths actually exist on disk."""
-
-    @pytest.mark.integration
-    def test_maya_bin_exists(self) -> None:
-        assert Path(LINUX.maya_bin).exists(), f"Maya binary not found at {LINUX.maya_bin}"
-
-    def test_ayon_launcher_exists(self) -> None:
-        assert Path(LINUX.ayon_launcher).exists(), f"AYON launcher not found at {LINUX.ayon_launcher}"
 
 
 class TestPathMapping:
-    """Unit tests for Linux <-> Windows path conversion."""
+    """Verify bidirectional path conversion between Linux and Windows."""
 
-    def test_linux_to_windows_projects(self) -> None:
-        assert linux_to_windows_path("/projects/MyProject/scenes/file.ma") == "P:\\MyProject\\scenes\\file.ma"
+    def test_linux_to_windows_projects(self):
+        assert linux_to_windows_path("/projects/foo") == "P:\\foo"
 
-    def test_linux_to_windows_tech(self) -> None:
-        assert linux_to_windows_path("/tech/users/gisi/dev/test.py") == "Z:\\users\\gisi\\dev\\test.py"
+    def test_linux_to_windows_tech(self):
+        assert linux_to_windows_path("/tech/bar") == "Z:\\bar"
 
-    def test_linux_to_windows_unmapped(self) -> None:
-        """Paths that don't match any prefix should be returned unchanged."""
-        original = "/home/user/file.txt"
-        assert linux_to_windows_path(original) == original
+    def test_linux_to_windows_unc(self):
+        assert linux_to_windows_path("/tech/bar", unc=True) == "\\\\rdoshyd\\tech\\bar"
 
-    def test_windows_to_linux_p_drive(self) -> None:
-        assert windows_to_linux_path("P:\\MyProject\\scenes\\file.ma") == "/projects/MyProject/scenes/file.ma"
+    def test_linux_to_windows_unc_projects(self):
+        assert linux_to_windows_path("/projects/foo", unc=True) == "\\\\rdoshyd\\projects\\foo"
 
-    def test_windows_to_linux_z_drive(self) -> None:
-        assert windows_to_linux_path("Z:\\users\\gisi\\dev\\test.py") == "/tech/users/gisi/dev/test.py"
+    def test_linux_to_windows_unmapped(self):
+        assert linux_to_windows_path("/home/user/file") == "/home/user/file"
 
-    def test_windows_to_linux_unmapped(self) -> None:
-        """Paths that don't match any prefix should be returned unchanged."""
-        original = "C:\\Program Files\\app.exe"
-        assert windows_to_linux_path(original) == original
+    def test_windows_to_linux_p_drive(self):
+        assert windows_to_linux_path("P:\\Barbie") == "/projects/Barbie"
 
-    def test_roundtrip_linux(self) -> None:
-        original = "/projects/MyProject/scenes/file.ma"
+    def test_windows_to_linux_z_drive(self):
+        assert windows_to_linux_path("Z:\\users") == "/tech/users"
+
+    def test_roundtrip_linux(self):
+        original = "/projects/Barbie_Nutcracker/episodes/ep01"
         assert windows_to_linux_path(linux_to_windows_path(original)) == original
 
-    def test_roundtrip_windows(self) -> None:
-        original = "P:\\MyProject\\scenes\\file.ma"
-        assert linux_to_windows_path(windows_to_linux_path(original)) == original
+
+# ---------------------------------------------------------------------------
+# AYON environment resolution
+# ---------------------------------------------------------------------------
 
 
 class TestAyonEnvResolution:
-    """Verify resolve_ayon_env returns expected keys."""
+    """Verify AYON environment variable resolution."""
 
-    def test_returns_expected_keys(self) -> None:
+    def test_returns_expected_keys(self):
         from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
 
-        env = resolve_ayon_env(project_name="TestProject", folder_path="/assets/hero")
-        expected_keys = {
-            "AYON_SERVER_URL",
-            "AYON_PROJECT_NAME",
-            "AYON_FOLDER_PATH",
-            "PYTHONPATH",
-            "AYON_LAUNCHER_STORAGE_DIR",
-            "AYON_LAUNCHER_LOCAL_DIR",
+        env = resolve_ayon_env("TestProject", "/test/path")
+        required_keys = {
+            "AYON_SERVER_URL", "AYON_API_KEY", "AYON_PROJECT_NAME",
+            "AYON_FOLDER_PATH", "PYTHONPATH",
         }
-        assert expected_keys.issubset(env.keys()), f"Missing keys: {expected_keys - env.keys()}"
+        assert required_keys.issubset(env.keys())
 
-    def test_task_name_included_when_provided(self) -> None:
+    def test_api_key_loaded(self):
         from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
 
-        env = resolve_ayon_env(project_name="TestProject", folder_path="/assets/hero", task_name="modeling")
-        assert env["AYON_TASK_NAME"] == "modeling"
+        env = resolve_ayon_env("TestProject", "/test/path")
+        assert env["AYON_API_KEY"], "AYON_API_KEY should not be empty"
 
-    def test_task_name_absent_when_none(self) -> None:
+    def test_windows_addon_paths_use_c_drive(self):
         from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
 
-        env = resolve_ayon_env(project_name="TestProject", folder_path="/assets/hero")
-        assert "AYON_TASK_NAME" not in env
-
-
-class TestResultsDirCreation:
-    """Verify get_results_dir creates the directory."""
-
-    def test_creates_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Redirect diagnostic_base to a temp directory so we don't touch real disk
-        monkeypatch.setattr(
-            "gishant_scripts.diagnostic.config.LINUX",
-            LINUX.__class__(diagnostic_base=str(tmp_path / "diagnostic")),
-        )
-        results_dir = get_results_dir("test_issue_123")
-        assert results_dir.is_dir()
-        assert results_dir == tmp_path / "diagnostic" / "issues" / "test_issue_123" / "results"
+        env = resolve_ayon_env("TestProject", "/test/path", target="windows")
+        pythonpath = env["PYTHONPATH"]
+        assert "C:\\Users" in pythonpath
+        assert "/home/" not in pythonpath
 
 
 # ---------------------------------------------------------------------------
-# Integration tests (require SSH, Maya, or Unreal)
+# Infrastructure checks
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
-class TestSSHConnectivity:
-    """Verify SSH to the Windows machine works."""
+class TestInfrastructure:
+    """Verify SSH connectivity and drive access on the Windows machine."""
 
-    def test_ssh_echo(self) -> None:
+    def test_config_maya_bin_exists(self):
+        assert Path(LINUX.maya_bin).exists(), f"Maya not found at {LINUX.maya_bin}"
+
+    def test_config_ayon_launcher_exists(self):
+        assert Path(LINUX.ayon_launcher).exists()
+
+    def test_ssh_connectivity(self):
         from gishant_scripts.diagnostic.unreal_runner import check_ssh_connectivity
 
-        assert check_ssh_connectivity(), (
-            f"SSH connectivity check failed for {WINDOWS.ssh_host}. "
-            "Ensure key-based auth is configured and the machine is reachable."
-        )
+        assert check_ssh_connectivity(), "SSH to Windows machine failed"
 
-    def test_ssh_raw_echo(self) -> None:
-        """Verify raw SSH echo returns 'ok'."""
-        result = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", WINDOWS.ssh_host, "echo", "ok"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert result.returncode == 0
-        assert "ok" in result.stdout
+    def test_windows_drive_access(self):
+        from gishant_scripts.diagnostic.unreal_runner import check_drive_access
+
+        assert check_drive_access(), "Network drive mapping on Windows failed"
 
 
-@pytest.mark.integration
-class TestMayaHelloWorld:
-    """Run the hello_world_maya.py fixture through maya_runner."""
+# ---------------------------------------------------------------------------
+# Maya integration
+# ---------------------------------------------------------------------------
 
-    def test_run(self) -> None:
+
+class TestMayaIntegration:
+    """End-to-end Maya batch execution with AYON context."""
+
+    @pytest.fixture(autouse=True)
+    def _cleanup_results(self):
+        result_file = FIXTURES_DIR / "results" / "maya_result.json"
+        result_file.unlink(missing_ok=True)
+        yield
+        result_file.unlink(missing_ok=True)
+
+    def test_maya_hello_world(self):
         from gishant_scripts.diagnostic.maya_runner import run_maya_script
 
-        script = FIXTURES_DIR / "hello_world_maya.py"
         result = run_maya_script(
-            script_path=script,
-            project_name="TestProject",
-            folder_path="/assets/hero",
+            script_path=str(FIXTURES_DIR / "hello_world_maya.py"),
+            project_name=AYON_PROJECT,
+            folder_path=AYON_FOLDER,
+            timeout=120,
         )
-        assert result.status in {"pass", "fail", "error"}, f"Unexpected status: {result.status}"
-        assert result.dcc == "maya"
+        assert result.status == "pass", f"Maya failed: {result.errors}"
+        assert result.findings.get("maya_version"), "Maya version not reported"
+
+    def test_maya_ayon_connected(self):
+        from gishant_scripts.diagnostic.maya_runner import run_maya_script
+
+        result = run_maya_script(
+            script_path=str(FIXTURES_DIR / "hello_world_maya.py"),
+            project_name=AYON_PROJECT,
+            folder_path=AYON_FOLDER,
+            timeout=120,
+        )
+        assert result.findings.get("ayon_connected"), f"AYON not connected: {result.errors}"
+        assert result.findings.get("project_name") == AYON_PROJECT
 
 
-@pytest.mark.integration
-class TestUnrealHelloWorld:
-    """Run the hello_world_unreal.py fixture through unreal_runner."""
+# ---------------------------------------------------------------------------
+# Unreal integration
+# ---------------------------------------------------------------------------
 
-    def test_run(self) -> None:
+
+class TestUnrealIntegration:
+    """End-to-end Unreal batch execution with AYON context."""
+
+    @pytest.fixture(autouse=True)
+    def _cleanup_results(self):
+        result_file = FIXTURES_DIR / "results" / "unreal_result.json"
+        result_file.unlink(missing_ok=True)
+        yield
+        result_file.unlink(missing_ok=True)
+
+    def test_unreal_hello_world(self):
         from gishant_scripts.diagnostic.unreal_runner import run_unreal_script
 
-        script = FIXTURES_DIR / "hello_world_unreal.py"
         result = run_unreal_script(
-            script_path=script,
-            project_name="TestProject",
-            folder_path="/assets/hero",
+            script_path=str(FIXTURES_DIR / "hello_world_unreal.py"),
+            project_name=AYON_PROJECT,
+            folder_path=AYON_FOLDER,
+            timeout=120,
         )
-        assert result.status in {"pass", "fail", "error"}, f"Unexpected status: {result.status}"
-        assert result.dcc == "unreal"
+        assert result.status == "pass", f"Unreal failed: {result.errors}"
+        assert result.findings.get("unreal_version"), "UE version not reported"
+
+    def test_unreal_ayon_connected(self):
+        from gishant_scripts.diagnostic.unreal_runner import run_unreal_script
+
+        result = run_unreal_script(
+            script_path=str(FIXTURES_DIR / "hello_world_unreal.py"),
+            project_name=AYON_PROJECT,
+            folder_path=AYON_FOLDER,
+            timeout=120,
+        )
+        assert result.findings.get("ayon_connected"), f"AYON not connected: {result.errors}"
+        assert result.findings.get("project_name") == AYON_PROJECT

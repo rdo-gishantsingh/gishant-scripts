@@ -33,7 +33,6 @@ def main():
         try:
             import ayon_api
 
-            ayon_api.init()
             project = ayon_api.get_project(os.environ["AYON_PROJECT_NAME"])
             result["findings"]["ayon_connected"] = project is not None
             result["findings"]["project_name"] = project["name"] if project else None

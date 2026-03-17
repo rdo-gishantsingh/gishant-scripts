@@ -2,7 +2,14 @@
 
 import json
 import os
+import sys
 from pathlib import Path
+
+# Unreal's embedded Python may not honor PYTHONPATH env var —
+# explicitly add its entries to sys.path.
+for p in os.environ.get("PYTHONPATH", "").split(";"):
+    if p and p not in sys.path:
+        sys.path.insert(0, p)
 
 
 def main():
@@ -33,7 +40,6 @@ def main():
         try:
             import ayon_api
 
-            ayon_api.init()
             project = ayon_api.get_project(os.environ["AYON_PROJECT_NAME"])
             result["findings"]["ayon_connected"] = project is not None
             result["findings"]["project_name"] = project["name"] if project else None

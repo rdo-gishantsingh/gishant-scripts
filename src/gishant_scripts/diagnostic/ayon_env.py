@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from gishant_scripts.diagnostic.config import LINUX, WINDOWS, linux_to_windows_path
@@ -160,20 +161,37 @@ def resolve_ayon_env(
     # -- Collect addon PYTHONPATH entries ------------------------------------
     addon_paths = list_all_addon_paths()
     python_paths: list[str] = []
-    for _addon_name, addon_dir in sorted(addon_paths.items()):
-        path_str = str(addon_dir)
-        if is_windows:
-            path_str = linux_to_windows_path(path_str)
-        python_paths.append(path_str)
+
+    if is_windows:
+        # Windows has its own addon storage — use addon folder names from
+        # the Linux manifest but prefix with the Windows storage base path.
+        win_addons_base = "C:\\Users\\gisi\\.local\\share\\ayon-launcher-local\\addons"
+        for _addon_name, addon_dir in sorted(addon_paths.items()):
+            folder_name = addon_dir.name  # e.g. "core_1.6.7+dev.rdo.4"
+            python_paths.append(f"{win_addons_base}\\{folder_name}")
+    else:
+        for _addon_name, addon_dir in sorted(addon_paths.items()):
+            python_paths.append(str(addon_dir))
 
     # -- Storage dir --------------------------------------------------------
     storage_dir = str(LINUX.ayon_storage_dir)
     if is_windows:
         storage_dir = str(config.ayon_storage_dir)
 
+    # -- Load API key from RDO shared credentials ----------------------------
+    _rdo_env_path = Path.home() / ".rdo" / ".env"
+    api_key = os.environ.get("AYON_TEST_API_KEY", "")
+    if not api_key and _rdo_env_path.exists():
+        for line in _rdo_env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("AYON_TEST_API_KEY="):
+                api_key = line.split("=", 1)[1].strip().strip('"')
+                break
+
     # -- Build env dict -----------------------------------------------------
     env: dict[str, str] = {
         "AYON_SERVER_URL": config.ayon_server_url,
+        "AYON_API_KEY": api_key,
         "AYON_PROJECT_NAME": project_name,
         "AYON_FOLDER_PATH": folder_path,
         "PYTHONPATH": path_sep.join(python_paths),
