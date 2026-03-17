@@ -17,6 +17,12 @@ PATH_MAP_LINUX_TO_WIN: dict[str, str] = {
 
 PATH_MAP_WIN_TO_LINUX: dict[str, str] = {v: k for k, v in PATH_MAP_LINUX_TO_WIN.items()}
 
+# UNC paths for SSH sessions where mapped drives are unavailable
+PATH_MAP_LINUX_TO_UNC: dict[str, str] = {
+    "/projects/": "\\\\rdoshyd\\projects\\",
+    "/tech/": "\\\\rdoshyd\\tech\\",
+}
+
 
 # ---------------------------------------------------------------------------
 # Config dataclasses
@@ -58,9 +64,17 @@ WINDOWS = WindowsConfig()
 # ---------------------------------------------------------------------------
 
 
-def linux_to_windows_path(path: str) -> str:
-    """Convert a Linux path to its Windows equivalent using PATH_MAP."""
-    for linux_prefix, win_prefix in PATH_MAP_LINUX_TO_WIN.items():
+def linux_to_windows_path(path: str, *, unc: bool = False) -> str:
+    """Convert a Linux path to its Windows equivalent.
+
+    Args:
+        path: Linux filesystem path.
+        unc: If True, use UNC paths (``\\\\rdoshyd\\tech\\``) instead of
+            drive letters (``Z:\\``). Needed in SSH sessions where mapped
+            drives are unavailable.
+    """
+    path_map = PATH_MAP_LINUX_TO_UNC if unc else PATH_MAP_LINUX_TO_WIN
+    for linux_prefix, win_prefix in path_map.items():
         if path.startswith(linux_prefix):
             return win_prefix + path[len(linux_prefix) :].replace("/", "\\")
     return path
