@@ -1,0 +1,179 @@
+# ===========================================================================
+# Task Workspace — Default Configuration
+# ===========================================================================
+# Override per-user by placing a file at:
+#   ~/.config/gishant/task_workspace.yaml
+# Or via environment variables:
+#   TASK_WS_REPOS_DIR, TASK_WS_WORKTREES_DIR, TASK_WS_WORKSPACES_DIR
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Base paths (~ is expanded at load time)
+# ---------------------------------------------------------------------------
+paths:
+  repos_dir: ~/dev/repos
+  worktrees_dir: ~/dev/worktrees
+  workspaces_dir: ~/dev/workspaces
+
+# ---------------------------------------------------------------------------
+# Repositories to skip during discovery (directory names under repos_dir)
+# ---------------------------------------------------------------------------
+deny_list:
+  - maya-completions
+
+# ---------------------------------------------------------------------------
+# Display names: maps directory name → label shown in workspace explorer.
+# Repos not listed here use their directory name as-is.
+# ---------------------------------------------------------------------------
+display_names:
+  ayon-docker: "ayon-docker"
+  kitsu-docker: "kitsu-docker"
+  kitsu-local: "kitsu-local"
+  kitsu: "kitsu-server"
+  zou: "kitsu-storage"
+  ayon-launcher: "ayon-launcher"
+  ayon-dependencies-tool: "ayon-dependencies-tool"
+  ynput-ayon-core: "ayon-core"
+  ynput-ayon-maya: "ayon-maya"
+  ynput-ayon-nuke: "ayon-nuke"
+  ynput-ayon-unreal: "ayon-unreal"
+  ayon-houdini: "ayon-houdini"
+  ynput-ayon-deadline: "ayon-deadline"
+  ynput-ayon-kitsu: "ayon-kitsu"
+  rdo-ayon-unreal: "rdo-ayon-unreal"
+  rdo-client-packaging-tool: "rdo-client-packaging-tool"
+  rdo-maya-pipeline-shelf: "rdo-maya-pipeline-shelf"
+  rdo-maya-animation-shelf: "rdo-maya-animation-shelf"
+  rdo-maya-layout-shelf: "rdo-maya-layout-shelf"
+  rdo-maya-material-manager: "rdo-maya-material-manager"
+  rdo-maya-model-shelf: "rdo-maya-model-shelf"
+  rdo-maya-rig-shelf: "rdo-maya-rig-shelf"
+  rdo-maya-set-shelf: "rdo-maya-set-shelf"
+  rdo-maya-texture-shelf: "rdo-maya-texture-shelf"
+  rdo-maya-shelf-builder: "rdo-maya-shelf-builder"
+  rdo-ayon-bundle-manager: "rdo-ayon-bundle-manager"
+  rdo-editorial-edl-ingester: "rdo-editorial-edl-ingester"
+  rdo-editorial-sa-otio-publisher: "rdo-editorial-sa-otio-publisher"
+  rdo-core-logging: "rdo-core-logging"
+  rdo-core-permissions-service: "rdo-core-permissions-service"
+  rdo-core-pms-bridge: "rdo-core-pms-bridge"
+  rdo-core-ayon-utils: "rdo-core-ayon-utils"
+  rdo-core-kitsu-utils: "rdo-core-kitsu-utils"
+  rdo-core-media-utils: "rdo-core-media-utils"
+  rdo-core-qt-utils: "rdo-core-qt-utils"
+  rdo-pydub: "rdo-pydub"
+  rdo-rez-build-utils: "rdo-rez-build-utils"
+  rdo-rez-external-packages: "rdo-rez-external-packages"
+  rdo-template-rez-maya-shelf: "rdo-template-rez-maya-shelf"
+  rdo-storage-cleanup: "rdo-storage-cleanup"
+  rdo-github-actions-runner: "rdo-github-actions-runner"
+  rdo-github-actions: "rdo-github-actions"
+  gishant-scripts: "custom-scripts"
+
+# ---------------------------------------------------------------------------
+# Extra paths: maps directory name → list of sub-paths for IntelliSense.
+# These are injected into python.analysis.extraPaths,
+# python.autoComplete.extraPaths, and cursorpyright.analysis.extraPaths
+# using ${workspaceFolder:<display_name>}/<sub-path> syntax.
+# ---------------------------------------------------------------------------
+extra_paths:
+  ayon-docker:
+    - backend
+  ynput-ayon-core:
+    - server
+    - client
+    - client/vendor/python
+    - server_addon
+  ynput-ayon-maya:
+    - server
+    - client
+  ynput-ayon-nuke:
+    - server
+    - client
+  ynput-ayon-unreal:
+    - server
+    - client
+  ayon-houdini:
+    - server
+    - client
+  ynput-ayon-deadline:
+    - server
+    - client
+  ynput-ayon-kitsu:
+    - server
+    - client
+  rdo-ayon-unreal:
+    - server
+    - client
+  rdo-maya-pipeline-shelf:
+    - python
+  rdo-maya-animation-shelf:
+    - python
+  rdo-maya-layout-shelf:
+    - python
+  rdo-maya-material-manager:
+    - python
+  rdo-maya-model-shelf:
+    - python
+  rdo-maya-rig-shelf:
+    - rdo_maya_rig_shelf
+  rdo-maya-set-shelf:
+    - rdo_maya_set_shelf
+  rdo-maya-texture-shelf:
+    - python
+  rdo-maya-shelf-builder:
+    - python
+  rdo-core-logging:
+    - python
+  rdo-editorial-edl-ingester:
+    - python
+  rdo-editorial-sa-otio-publisher:
+    - python
+  rdo-core-pms-bridge:
+    - python
+  rdo-core-ayon-utils:
+    - python
+  rdo-core-kitsu-utils:
+    - python
+  rdo-core-qt-utils:
+    - python
+  rdo-core-permissions-service:
+    - python
+  rdo-core-media-utils:
+    - python
+  rdo-pydub:
+    - python
+    - pydub
+  rdo-storage-cleanup:
+    - python
+  rdo-rez-build-utils:
+    - python
+  rdo-rez-external-packages:
+    - python
+
+# ---------------------------------------------------------------------------
+# Repositories that maintain their own .venv (directory names).
+# Per-folder python.defaultInterpreterPath is set for these.
+# ---------------------------------------------------------------------------
+own_venv:
+  - ayon-launcher
+  - ynput-ayon-core
+  - ynput-ayon-unreal
+  - ynput-ayon-kitsu
+  - rdo-ayon-unreal
+  - rdo-ayon-bundle-manager
+  - rdo-editorial-edl-ingester
+  - rdo-core-logging
+  - rdo-core-ayon-utils
+  - rdo-core-kitsu-utils
+  - rdo-core-media-utils
+  - rdo-core-qt-utils
+  - gishant-scripts
+
+# ---------------------------------------------------------------------------
+# Absolute extra paths (not tied to any workspace folder).
+# Always included regardless of which repos are selected.
+# ---------------------------------------------------------------------------
+global_extra_paths:
+  - ~/dev/repos/maya-completions/py
+  - ~/dev/repos/maya-completions/pyi

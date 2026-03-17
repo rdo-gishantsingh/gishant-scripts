@@ -1,0 +1,167 @@
+# ===========================================================================
+# Task Workspace — VS Code Settings Template
+# ===========================================================================
+# Static settings applied to every generated task workspace.
+# extraPaths and per-folder interpreter paths are injected dynamically.
+# ===========================================================================
+
+# ---------- Editor experience ----------
+editor.fontFamily: "FiraCode Nerd Font, Menlo, Monaco, 'Courier New', monospace"
+editor.fontLigatures: true
+editor.fontSize: 14
+editor.fontWeight: 500
+editor.minimap.enabled: false
+editor.rulers: [88, 120]
+editor.formatOnSave: false
+editor.defaultFormatter: "charliermarsh.ruff"
+workbench.colorTheme: "Experimental Dark"
+workbench.iconTheme: "material-icon-theme"
+
+# ---------- Terminal ----------
+terminal.integrated.cursorBlinking: true
+terminal.integrated.cursorStyle: "line"
+terminal.integrated.cursorWidth: 2
+terminal.integrated.fontFamily: "JetBrainsMono NF, Menlo, Monaco, 'Courier New', monospace"
+terminal.integrated.fontWeight: "normal"
+terminal.integrated.defaultProfile.linux: "zsh"
+
+# ---------- Files & explorer ----------
+files.autoSave: "onFocusChange"
+files.trimTrailingWhitespace: true
+explorer.compactFolders: false
+explorer.fileNesting.enabled: true
+explorer.fileNesting.patterns:
+  "*.py": "${capture}.pyc, ${capture}.pyi, test_${capture}.py"
+  "*.ts": "${capture}.js, ${capture}.d.ts, ${capture}.js.map"
+  "package.json": "package-lock.json, yarn.lock, pnpm-lock.yaml, .npmrc, .nvmrc, tsconfig.json"
+  "package.py": "rezbuild.py, CHANGELOG.md"
+  "pyproject.toml": "poetry.lock, poetry.toml, requirements*.txt, .venv, venv, uv.lock, ruff.toml, pytest.ini, .coverage, coverage.xml"
+  "docker-compose.yml": "docker-compose.*.yml, Dockerfile*, .dockerignore"
+  "README.md": "LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, ARCHITECTURE.md"
+  "create_package.py": "package.py, mkdocs.yml, mkdocs_hooks.py, mkdocs_requirements.txt"
+
+# ---------- Exclusions & search perf ----------
+files.exclude:
+  "**/.DS_Store": true
+  "**/.git": true
+  "**/.pytest_cache": true
+  "**/.ruff_cache": true
+  "**/venv": true
+  "**/__pycache__": true
+  "**/*.pyc": true
+
+search.exclude:
+  "**/*.code-search": true
+  "**/.pytest_cache": true
+  "**/.ruff_cache": true
+  "**/bower_components": true
+  "**/build": true
+  "**/dist": true
+  "**/node_modules": true
+  "**/package": true
+  "**/__pycache__": true
+  "**/htmlcov": true
+  "**/.coverage": true
+  "**/*.egg-info": true
+
+files.watcherExclude:
+  "**/.git/objects/**": true
+  "**/.git/subtree-cache/**": true
+  "**/node_modules/**": true
+  "**/.venv/**": true
+  "**/venv/**": true
+  "**/build/**": true
+  "**/dist/**": true
+  "**/__pycache__/**": true
+  "**/.pytest_cache/**": true
+  "**/.ruff_cache/**": true
+
+search.followSymlinks: false
+search.smartCase: true
+search.quickOpen.includeSymbols: false
+
+# ---------- Python tooling ----------
+ruff.configurationPreference: "editorFirst"
+ruff.lineLength: 120
+python.terminal.activateEnvironment: true
+python.testing.autoTestDiscoverOnSaveEnabled: true
+python.testing.pytestEnabled: true
+python.testing.unittestEnabled: false
+python.testing.cwd: "${workspaceFolder}"
+python.testing.pytestArgs: ["-v", "--tb=short"]
+python.analysis.typeCheckingMode: "basic"
+python.analysis.autoImportCompletions: true
+python.analysis.inlayHints.functionReturnTypes: true
+python.analysis.inlayHints.variableTypes: true
+python.analysis.completeFunctionParens: true
+python.analysis.indexing: true
+python.analysis.importFormat: "absolute"
+python.analysis.diagnosticSeverityOverrides:
+  reportAttributeAccessIssue: "none"
+  reportOptionalSubscript: "none"
+
+# ---------- Language overrides ----------
+"[python]":
+  editor.formatOnSave: false
+  editor.defaultFormatter: "charliermarsh.ruff"
+  editor.codeActionsOnSave:
+    source.organizeImports: "explicit"
+    source.fixAll: "explicit"
+  editor.rulers: [88, 120]
+
+"[typescript]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+  editor.formatOnSave: true
+
+"[typescriptreact]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+  editor.formatOnSave: true
+
+"[javascript]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+  editor.formatOnSave: true
+
+"[json]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+  editor.formatOnSave: true
+
+"[jsonc]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+
+"[markdown]":
+  editor.defaultFormatter: "esbenp.prettier-vscode"
+
+# ---------- Git configuration ----------
+git.autofetch: true
+git.confirmSync: false
+git.enableSmartCommit: true
+git.ignoreLimitWarning: true
+git.fetchOnPull: true
+git.pruneOnFetch: true
+git.blame.editorDecoration.enabled: true
+gitlens.advanced.repositorySearchDepth: 3
+gitlens.mode.active: "zen"
+
+# ---------- Extension recommendations ----------
+extensions:
+  recommendations:
+    - ms-python.python
+    - ms-python.pylance
+    - ms-python.debugpy
+    - ms-vscode.cpptools
+    - GitHub.vscode-pull-request-github
+    - ms-azuretools.vscode-docker
+    - ms-vscode-remote.remote-containers
+    - ms-vscode-remote.remote-ssh
+    - charliermarsh.ruff
+    - esbenp.prettier-vscode
+    - dbaeumer.vscode-eslint
+    - usernamehw.errorlens
+    - redhat.vscode-yaml
+    - tamasfe.even-better-toml
+    - eamodio.gitlens
+    - christian-kohler.path-intellisense
+    - GitHub.vscode-github-actions
+    - wayou.vscode-todo-highlight
+    - shd101wyy.markdown-preview-enhanced
+    - yzhang.markdown-all-in-one

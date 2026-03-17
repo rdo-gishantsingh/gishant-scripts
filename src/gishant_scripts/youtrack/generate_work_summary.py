@@ -251,85 +251,81 @@ def generate_work_summary_with_gemini(
         else 'Use first person "I" when writing from the report owner\'s perspective.'
     )
 
-    # Create detailed prompt with strict formatting requirements
-    prompt = f"""
-You are a technical professional creating a work summary for management review.
+    prompt = f"""\
+{person_instruction}
 
-TASK: Analyze the following YouTrack issues from the past {data["time_period_weeks"]} weeks and generate a STRUCTURED work summary.
+Analyze the YouTrack issues below (last {data["time_period_weeks"]} weeks, as of {datetime.now().strftime("%Y-%m-%d")}) \
+and produce a work summary for management review.
 
-CRITICAL FORMATTING REQUIREMENTS (Markdown Format):
+IMPORTANT: The output will be pasted into Google Chat, so use only formatting that Google Chat supports: \
+*bold* (single asterisk), links, and bullet points. Do NOT use Markdown headers (#, ##, ###) — they do not render.
 
-1. The entire report MUST be in valid **Markdown** format.
+# Classification
 
-2. Group issues into TWO categories, each as a Markdown H2 heading:
-   - ## COMPLETED
-     (for issues with state "Done", "Closed", "Resolved", or where work is clearly finished)
-   - ## IN PROGRESS
-     (for issues with state "In Progress", "Open", "To Do", or where work is ongoing)
+Assign each issue to exactly one category:
 
-3. For EACH issue, follow this Markdown structure EXACTLY:
+- ✅ *COMPLETED* — state is "Done", "Closed", "Resolved", or all work is clearly finished.
+- 🔄 *IN PROGRESS* — state is "In Progress", "Open", "To Do", or work is ongoing.
 
-### [PIPE-XXX](https://ro.youtrack.cloud/issue/PIPE-XXX): Issue-Title-With-Hyphens
+# Analysis
 
-**Done**
-- Bullet point of completed work item
-- Another completed work item
-- PR links, deployment info, etc.
+For each issue, extract from comments (chronologically) and metadata:
 
-**Current Work**
-- What you're currently working on
-- Or "None" if not applicable
+| Section              | What to include                                                        |
+|----------------------|------------------------------------------------------------------------|
+| ✅ *Done*            | Completed work, merged PRs, deployed features, resolved decisions.     |
+| 🔨 *Current Work*   | Recently mentioned ongoing activities or work in progress.             |
+| ⏳ *Pending*        | Items awaiting code review, testing by others, external dependencies.  |
+| 🚫 *Blockers*       | Technical obstacles, missing resources, blocking dependencies.         |
 
-**Pending**
-- Items waiting on others (with person's name if mentioned)
-- Or "None" if not applicable
+- Be specific: mention people by name, include PR URLs, reference concrete actions.
+- Include GitHub links from the `github_links` field and from comment text under ✅ *Done*.
+- Omit sections that have no items — do NOT write "None".
 
-**Blockers**
-- Any obstacles preventing progress
-- Or "None" if not applicable
+# Output format
 
-(Rules for formatting the above:
-- The issue header is an H3 with a Markdown link showing `[PIPE-XXX](https://ro.youtrack.cloud/issue/PIPE-XXX)` for the ticket ID, followed by the issue title using hyphens instead of spaces.
-- Bullet lists use dash (`- `) not `•`.
-- Each section title (Done, Current Work, Pending, Blockers) is bolded using double asterisks.
-- If a section has no items, write `- None`.)
+Use this exact structure. No preamble, no summary, no closing text.
 
-4. IMPORTANT RULES:
-   - Always create the ticket ID as a clickable Markdown link as above, do not show the ID without the link.
-   - Replace spaces in issue titles with hyphens (e.g., "Fix the bug" → "Fix-the-bug").
-   - Use dash bullets (`-`) for all lists.
-   - If a section has no content, write `- None`.
-   - Extract information from comments chronologically.
-   - Focus on concrete actions, PRs, deployments, decisions.
-   - Be specific with names when mentioning people.
-   - Include PR links if mentioned in comments or present in `github_links` field.
-   - For PR links, add as: `- PR: <url>` in the **Done** section.
+```
+✅ *COMPLETED*
 
-5. GITHUB PR LINKS:
-   - Each issue may have a "github_links" field with GitHub PR/issue URLs.
-   - If github_links exist, include them in the "Done" section as `- PR: <url>`.
-   - Also extract any GitHub links mentioned in comments.
-   - Example: `- PR: https://github.com/org/repo/pull/123`
+<https://ro.youtrack.cloud/issue/PROJ-42|PROJ-42>: Short issue title
+✅ *Done*
+• Implemented feature X for the asset loader
+• PR: https://github.com/org/repo/pull/99
 
-6. ANALYSIS GUIDELINES:
-   - "Done" items: Completed work, merged PRs, deployed features, resolved issues
-   - "Current Work": Recently mentioned ongoing activities, work in progress
-   - "Pending": Waiting for code review, testing by others, external dependencies
-   - "Blockers": Technical issues, missing resources, dependencies blocking progress
+<https://ro.youtrack.cloud/issue/PROJ-51|PROJ-51>: Another issue title
+✅ *Done*
+• Deployed hotfix to production
 
-7. DATE CONTEXT: Today is {datetime.now().strftime("%Y-%m-%d")}. All issues have activity in the last {data["time_period_weeks"]} weeks.
+🔄 *IN PROGRESS*
 
-8. {person_instruction}
+<https://ro.youtrack.cloud/issue/PROJ-78|PROJ-78>: Third issue title
+✅ *Done*
+• Completed initial prototype
+🔨 *Current Work*
+• Integrating with the rendering pipeline
+⏳ *Pending*
+• Waiting on Alex for texture review
+🚫 *Blockers*
+• Upstream API returns 500 on large payloads
+```
 
-YOUTRACK ISSUES DATA:
+Formatting rules:
+- Ticket IDs use Google Chat link syntax: `<URL|LABEL>`.
+- Issue titles use normal spaces (never hyphens).
+- Use `•` (bullet) for all list items.
+- Section labels are bold with single asterisks and prefixed with their emoji.
+- Omit any section (Current Work, Pending, Blockers) with nothing to report.
+- If a category (COMPLETED or IN PROGRESS) has no issues, omit it entirely.
+- One blank line between issues; one blank line between categories.
 
-Total Issues: {data["total_issues"]}
-State Distribution: {json.dumps(data["state_groups"], indent=2)}
+---
 
-DETAILED ISSUES:
+Total: {data["total_issues"]}
+State distribution: {json.dumps(data["state_groups"], indent=2)}
+
 {json.dumps(data["issues"], indent=2)}
-
-Generate the work summary in Markdown exactly as specified, starting with the ## COMPLETED or ## IN PROGRESS headings and listing each issue using the described format with ticket links.
 """
 
     try:

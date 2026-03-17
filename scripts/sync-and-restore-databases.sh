@@ -86,18 +86,37 @@ fi
 
 mkdir -p "$AYON_STAGING_DIR" "$KITSU_STAGING_DIR"
 
-LOG_PREFIX() { echo "[$(date '+%Y-%m-%d %H:%M:%S')]"; }
+# Colors and Icons
+NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 
-log()     { echo "$(LOG_PREFIX) [INFO]    $*"; }
-success() { echo "$(LOG_PREFIX) [SUCCESS] $*"; }
-warning() { echo "$(LOG_PREFIX) [WARNING] $*"; }
-error()   { echo "$(LOG_PREFIX) [ERROR]   $*"; }
+ICON_INFO="${BLUE}i${NC}"
+ICON_SUCCESS="${GREEN}✓${NC}"
+ICON_WARNING="${YELLOW}!${NC}"
+ICON_ERROR="${RED}✗${NC}"
+
+header()  { 
+    echo -e "\n${BOLD}${CYAN}=== $* ===${NC}"
+}
+
+log()     { echo -e "  ${ICON_INFO}  $*"; }
+success() { echo -e "  ${ICON_SUCCESS}  ${GREEN}$*${NC}"; }
+warning() { echo -e "  ${ICON_WARNING}  ${YELLOW}$*${NC}"; }
+error()   { echo -e "  ${ICON_ERROR}  ${RED}$*${NC}"; }
+
+# Filter for transaction_timeout (PostgreSQL 17+ param unsupported by older versions)
+FILTER_PG="sed '/SET transaction_timeout = 0;/d'"
 
 format_size() {
     local size=$1
-    if   [ "$size" -ge 1073741824 ]; then awk "BEGIN {printf \"%.2f GB\", $size/1073741824}"
-    elif [ "$size" -ge 1048576 ];    then awk "BEGIN {printf \"%.2f MB\", $size/1048576}"
-    elif [ "$size" -ge 1024 ];       then awk "BEGIN {printf \"%.2f KB\", $size/1024}"
+    if   [[ "$size" -ge 1073741824 ]]; then awk "BEGIN {printf \"%.2f GB\", $size/1073741824}"
+    elif [[ "$size" -ge 1048576 ]];    then awk "BEGIN {printf \"%.2f MB\", $size/1048576}"
+    elif [[ "$size" -ge 1024 ]];       then awk "BEGIN {printf \"%.2f KB\", $size/1024}"
     else echo "${size} B"
     fi
 }
@@ -170,7 +189,7 @@ restore_database() {
     local schema_upgrade_service="$7"
     local label="$8"
 
-    log "====== Starting $label database restore ======"
+    # log "====== Starting $label database restore ======"
 
     # ── Find latest staged backup ──────────────────────────────────────────
     local backup_file
@@ -256,17 +275,17 @@ restore_database() {
     elif [[ "$backup_file" == *.gz ]]; then
         log "$label: Detected gzip SQL format – streaming restore..."
         if [[ "$USE_PV" == true ]]; then
-            pv "$backup_file" | gunzip | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            pv "$backup_file" | gunzip | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
         else
-            gunzip -c "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            gunzip -c "$backup_file" | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
         fi
 
     else
         log "$label: Detected plain SQL format..."
         if [[ "$USE_PV" == true ]]; then
-            pv "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            pv "$backup_file" | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
         else
-            docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q < "$backup_file"
+            eval "$FILTER_PG" < "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
         fi
     fi
 
@@ -306,11 +325,10 @@ if [[ $INTERACTIVE -eq 1 ]]; then
     echo ""
 fi
 
-log "===== Starting sync-and-restore-databases ====="
-echo ""
+log "Starting sync-and-restore-databases"
 
 # ── Phase 1: Copy ───────────────────────────────────────────────────────────
-log "Phase 1: Copying latest backups to staging..."
+header "Phase 1: Copying latest backups to staging"
 AYON_COPY_OK=1
 KITSU_COPY_OK=1
 
@@ -320,7 +338,7 @@ echo ""
 
 # ── Phase 2: Restore Ayon ─────────────────────────────────────────────────
 if [[ $AYON_COPY_OK -eq 1 ]]; then
-    log "Phase 2: Restoring Ayon database..."
+    header "Phase 2: Restoring Ayon database"
     restore_database \
         "$AYON_COMPOSE_DIR" \
         "$AYON_STAGING_DIR" \
@@ -336,7 +354,7 @@ fi
 
 # ── Phase 3: Restore Kitsu ─────────────────────────────────────────────────
 if [[ $KITSU_COPY_OK -eq 1 ]]; then
-    log "Phase 3: Restoring Kitsu database..."
+    header "Phase 3: Restoring Kitsu database"
     restore_database \
         "$KITSU_COMPOSE_DIR" \
         "$KITSU_STAGING_DIR" \
@@ -350,4 +368,4 @@ else
     warning "Phase 3: Skipping Kitsu restore (copy failed)"
 fi
 
-log "===== sync-and-restore-databases complete ====="
+header "sync-and-restore-databases complete"
