@@ -168,10 +168,18 @@ def resolve_ayon_env(
         win_addons_base = "C:\\Users\\gisi\\.local\\share\\ayon-launcher-local\\addons"
         for _addon_name, addon_dir in sorted(addon_paths.items()):
             folder_name = addon_dir.name  # e.g. "core_1.6.7+dev.rdo.4"
-            python_paths.append(f"{win_addons_base}\\{folder_name}")
+            addon_path = f"{win_addons_base}\\{folder_name}"
+            python_paths.append(addon_path)
+            # Add vendor/python subdirs (contains qargparse, scriptsmenu, etc.)
+            if _addon_name == "core":
+                python_paths.append(f"{addon_path}\\ayon_core\\vendor\\python")
     else:
         for _addon_name, addon_dir in sorted(addon_paths.items()):
             python_paths.append(str(addon_dir))
+            if _addon_name == "core":
+                vendor_path = addon_dir / "ayon_core" / "vendor" / "python"
+                if vendor_path.is_dir():
+                    python_paths.append(str(vendor_path))
 
     # -- Storage dir --------------------------------------------------------
     storage_dir = str(LINUX.ayon_storage_dir)
@@ -188,12 +196,38 @@ def resolve_ayon_env(
                 api_key = line.split("=", 1)[1].strip().strip('"')
                 break
 
+    # -- Resolve active bundle name -----------------------------------------
+    bundle_name = ""
+    try:
+        import ayon_api as _ayon_api
+
+        _prev_url = os.environ.get("AYON_SERVER_URL")
+        _prev_key = os.environ.get("AYON_API_KEY")
+        os.environ["AYON_SERVER_URL"] = LINUX.ayon_server_url
+        os.environ["AYON_API_KEY"] = api_key
+        resp = _ayon_api.get("bundles")
+        if resp.data:
+            for b in resp.data.get("bundles", []):
+                if b.get("isProduction"):
+                    bundle_name = b["name"]
+                    break
+        # Restore original env
+        if _prev_url is not None:
+            os.environ["AYON_SERVER_URL"] = _prev_url
+        if _prev_key is not None:
+            os.environ["AYON_API_KEY"] = _prev_key
+    except Exception:
+        logger.debug("Failed to resolve AYON bundle name", exc_info=True)
+
     # -- Build env dict -----------------------------------------------------
     env: dict[str, str] = {
         "AYON_SERVER_URL": config.ayon_server_url,
         "AYON_API_KEY": api_key,
+        "AYON_BUNDLE_NAME": bundle_name,
         "AYON_PROJECT_NAME": project_name,
         "AYON_FOLDER_PATH": folder_path,
+        "AYON_UNREAL_VERSION": "5.4",
+        "AYON_SITE_ID": "puzzling-tiger-from-tartarus" if is_windows else "",
         "PYTHONPATH": path_sep.join(python_paths),
         "AYON_LAUNCHER_STORAGE_DIR": storage_dir,
         "AYON_LAUNCHER_LOCAL_DIR": storage_dir,
