@@ -15,6 +15,8 @@ For each issue, includes:
 - Blockers: Any obstacles
 """
 
+from __future__ import annotations
+
 import json
 import re
 import threading
@@ -22,7 +24,7 @@ import time
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 from rich.box import SIMPLE
@@ -136,6 +138,44 @@ def build_live_display(
     return RichGroup(*parts)
 
 
+def load_work_logs(worktrees_dir: Path | None = None) -> dict[str, str]:
+    """Load WORK_LOG.md files from all worktrees and map them to YouTrack ticket IDs.
+
+    Scans ``~/dev/worktrees/<slug>/WORK_LOG.md``. Recognises slugs of the form
+    ``pipe-NNN`` → ``PIPE-NNN`` and ``user-NNN`` → ``USER-NNN``.
+
+    Args:
+        worktrees_dir: Path to the worktrees directory. Defaults to ``~/dev/worktrees``.
+
+    Returns:
+        Dict mapping ticket ID (e.g. ``"PIPE-523"``) to ``WORK_LOG.md`` content.
+    """
+    if worktrees_dir is None:
+        worktrees_dir = Path.home() / "dev" / "worktrees"
+
+    if not worktrees_dir.is_dir():
+        return {}
+
+    slug_pattern = re.compile(r"^(pipe|user)-(\d+)", re.IGNORECASE)
+    work_logs: dict[str, str] = {}
+
+    for slug_dir in worktrees_dir.iterdir():
+        if not slug_dir.is_dir():
+            continue
+        log_file = slug_dir / "WORK_LOG.md"
+        if not log_file.is_file():
+            continue
+        match = slug_pattern.match(slug_dir.name)
+        if not match:
+            continue
+        ticket_id = f"{match.group(1).upper()}-{match.group(2)}"
+        content = log_file.read_text(encoding="utf-8").strip()
+        if content:
+            work_logs[ticket_id] = content
+
+    return work_logs
+
+
 def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
     """
     Filter issues that were updated in the last N weeks.
@@ -188,27 +228,84 @@ def filter_comments_by_time(issue: dict, weeks: int) -> dict:
     return filtered_issue
 
 
-def prepare_issues_for_summary(issues: list[dict], weeks: int) -> dict:
-    """
-    Prepare issues data for Gemini AI processing.
+def prepare_issues_for_summary(
+    issues: list[dict],
+    weeks: int,
+    work_logs: dict[str, str] | None = None,
+    user_login: str | None = None,
+) -> dict:
+    """Prepare issues data for Gemini AI processing.
 
     Args:
-        issues: List of issue dictionaries
-        weeks: Number of weeks (for context)
+        issues: List of issue dictionaries.
+        weeks: Number of weeks (for context).
+        work_logs: Optional dict mapping ticket ID to WORK_LOG.md content.
+            When provided, each matching issue gets a ``work_log`` field injected.
+        user_login: Login of the report owner. Used to compute ``user_role`` per
+            issue so Gemini can decide whether to include, skip, or flag a handoff.
 
     Returns:
-        Dictionary with categorized issues and metadata
+        Dictionary with categorized issues and metadata.
     """
-    # Filter comments by time period for all issues
+    # Filter comments by time period for all issues.
     # All issues passed here were already filtered by update time in filter_issues_by_time()
-    # so we include all of them, just with filtered comments
+    # so we include all of them, just with filtered comments.
     issues_with_filtered_comments = []
     for issue in issues:
         filtered_issue = filter_comments_by_time(issue, weeks)
+
+        # Inject WORK_LOG.md content when available — Claude session notes capture
+        # technical detail that may not be reflected in the YouTrack description.
+        if work_logs:
+            ticket_id = filtered_issue.get("id") or filtered_issue.get("idReadable") or ""
+            log_content = work_logs.get(ticket_id)
+            if log_content:
+                filtered_issue["work_log"] = log_content
+
+        # Compute user_role so the prompt can apply ownership-aware filtering.
+        #
+        # Roles (mutually exclusive, in priority order):
+        #   reporter_only         — user filed the ticket but is not the assignee and has
+        #                           no comments in the reporting period; they raised it for
+        #                           IT or another team member → Gemini should skip it.
+        #   assignee_active       — user is current assignee AND has recent comments.
+        #   assignee_quiet        — user is current assignee but no recent comments
+        #                           (e.g. blocked, waiting).
+        #   contributor_handed_off — user commented recently but is no longer assignee;
+        #                           work was handed off → Gemini should note the transition.
+        #   contributor           — user commented recently but was never the assignee.
+        #   watcher               — user has no recent involvement at all → skip.
+        if user_login:
+            is_reporter = filtered_issue.get("reporter_login", "") == user_login
+            is_assignee = filtered_issue.get("user_is_assignee", False)
+            recent_user_comments = sum(
+                1
+                for c in filtered_issue.get("comments", [])
+                if c.get("author_login") == user_login
+            )
+            had_recent_activity = recent_user_comments > 0
+            ever_commented = filtered_issue.get("user_commented", False)
+
+            if is_reporter and not is_assignee and not had_recent_activity:
+                role = "reporter_only"
+            elif is_assignee and had_recent_activity:
+                role = "assignee_active"
+            elif is_assignee and not had_recent_activity:
+                role = "assignee_quiet"
+            elif not is_assignee and had_recent_activity and ever_commented:
+                role = "contributor_handed_off"
+            elif not is_assignee and had_recent_activity:
+                role = "contributor"
+            else:
+                role = "watcher"
+
+            filtered_issue["user_role"] = role
+            filtered_issue["user_recent_comment_count"] = recent_user_comments
+
         issues_with_filtered_comments.append(filtered_issue)
 
-    # Group issues by state for context
-    state_groups = {}
+    # Group issues by state for context.
+    state_groups: dict[str, list[dict]] = {}
     for issue in issues_with_filtered_comments:
         state = issue.get("state", "Unknown")
         if state not in state_groups:
@@ -228,6 +325,7 @@ def generate_work_summary_with_gemini(
     api_key: str,
     model: GeminiModel = DEFAULT_MODEL,
     user_full_name: str | None = None,
+    audience: str = "management",
     *,
     show_progress: bool = True,
 ) -> str:
@@ -257,29 +355,51 @@ def generate_work_summary_with_gemini(
 Analyze the YouTrack issues below (last {data["time_period_weeks"]} weeks, as of {datetime.now().strftime("%Y-%m-%d")}) \
 and produce a work summary for management review.
 
-IMPORTANT: The output will be pasted into Google Chat, so use only formatting that Google Chat supports: \
-*bold* (single asterisk), links, and bullet points. Do NOT use Markdown headers (#, ##, ###) — they do not render.
+IMPORTANT: The output will be copy-pasted directly into Google Chat/Meet. \
+Google Chat only supports: *bold* (SINGLE asterisk), bare URLs (auto-linked), and bullet points with `• `. \
+Do NOT use Markdown syntax ([label](url), **double asterisks**, `- ` dashes) — Google Chat does not render it.
 
-# Classification
+# Step 1 — Ownership filter (apply before anything else)
 
-Assign each issue to exactly one category:
+Each issue has a `user_role` field. Use it to decide whether to include the issue:
+
+| user_role               | Action                                                                                       |
+|-------------------------|----------------------------------------------------------------------------------------------|
+| `reporter_only`         | *Skip entirely.* The user raised this ticket for IT or another team member — it is not their work. |
+| `watcher`               | *Skip entirely.* The user has no recent involvement in this period.                          |
+| `assignee_active`       | *Include normally.*                                                                          |
+| `assignee_quiet`        | *Include normally.* User is assignee but blocked or waiting — show Pending/Blockers.        |
+| `contributor`           | *Include normally.* User contributed comments but was not the formal assignee.               |
+| `contributor_handed_off`| *Include with a transition note.* User was working on this and handed it to someone else — mention who took it over and why if the comments say so. |
+
+# Step 2 — Classification
+
+Assign each included issue to exactly one category:
 
 - ✅ *COMPLETED* — state is "Done", "Closed", "Resolved", or all work is clearly finished.
 - 🔄 *IN PROGRESS* — state is "In Progress", "Open", "To Do", or work is ongoing.
 
-# Analysis
+# Step 3 — Analysis
 
-For each issue, extract from comments (chronologically) and metadata:
+For each issue, read the comments chronologically and extract full narrative sentences:
 
-| Section              | What to include                                                        |
-|----------------------|------------------------------------------------------------------------|
-| ✅ *Done*            | Completed work, merged PRs, deployed features, resolved decisions.     |
-| 🔨 *Current Work*   | Recently mentioned ongoing activities or work in progress.             |
-| ⏳ *Pending*        | Items awaiting code review, testing by others, external dependencies.  |
-| 🚫 *Blockers*       | Technical obstacles, missing resources, blocking dependencies.         |
+| Section              | What to include                                                                                          |
+|----------------------|----------------------------------------------------------------------------------------------------------|
+| ✅ *Done*            | Completed work as full sentences — what was built/fixed, who confirmed it, PRs raised. List all GitHub PR URLs explicitly. |
+| 🔨 *Current Work*   | Ongoing activities as full sentences — what is actively being investigated or developed right now.       |
+| ⏳ *Pending*        | What is waiting and on whom — name the person, describe what they need to do.                            |
+| 🚫 *Blockers*       | Specific obstacles — name the blocking ticket, person, or technical issue.                               |
 
-- Be specific: mention people by name, include PR URLs, reference concrete actions.
-- Include GitHub links from the `github_links` field and from comment text under ✅ *Done*.
+Some issues include a `work_log` field. This contains timestamped technical notes written during Claude AI development sessions — they record exactly what was implemented, decisions made, and what remains. **When `work_log` is present, treat it as the most authoritative source for implementation detail.** It supplements the YouTrack description and comments; if they conflict, the work log reflects ground truth.
+
+Rules for bullet content:
+- Write full sentences, not fragments. E.g. "Fixed the FPS rounding issue so Unreal defaults to 23.976 for the Barbie project." not "Fixed FPS".
+- If a ticket depends on or is related to another ticket, mention it explicitly. E.g. "Blocked by PIPE-772 which must be completed first."
+- List every GitHub PR URL from the `github_links` field and from comment text, each on its own bullet under ✅ *Done*.
+- Name people when they are mentioned in comments (reviewers, testers, collaborators).
+- For `contributor_handed_off` issues: add a 🔁 *Handed off to [Name]* note explaining what was transitioned and why.
+- *Verbosity:* aim for 2–3 bullets per section maximum. Combine related small actions into one sentence rather than listing each separately.
+- *Deduplication:* if the same fix, PR, or decision is referenced across multiple tickets, mention it once under the most relevant ticket and cross-reference briefly in the others (e.g. "See also USER-747"). Do not repeat the same detail verbatim.
 - Omit sections that have no items — do NOT write "None".
 
 # Output format
@@ -289,36 +409,90 @@ Use this exact structure. No preamble, no summary, no closing text.
 ```
 ✅ *COMPLETED*
 
-<https://ro.youtrack.cloud/issue/PROJ-42|PROJ-42>: Short issue title
+PROJ-42 — https://ro.youtrack.cloud/issue/PROJ-42 : Short issue title
 ✅ *Done*
-• Implemented feature X for the asset loader
+• Built the X feature for the asset loader, resolving the import failure reported by Kiran.
 • PR: https://github.com/org/repo/pull/99
 
-<https://ro.youtrack.cloud/issue/PROJ-51|PROJ-51>: Another issue title
+PROJ-51 — https://ro.youtrack.cloud/issue/PROJ-51 : Another issue title
 ✅ *Done*
-• Deployed hotfix to production
+• Deployed the hotfix to production after confirmation from Yogesh that staging tests passed.
 
 🔄 *IN PROGRESS*
 
-<https://ro.youtrack.cloud/issue/PROJ-78|PROJ-78>: Third issue title
+PROJ-78 — https://ro.youtrack.cloud/issue/PROJ-78 : Third issue title
 ✅ *Done*
-• Completed initial prototype
+• Completed the initial prototype and demoed it to the Production team.
+• PR: https://github.com/org/repo/pull/101
 🔨 *Current Work*
-• Integrating with the rendering pipeline
+• Integrating the prototype with the rendering pipeline based on feedback from the demo.
 ⏳ *Pending*
-• Waiting on Alex for texture review
+• Waiting for Alex to complete texture review before the PR can be merged.
 🚫 *Blockers*
-• Upstream API returns 500 on large payloads
+• Blocked by PROJ-77 — upstream API returns 500 on large payloads and must be resolved first.
 ```
 
+After all issues, append this section if any PRs are awaiting review:
+
+```
+⏳ *Awaiting review:* N PRs
+• PR: https://github.com/...
+• PR: https://github.com/...
+```
+
+Collect every PR URL that appears under a ⏳ *Pending* "awaiting code review" bullet across all issues and list them here. If no PRs are pending review, omit this section entirely.
+
 Formatting rules:
-- Ticket IDs use Google Chat link syntax: `<URL|LABEL>`.
+- Ticket IDs as plain text followed by an em dash and the bare URL: `PROJ-42 — https://...`.
 - Issue titles use normal spaces (never hyphens).
 - Use `•` (bullet) for all list items.
 - Section labels are bold with single asterisks and prefixed with their emoji.
 - Omit any section (Current Work, Pending, Blockers) with nothing to report.
 - If a category (COMPLETED or IN PROGRESS) has no issues, omit it entirely.
 - One blank line between issues; one blank line between categories.
+
+---
+
+Total: {data["total_issues"]}
+State distribution: {json.dumps(data["state_groups"], indent=2)}
+
+{json.dumps(data["issues"], indent=2)}
+"""
+
+    if audience == "standup":
+        prompt = f"""\
+{person_instruction}
+
+Analyze the YouTrack issues below (last {data["time_period_weeks"]} weeks, as of {datetime.now().strftime("%Y-%m-%d")}) \
+and produce a compact standup-style work summary.
+
+IMPORTANT: The output will be copy-pasted directly into Google Chat/Meet. \
+Google Chat only supports: *bold* (SINGLE asterisk), bare URLs (auto-linked), and bullet points with `• `. \
+Do NOT use Markdown syntax.
+
+# Ownership filter
+
+Apply the same `user_role` filter as normal: skip `reporter_only` and `watcher` issues entirely.
+
+# Output format
+
+One bullet per included issue. Group under ✅ *COMPLETED* and 🔄 *IN PROGRESS*. \
+Each bullet: ticket ID, bare URL, one sentence of what was done or is being done.
+
+```
+✅ *COMPLETED*
+• PROJ-42 — https://ro.youtrack.cloud/issue/PROJ-42 : Closed after redirecting frame boundary work to USER-747.
+
+🔄 *IN PROGRESS*
+• PROJ-78 — https://ro.youtrack.cloud/issue/PROJ-78 : Testing preliminary fix for animcache loop; validating across project files.
+• PROJ-99 — https://ro.youtrack.cloud/issue/PROJ-99 : Refactoring codebase; 3 PRs awaiting review.
+```
+
+Rules:
+- One bullet per issue, max two short clauses.
+- Mention the current blocker or pending person only if it is the key fact.
+- No section labels (Done / Current Work / Pending / Blockers) — everything in one line.
+- If a category has no issues, omit it entirely.
 
 ---
 
@@ -370,6 +544,34 @@ def main(
         int,
         typer.Option(help="Maximum number of issues to fetch per user"),
     ] = 100,
+    audience: Annotated[
+        Literal["management", "standup"],
+        typer.Option(
+            "--audience",
+            help="Output style: 'management' (detailed, full sentences) or 'standup' (one bullet per ticket, compact)",
+        ),
+    ] = "management",
+    exclude: Annotated[
+        str | None,
+        typer.Option(
+            "--exclude",
+            help="Comma-separated ticket IDs to force-exclude regardless of computed role (e.g. PIPE-123,USER-456)",
+        ),
+    ] = None,
+    include: Annotated[
+        str | None,
+        typer.Option(
+            "--include",
+            help="Comma-separated ticket IDs to force-include regardless of computed role (e.g. PIPE-123,USER-456)",
+        ),
+    ] = None,
+    debug_roles: Annotated[
+        bool,
+        typer.Option(
+            "--debug-roles",
+            help="Print a table showing each issue's computed user_role and exit without generating",
+        ),
+    ] = False,
 ) -> int:
     """
     Generate work summary from YouTrack issues using Gemini AI.
@@ -450,6 +652,10 @@ def main(
             base_url=config.youtrack.url,
             token=config.youtrack.api_token,
         )
+
+        # Load local WORK_LOG.md files from worktrees — these contain Claude session notes
+        # that capture technical detail not always reflected in the YouTrack ticket.
+        work_logs = load_work_logs()
 
         for idx, user_login in enumerate(user_logins, 1):
             label = user_login or "current user"
@@ -533,7 +739,52 @@ def main(
                     )
                 )
 
-                prepared_data = prepare_issues_for_summary(filtered_issues, weeks)
+                prepared_data = prepare_issues_for_summary(
+                    filtered_issues,
+                    weeks,
+                    work_logs=work_logs,
+                    user_login=user_login or user_info.get("login"),
+                )
+
+                # Apply --exclude and --include overrides.
+                exclude_ids = {t.strip().upper() for t in exclude.split(",") if t.strip()} if exclude else set()
+                include_ids = {t.strip().upper() for t in include.split(",") if t.strip()} if include else set()
+                for issue in prepared_data["issues"]:
+                    tid = (issue.get("id") or "").upper()
+                    if tid in exclude_ids:
+                        issue["user_role"] = "reporter_only"  # force skip
+                    elif tid in include_ids:
+                        issue["user_role"] = "assignee_active"  # force include
+
+                # --debug-roles: print role table and stop before generation.
+                if debug_roles:
+                    live.stop()
+                    from rich.table import Table as RichTable
+                    role_table = RichTable(title=f"Issue roles for {label}", border_style="cyan")
+                    role_table.add_column("Ticket", style="cyan")
+                    role_table.add_column("Role", style="bold")
+                    role_table.add_column("Assignee")
+                    role_table.add_column("Recent comments", justify="right")
+                    role_table.add_column("Summary")
+                    for issue in prepared_data["issues"]:
+                        role = issue.get("user_role", "unknown")
+                        role_color = {
+                            "reporter_only": "red",
+                            "watcher": "red",
+                            "assignee_active": "green",
+                            "assignee_quiet": "yellow",
+                            "contributor": "cyan",
+                            "contributor_handed_off": "magenta",
+                        }.get(role, "white")
+                        role_table.add_row(
+                            issue.get("id", "?"),
+                            f"[{role_color}]{role}[/{role_color}]",
+                            issue.get("assignee") or "—",
+                            str(issue.get("user_recent_comment_count", "?")),
+                            (issue.get("summary") or "")[:60],
+                        )
+                    console.print(role_table)
+                    continue
 
                 if prepared_data["total_issues"] == 0:
                     live.stop()
@@ -557,6 +808,7 @@ def main(
                             api_key=config.google_ai.api_key,
                             model=validate_model(model),
                             user_full_name=user_full_name or None,
+                            audience=audience,
                             show_progress=False,
                         )
                     except Exception as e:
