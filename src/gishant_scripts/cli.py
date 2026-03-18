@@ -111,6 +111,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from gishant_scripts.youtrack.generate_work_summary import main as youtrack_summary_main
+
+    app.command(name="youtrack-summary")(youtrack_summary_main)
+except ImportError:
+    pass
+
 
 def main() -> None:
     """Entry point for CLI."""
