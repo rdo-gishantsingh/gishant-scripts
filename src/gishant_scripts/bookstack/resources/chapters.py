@@ -39,6 +39,7 @@ class ChaptersResource(ExportableResource):
 
         Returns:
             Created chapter data
+
         """
         data: dict[str, Any] = {
             "book_id": book_id,
@@ -84,6 +85,7 @@ class ChaptersResource(ExportableResource):
 
         Returns:
             Updated chapter data
+
         """
         data: dict[str, Any] = {}
         if book_id is not None:
@@ -111,5 +113,6 @@ class ChaptersResource(ExportableResource):
 
         Returns:
             List of chapters
+
         """
         return self.list_all(filters={"book_id": book_id})

@@ -32,6 +32,7 @@ class CommentsResource(CRUDResource):
 
         Returns:
             Created comment data
+
         """
         data: dict[str, Any] = {
             "page_id": page_id,
@@ -61,6 +62,7 @@ class CommentsResource(CRUDResource):
 
         Returns:
             Updated comment data
+
         """
         data: dict[str, Any] = {}
         if html is not None:
@@ -78,5 +80,6 @@ class CommentsResource(CRUDResource):
 
         Returns:
             List of comments
+
         """
         return self.list_all(filters={"commentable_id": page_id})

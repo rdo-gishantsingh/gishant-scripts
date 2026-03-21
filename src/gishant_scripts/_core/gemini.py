@@ -49,6 +49,7 @@ class GeminiClient:
         Args:
             api_key: Google AI API key
             model: Gemini model to use (enum or model name string)
+
         """
         self._model = validate_model(model) if isinstance(model, str) else model
         self.client = genai.Client(api_key=api_key)
@@ -83,6 +84,7 @@ class GeminiClient:
         Raises:
             ValueError: If response is empty
             Exception: For other API errors
+
         """
         if show_progress:
             self.console.print(f"[cyan]Generating content with {self._model.model_name}...[/cyan]")
@@ -171,6 +173,7 @@ def validate_model(model: str) -> GeminiModel:
 
     Raises:
         ValueError: If model is not in available models
+
     """
     for m in GeminiModel:
         if m.model_name == model:
@@ -189,6 +192,7 @@ def select_model_interactive(default: GeminiModel = DEFAULT_MODEL) -> GeminiMode
 
     Returns:
         Selected GeminiModel enum member
+
     """
     console = Console()
     models = list(GeminiModel)

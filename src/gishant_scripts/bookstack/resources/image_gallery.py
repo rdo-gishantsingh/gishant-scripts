@@ -34,6 +34,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Response with 'data' list and 'total' count
+
         """
         return super().list(count=count, offset=offset, sort=sort, filters=filters)
 
@@ -54,6 +55,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Created image data
+
         """
         data: dict[str, Any] = {
             "type": image_type,
@@ -75,6 +77,7 @@ class ImageGalleryResource(CRUDResource):
             Image data including:
             - thumbs: Dictionary of thumbnail URLs
             - content: HTML and Markdown snippets for embedding
+
         """
         result = self.client.get(self._get_endpoint(image_id))
         if isinstance(result, bytes):
@@ -89,6 +92,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Image file bytes
+
         """
         result = self.client.get(self._get_endpoint(image_id, "data"))
         if isinstance(result, bytes):
@@ -103,6 +107,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Image file bytes
+
         """
         result = self.client.get("image-gallery/url/data", params={"url": url})
         if isinstance(result, bytes):
@@ -124,6 +129,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Updated image data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -144,6 +150,7 @@ class ImageGalleryResource(CRUDResource):
 
         Returns:
             Path to saved file
+
         """
         data = self.read_data(image_id)
         output_path.parent.mkdir(parents=True, exist_ok=True)

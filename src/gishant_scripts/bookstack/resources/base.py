@@ -23,6 +23,7 @@ class BaseResource:
 
         Args:
             client: BookStack API client instance
+
         """
         self.client = client
 
@@ -34,6 +35,7 @@ class BaseResource:
 
         Returns:
             Full endpoint path
+
         """
         endpoint = self.ENDPOINT
         for part in parts:
@@ -61,6 +63,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             Response with 'data' list and 'total' count
+
         """
         params: dict[str, Any] = {}
         if count is not None:
@@ -91,6 +94,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             List of all items
+
         """
         params: dict[str, Any] = {}
         if sort is not None:
@@ -109,6 +113,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             Item data
+
         """
         result = self.client.get(self._get_endpoint(item_id))
         if isinstance(result, bytes):
@@ -123,6 +128,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             Created item data
+
         """
         return self.client.post(self.ENDPOINT, data=data)
 
@@ -135,6 +141,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             Updated item data
+
         """
         return self.client.put(self._get_endpoint(item_id), data=data)
 
@@ -146,6 +153,7 @@ class CRUDResource(BaseResource):
 
         Returns:
             Empty dict on success
+
         """
         return self.client.delete(self._get_endpoint(item_id))
 
@@ -170,6 +178,7 @@ class ExportableResource(CRUDResource):
 
         Returns:
             Raw bytes if no output_path, otherwise the output path
+
         """
         if format not in self.EXPORT_FORMATS:
             raise ValueError(f"Invalid export format: {format}. Valid formats: {self.EXPORT_FORMATS}")
@@ -182,13 +191,12 @@ class ExportableResource(CRUDResource):
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(result)
                 return output_path
-            else:
-                # JSON response - save as text
-                import json
+            # JSON response - save as text
+            import json
 
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_text(json.dumps(result, indent=2))
-                return output_path
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(result, indent=2))
+            return output_path
 
         if isinstance(result, bytes):
             return result

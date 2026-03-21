@@ -34,6 +34,7 @@ class RolesResource(CRUDResource):
 
         Returns:
             Created role data
+
         """
         data: dict[str, Any] = {"display_name": display_name}
         if description:
@@ -70,6 +71,7 @@ class RolesResource(CRUDResource):
 
         Returns:
             Updated role data
+
         """
         data: dict[str, Any] = {}
         if display_name is not None:

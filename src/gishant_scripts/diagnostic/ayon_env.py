@@ -11,7 +11,7 @@ import logging
 import os
 from pathlib import Path
 
-from gishant_scripts.diagnostic.config import LINUX, WINDOWS, linux_to_windows_path
+from gishant_scripts.diagnostic.config import LINUX, WINDOWS
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,7 @@ def resolve_ayon_env(
     dict[str, str]
         Environment variables including ``AYON_SERVER_URL``,
         ``AYON_PROJECT_NAME``, ``PYTHONPATH``, etc.
+
     """
     is_windows = target.lower() == "windows"
     path_sep = ";" if is_windows else ":"
@@ -238,7 +239,8 @@ def resolve_ayon_env(
         "AYON_UNREAL_VERSION": "5.5" if is_windows else "",
         "AYON_MAYA_VERSION": "2025" if not is_windows else "",
         "AYON_SITE_ID": _read_site_id(is_windows),
-        "AYON_WORKDIR": str(Path(LINUX.diagnostic_base) / "_workdir") if not is_windows
+        "AYON_WORKDIR": str(Path(LINUX.diagnostic_base) / "_workdir")
+        if not is_windows
         else r"C:\Users\gisi\.ayon_diagnostic_workdir",
         "AYON_APP_NAME": "maya/2025" if not is_windows else "unreal/5.5",
         "PYTHONPATH": path_sep.join(python_paths),

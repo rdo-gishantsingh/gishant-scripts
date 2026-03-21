@@ -1,5 +1,7 @@
 """Common utilities for AYON bundle operations.
 
+from __future__ import annotations
+
 This module provides shared functionality for analyzing and syncing AYON bundles,
 including connection management, data fetching, and comparison operations.
 """
@@ -28,13 +30,9 @@ except ImportError:
 class AYONConnectionError(Exception):
     """Raised when AYON connection fails."""
 
-    pass
-
 
 class BundleNotFoundError(Exception):
     """Raised when a bundle is not found."""
-
-    pass
 
 
 # ============================================================================
@@ -49,8 +47,7 @@ def setup_ayon_connection(
     use_dev: bool = False,
     use_uat: bool = False,
 ) -> None:
-    """
-    Set up AYON connection using configuration from .env file or environment variables.
+    """Set up AYON connection using configuration from .env file or environment variables.
 
     Args:
         console: Rich console for displaying messages
@@ -61,6 +58,7 @@ def setup_ayon_connection(
 
     Raises:
         AYONConnectionError: If connection setup fails
+
     """
     if ayon_api is None:
         raise AYONConnectionError("ayon-python-api not installed. Install it with: uv pip install ayon-python-api")
@@ -113,8 +111,7 @@ def setup_ayon_connection(
 
 
 def fetch_all_bundles(console: Console) -> dict[str, Any]:
-    """
-    Fetch all bundles from AYON server.
+    """Fetch all bundles from AYON server.
 
     Args:
         console: Rich console for displaying messages
@@ -128,6 +125,7 @@ def fetch_all_bundles(console: Console) -> dict[str, Any]:
 
     Raises:
         AYONConnectionError: If fetching bundles fails
+
     """
     try:
         console.print("[dim]Fetching bundles from AYON server...[/dim]")
@@ -139,8 +137,7 @@ def fetch_all_bundles(console: Console) -> dict[str, Any]:
 
 
 def get_bundle_by_name(bundles_data: dict[str, Any], bundle_name: str) -> dict[str, Any]:
-    """
-    Get a specific bundle by name.
+    """Get a specific bundle by name.
 
     Args:
         bundles_data: Bundles data from fetch_all_bundles()
@@ -151,6 +148,7 @@ def get_bundle_by_name(bundles_data: dict[str, Any], bundle_name: str) -> dict[s
 
     Raises:
         BundleNotFoundError: If bundle not found
+
     """
     bundles = bundles_data.get("bundles", [])
     for bundle in bundles:
@@ -161,8 +159,7 @@ def get_bundle_by_name(bundles_data: dict[str, Any], bundle_name: str) -> dict[s
 
 
 def get_bundle_settings(bundle_name: str, console: Console) -> dict[str, Any]:
-    """
-    Get all settings for a bundle including addon settings.
+    """Get all settings for a bundle including addon settings.
 
     Args:
         bundle_name: Name of the bundle
@@ -173,6 +170,7 @@ def get_bundle_settings(bundle_name: str, console: Console) -> dict[str, Any]:
 
     Raises:
         AYONConnectionError: If fetching settings fails
+
     """
     try:
         console.print(f"[dim]Fetching settings for bundle '{bundle_name}'...[/dim]")
@@ -187,8 +185,7 @@ def get_bundle_settings(bundle_name: str, console: Console) -> dict[str, Any]:
 
 
 def get_project_settings(bundle_name: str, project_name: str, console: Console) -> dict[str, Any]:
-    """
-    Get project-specific settings overrides for a bundle.
+    """Get project-specific settings overrides for a bundle.
 
     Args:
         bundle_name: Name of the bundle
@@ -200,6 +197,7 @@ def get_project_settings(bundle_name: str, project_name: str, console: Console) 
 
     Raises:
         AYONConnectionError: If fetching settings fails
+
     """
     try:
         console.print(f"[dim]Fetching project settings for '{project_name}' in bundle '{bundle_name}'...[/dim]")
@@ -214,8 +212,7 @@ def get_project_settings(bundle_name: str, project_name: str, console: Console) 
 
 
 def get_project_anatomy(project_name: str, console: Console) -> dict[str, Any]:
-    """
-    Get project anatomy configuration.
+    """Get project anatomy configuration.
 
     Args:
         project_name: Name of the project
@@ -226,6 +223,7 @@ def get_project_anatomy(project_name: str, console: Console) -> dict[str, Any]:
 
     Raises:
         AYONConnectionError: If fetching anatomy fails
+
     """
     try:
         console.print(f"[dim]Fetching anatomy for project '{project_name}'...[/dim]")
@@ -239,8 +237,7 @@ def get_project_anatomy(project_name: str, console: Console) -> dict[str, Any]:
 
 
 def get_all_projects(console: Console) -> list[dict[str, Any]]:
-    """
-    Get list of all projects.
+    """Get list of all projects.
 
     Args:
         console: Rich console for displaying messages
@@ -250,6 +247,7 @@ def get_all_projects(console: Console) -> list[dict[str, Any]]:
 
     Raises:
         AYONConnectionError: If fetching projects fails
+
     """
     try:
         console.print("[dim]Fetching projects from AYON server...[/dim]")
@@ -272,8 +270,7 @@ def flatten_dict(
     max_depth: int | None = None,
     current_depth: int = 0,
 ) -> dict[str, Any]:
-    """
-    Flatten a nested dictionary into dot-notation keys.
+    """Flatten a nested dictionary into dot-notation keys.
 
     Args:
         data: Dictionary to flatten
@@ -284,6 +281,7 @@ def flatten_dict(
 
     Returns:
         Flattened dictionary
+
     """
     items = []
 
@@ -319,8 +317,7 @@ def compare_settings(
     anatomy2: dict[str, Any] | None = None,
     max_depth: int | None = None,
 ) -> dict[str, Any]:
-    """
-    Compare settings between two bundles.
+    """Compare settings between two bundles.
 
     Args:
         bundle1_data: First bundle metadata
@@ -335,6 +332,7 @@ def compare_settings(
 
     Returns:
         Dictionary with comparison results
+
     """
     comparison = {
         "metadata": {
@@ -391,8 +389,7 @@ def compare_settings(
 def get_differences(
     comparison: dict[str, Any], only_diff: bool = False, addon_filter: list[str] | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    """
-    Extract differences from comparison results.
+    """Extract differences from comparison results.
 
     Args:
         comparison: Comparison results from compare_settings()
@@ -401,6 +398,7 @@ def get_differences(
 
     Returns:
         Dictionary with lists of differences for each category
+
     """
     differences = {
         "metadata": [],
@@ -540,8 +538,7 @@ def get_differences(
 
 
 def interactive_bundle_selection(bundles_data: dict[str, Any], console: Console) -> tuple[str, str]:
-    """
-    Interactively select two bundles for comparison.
+    """Interactively select two bundles for comparison.
 
     Args:
         bundles_data: Bundles data from fetch_all_bundles()
@@ -549,6 +546,7 @@ def interactive_bundle_selection(bundles_data: dict[str, Any], console: Console)
 
     Returns:
         Tuple of (bundle1_name, bundle2_name)
+
     """
     bundles = bundles_data.get("bundles", [])
     production = bundles_data.get("productionBundle")
@@ -594,11 +592,10 @@ def interactive_bundle_selection(bundles_data: dict[str, Any], console: Console)
         if choice.isdigit() and 1 <= int(choice) <= len(bundle_names):
             bundle1_name = bundle_names[int(choice) - 1]
             break
-        elif choice in bundle_names:
+        if choice in bundle_names:
             bundle1_name = choice
             break
-        else:
-            console.print(f"[red]Invalid choice. Please enter a number 1-{len(bundle_names)} or a bundle name.[/red]")
+        console.print(f"[red]Invalid choice. Please enter a number 1-{len(bundle_names)} or a bundle name.[/red]")
 
     console.print(f"[green]✓ Selected first bundle: {bundle1_name}[/green]\n")
 
@@ -612,22 +609,20 @@ def interactive_bundle_selection(bundles_data: dict[str, Any], console: Console)
                 console.print("[red]Please select a different bundle for comparison.[/red]")
                 continue
             break
-        elif choice in bundle_names:
+        if choice in bundle_names:
             bundle2_name = choice
             if bundle2_name == bundle1_name:
                 console.print("[red]Please select a different bundle for comparison.[/red]")
                 continue
             break
-        else:
-            console.print(f"[red]Invalid choice. Please enter a number 1-{len(bundle_names)} or a bundle name.[/red]")
+        console.print(f"[red]Invalid choice. Please enter a number 1-{len(bundle_names)} or a bundle name.[/red]")
 
     console.print(f"[green]✓ Selected second bundle: {bundle2_name}[/green]\n")
     return bundle1_name, bundle2_name
 
 
 def interactive_project_selection(projects: list[dict[str, Any]], console: Console) -> str | None:
-    """
-    Interactively select a project for comparison.
+    """Interactively select a project for comparison.
 
     Args:
         projects: List of projects from get_all_projects()
@@ -635,6 +630,7 @@ def interactive_project_selection(projects: list[dict[str, Any]], console: Conso
 
     Returns:
         Project name or None to skip project comparison
+
     """
     console.print("\n[bold cyan]Project Selection:[/bold cyan]\n")
 
@@ -666,11 +662,10 @@ def interactive_project_selection(projects: list[dict[str, Any]], console: Conso
         if choice.isdigit() and 1 <= int(choice) <= len(project_names):
             project_name = project_names[int(choice) - 1]
             break
-        elif choice in project_names:
+        if choice in project_names:
             project_name = choice
             break
-        else:
-            console.print(f"[red]Invalid choice. Please enter a number 1-{len(project_names)} or a project name.[/red]")
+        console.print(f"[red]Invalid choice. Please enter a number 1-{len(project_names)} or a project name.[/red]")
 
     console.print(f"\n[green]✓ Selected project: {project_name}[/green]\n")
     return project_name

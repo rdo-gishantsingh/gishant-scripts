@@ -22,6 +22,7 @@ class SystemResource(BaseResource):
             - app_name: Configured application name
             - app_logo: URL to application logo (may be null)
             - base_url: Base URL of the instance
+
         """
         result = self.client.get(self.ENDPOINT)
         if isinstance(result, bytes):

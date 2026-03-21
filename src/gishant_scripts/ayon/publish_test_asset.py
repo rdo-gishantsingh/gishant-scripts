@@ -84,8 +84,7 @@ def _resolve_episode_folder(conn, project_name: str):
         return folders[0]
 
     raise SystemExit(
-        f"SAFEGUARD: Episode '{EPISODE_NAME_ALLOWED}' not found in project {project_name}. "
-        "Cannot proceed."
+        f"SAFEGUARD: Episode '{EPISODE_NAME_ALLOWED}' not found in project {project_name}. Cannot proceed."
     )
 
 
@@ -118,8 +117,7 @@ def _get_task_with_kitsu_link(conn, project_name: str, folder_id: str, task_name
     kitsu_id = a_task.get("data", {}).get("kitsuId")
     if not kitsu_id:
         raise SystemExit(
-            f"Task '{a_task.get('name')}' has no Kitsu link (data.kitsuId). "
-            "Kitsu upload requires a linked task."
+            f"Task '{a_task.get('name')}' has no Kitsu link (data.kitsuId). Kitsu upload requires a linked task."
         )
 
     try:
@@ -138,11 +136,16 @@ def _generate_placeholder_mov() -> Path:
         cmd = [
             "ffmpeg",
             "-y",
-            "-f", "lavfi",
-            "-i", "color=c=black:s=1280x720:d=1",
-            "-t", "0.04",
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=1280x720:d=1",
+            "-t",
+            "0.04",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
             str(out),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -151,8 +154,9 @@ def _generate_placeholder_mov() -> Path:
         return out
 
     try:
-        import numpy as np
         import imageio
+        import numpy as np
+
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         writer = imageio.get_writer(str(out), fps=24)
         writer.append_data(frame)
@@ -162,8 +166,7 @@ def _generate_placeholder_mov() -> Path:
         return out
     except ImportError as e:
         raise SystemExit(
-            "Neither ffmpeg nor imageio available. Install ffmpeg or "
-            "provide --file with a video path."
+            "Neither ffmpeg nor imageio available. Install ffmpeg or provide --file with a video path."
         ) from e
 
 
@@ -333,9 +336,7 @@ def cli(
         )
 
     typer.echo("Resolving task...")
-    a_task, k_task = _get_task_with_kitsu_link(
-        conn, project_name, target_folder["id"], task
-    )
+    a_task, k_task = _get_task_with_kitsu_link(conn, project_name, target_folder["id"], task)
     typer.echo(f"  AYON task: {a_task['name']}, Kitsu task: {k_task.get('id')}")
 
     if dry_run:
@@ -380,10 +381,10 @@ def cli(
         typer.echo(f"  {k}: {v}")
 
     if kitsu_rev_id:
-        found = version_linking.find_version_by_kitsu_revision(
-            conn, project_name, kitsu_rev_id
+        found = version_linking.find_version_by_kitsu_revision(conn, project_name, kitsu_rev_id)
+        typer.echo(
+            f"\nVerification (find_version_by_kitsu_revision): {'OK' if found and found.get('id') == version_id else 'MISMATCH'}"
         )
-        typer.echo(f"\nVerification (find_version_by_kitsu_revision): {'OK' if found and found.get('id') == version_id else 'MISMATCH'}")
 
     lineage = get_version_lineage(conn, project_name, version_id)
     typer.echo(f"Lineage chain: {len(lineage)} version(s)")

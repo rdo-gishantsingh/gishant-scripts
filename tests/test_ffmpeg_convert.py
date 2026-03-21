@@ -2,8 +2,7 @@
 
 import json
 import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -78,9 +77,8 @@ class TestFFmpegConverter:
 
     def test_init_no_ffmpeg(self):
         """Test initialization fails when ffmpeg not found."""
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(RuntimeError, match="ffmpeg not found"):
-                FFmpegConverter()
+        with patch("shutil.which", return_value=None), pytest.raises(RuntimeError, match="ffmpeg not found"):
+            FFmpegConverter()
 
     def test_init_with_ffmpeg(self):
         """Test initialization succeeds when ffmpeg is found."""

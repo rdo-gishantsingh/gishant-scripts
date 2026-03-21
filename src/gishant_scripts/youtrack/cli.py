@@ -1,5 +1,7 @@
 """Unified YouTrack CLI tool for creating, fetching, and updating issues.
 
+from __future__ import annotations
+
 This module combines functionality to manage YouTrack issues programmatically
 via the API, supporting create, fetch, and update operations.
 """
@@ -379,9 +381,7 @@ class YouTrackIssuesFetcher:
         if not silent:
             user_display = target_user.get("fullName", "") or target_user.get("login", "")
             login_display = target_user.get("login", "")
-            self.console.print(
-                f"[cyan]Fetching complete issue data for user:[/cyan] {user_display} ({login_display})"
-            )
+            self.console.print(f"[cyan]Fetching complete issue data for user:[/cyan] {user_display} ({login_display})")
         url = f"{self.base_url}/api/issues"
         params = {
             "query": query,
@@ -501,8 +501,7 @@ class YouTrackIssuesFetcher:
 
     def save_ids_to_file(self, issue_ids: list[str], filename: str = "my_youtrack_issue_ids.txt"):
         with open(filename, "w", encoding="utf-8") as f:
-            for issue_id in issue_ids:
-                f.write(f"{issue_id}\n")
+            f.writelines(f"{issue_id}\n" for issue_id in issue_ids)
         self.console.print(f"\n[green]✓ Issue IDs saved to {filename}[/green]")
 
 
@@ -740,7 +739,7 @@ def fetch(
             if comments:
                 show_fields.append("comments")
 
-            fetcher.print_issue(issue, show_fields if show_fields else None)
+            fetcher.print_issue(issue, show_fields or None)
             if save_json:
                 fetcher.save_to_json([issue], f"{issue_id.replace('-', '_')}.json")
             return

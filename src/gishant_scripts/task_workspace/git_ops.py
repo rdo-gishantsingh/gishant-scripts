@@ -9,7 +9,7 @@ from gishant_scripts.task_workspace.ui import console
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)  # noqa: S603
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
 
 
 def get_repo_status(repo_path: Path) -> tuple[str, bool, bool]:
@@ -68,9 +68,9 @@ def list_worktree_branches(repo_path: Path) -> dict[str, str]:
     wt_path = ""
     for line in r.stdout.splitlines():
         if line.startswith("worktree "):
-            wt_path = line[len("worktree "):]
+            wt_path = line[len("worktree ") :]
         elif line.startswith("branch "):
-            branch = line[len("branch "):].replace("refs/heads/", "")
+            branch = line[len("branch ") :].replace("refs/heads/", "")
             result[branch] = wt_path
         elif line == "":
             wt_path = ""
@@ -104,6 +104,7 @@ def create_worktree(
         base_branch: Branch to create from when *branch* doesn't exist yet.
             Defaults to the repo's default branch (main/master).
         dry_run: If True, print what would happen without doing it.
+
     """
     if worktree_path.exists():
         console.print(f"  [yellow]⚠  Already exists, skipping:[/] {worktree_path.name}")

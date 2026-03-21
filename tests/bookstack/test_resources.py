@@ -4,11 +4,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gishant_scripts.bookstack.resources.pages import PagesResource
-from gishant_scripts.bookstack.resources.chapters import ChaptersResource
 from gishant_scripts.bookstack.resources.books import BooksResource
-from gishant_scripts.bookstack.resources.shelves import ShelvesResource
+from gishant_scripts.bookstack.resources.chapters import ChaptersResource
+from gishant_scripts.bookstack.resources.pages import PagesResource
 from gishant_scripts.bookstack.resources.search import SearchResource
+from gishant_scripts.bookstack.resources.shelves import ShelvesResource
 from gishant_scripts.bookstack.resources.system import SystemResource
 
 

@@ -1,5 +1,4 @@
-"""
-Generate Work Summary from YouTrack Issues using Gemini AI.
+"""Generate Work Summary from YouTrack Issues using Gemini AI.
 
 This script fetches YouTrack issues where the user is involved (assigned or commented)
 within a specified time period and generates a structured work summary using Google Gemini AI.
@@ -149,6 +148,7 @@ def load_work_logs(worktrees_dir: Path | None = None) -> dict[str, str]:
 
     Returns:
         Dict mapping ticket ID (e.g. ``"PIPE-523"``) to ``WORK_LOG.md`` content.
+
     """
     if worktrees_dir is None:
         worktrees_dir = Path.home() / "dev" / "worktrees"
@@ -177,8 +177,7 @@ def load_work_logs(worktrees_dir: Path | None = None) -> dict[str, str]:
 
 
 def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
-    """
-    Filter issues that were updated in the last N weeks.
+    """Filter issues that were updated in the last N weeks.
 
     Args:
         issues: List of issue dictionaries
@@ -186,6 +185,7 @@ def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
 
     Returns:
         Filtered list of issues
+
     """
     cutoff_date = datetime.now() - timedelta(weeks=weeks)
     cutoff_timestamp = int(cutoff_date.timestamp() * 1000)  # YouTrack uses milliseconds
@@ -199,8 +199,7 @@ def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
 
 
 def filter_comments_by_time(issue: dict, weeks: int) -> dict:
-    """
-    Filter issue comments to only include those from the last N weeks.
+    """Filter issue comments to only include those from the last N weeks.
 
     Args:
         issue: Issue dictionary
@@ -208,6 +207,7 @@ def filter_comments_by_time(issue: dict, weeks: int) -> dict:
 
     Returns:
         Issue dictionary with filtered comments
+
     """
     cutoff_date = datetime.now() - timedelta(weeks=weeks)
     cutoff_timestamp = int(cutoff_date.timestamp() * 1000)
@@ -246,6 +246,7 @@ def prepare_issues_for_summary(
 
     Returns:
         Dictionary with categorized issues and metadata.
+
     """
     # Filter comments by time period for all issues.
     # All issues passed here were already filtered by update time in filter_issues_by_time()
@@ -279,9 +280,7 @@ def prepare_issues_for_summary(
             is_reporter = filtered_issue.get("reporter_login", "") == user_login
             is_assignee = filtered_issue.get("user_is_assignee", False)
             recent_user_comments = sum(
-                1
-                for c in filtered_issue.get("comments", [])
-                if c.get("author_login") == user_login
+                1 for c in filtered_issue.get("comments", []) if c.get("author_login") == user_login
             )
             had_recent_activity = recent_user_comments > 0
             ever_commented = filtered_issue.get("user_commented", False)
@@ -329,8 +328,7 @@ def generate_work_summary_with_gemini(
     *,
     show_progress: bool = True,
 ) -> str:
-    """
-    Use Gemini AI to generate a structured work summary.
+    """Use Gemini AI to generate a structured work summary.
 
     Args:
         data: Prepared issues data
@@ -341,6 +339,7 @@ def generate_work_summary_with_gemini(
 
     Returns:
         Generated work summary text
+
     """
     gemini_client = GeminiClient(api_key=api_key, model=model)
     person_instruction = (
@@ -536,10 +535,8 @@ def main(
     ] = None,
     output_dir: Annotated[
         Path,
-        typer.Option(
-            help="Directory to save reports when using --users (each file: work_summary_{username}.md)"
-        ),
-    ] = Path("."),
+        typer.Option(help="Directory to save reports when using --users (each file: work_summary_{username}.md)"),
+    ] = Path(),
     max_issues: Annotated[
         int,
         typer.Option(help="Maximum number of issues to fetch per user"),
@@ -573,8 +570,7 @@ def main(
         ),
     ] = False,
 ) -> int:
-    """
-    Generate work summary from YouTrack issues using Gemini AI.
+    """Generate work summary from YouTrack issues using Gemini AI.
 
     Fetches issues where the user(s) are involved (assigned or commented) from the last N weeks
     and generates a structured summary with Done/Current Work/Pending/Blockers sections.
@@ -586,7 +582,6 @@ def main(
     It ONLY fetches data from YouTrack - NO modifications are made to any issues.
 
     Examples:
-
         # Generate summary for current user (last 4 weeks)
         gishant youtrack-summary --weeks 4
 
@@ -602,12 +597,11 @@ def main(
     Prerequisites:
         - YOUTRACK_URL and YOUTRACK_API_TOKEN in environment
         - GOOGLE_AI_API_KEY in environment
+
     """
     console = Console()
 
-    user_logins: list[str | None] = (
-        [u.strip() for u in users.split(",") if u.strip()] if users else [None]
-    )
+    user_logins: list[str | None] = [u.strip() for u in users.split(",") if u.strip()] if users else [None]
     if users is not None:
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -635,6 +629,7 @@ def main(
                 with_activity,
                 show_spinner=show_spinner,
             )
+
         return render
 
     try:
@@ -719,9 +714,7 @@ def main(
 
                 if not filtered_issues:
                     live.stop()
-                    console.print(
-                        f"[yellow]No issues updated in the last {weeks} weeks for {label}.[/yellow]\n"
-                    )
+                    console.print(f"[yellow]No issues updated in the last {weeks} weeks for {label}.[/yellow]\n")
                     continue
 
                 completed_phases.add(Phase.FILTER)
@@ -760,6 +753,7 @@ def main(
                 if debug_roles:
                     live.stop()
                     from rich.table import Table as RichTable
+
                     role_table = RichTable(title=f"Issue roles for {label}", border_style="cyan")
                     role_table.add_column("Ticket", style="cyan")
                     role_table.add_column("Role", style="bold")
@@ -788,9 +782,7 @@ def main(
 
                 if prepared_data["total_issues"] == 0:
                     live.stop()
-                    console.print(
-                        f"[yellow]No issues with activity in the last {weeks} weeks for {label}.[/yellow]\n"
-                    )
+                    console.print(f"[yellow]No issues with activity in the last {weeks} weeks for {label}.[/yellow]\n")
                     continue
 
                 completed_phases.add(Phase.PREPARE)
@@ -885,9 +877,7 @@ def main(
             elif save_to_file:
                 console.print(f"\n[green]✓ Saved to: {save_to_file}[/green]")
 
-            console.print(
-                f"\n[dim]Generated from {prepared_data['total_issues']} issues over {weeks} weeks[/dim]"
-            )
+            console.print(f"\n[dim]Generated from {prepared_data['total_issues']} issues over {weeks} weeks[/dim]")
             console.print(f"[dim]Model: {model}[/dim]\n")
 
         return 0

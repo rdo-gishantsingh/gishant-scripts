@@ -27,6 +27,7 @@ def setup_logging(
     Example:
         >>> logger = setup_logging(__name__, level="DEBUG")
         >>> logger.info("Script started")
+
     """
     logger = logging.getLogger(name)
     if isinstance(level, str):

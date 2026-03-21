@@ -16,7 +16,7 @@ Usage from inside a DCC script::
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -41,6 +41,7 @@ def write_result(
         context: Contextual information (project, folder, fps, etc.).
         findings: Free-form diagnostic data produced by the script.
         errors: Optional list of error messages encountered during the run.
+
     """
     script_dir = Path(script_path).resolve().parent
     results_dir = script_dir / "results"
@@ -50,7 +51,7 @@ def write_result(
         "status": status,
         "dcc": dcc,
         "issue": script_dir.name,
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "timestamp": datetime.now(tz=UTC).isoformat(),
         "context": context,
         "findings": findings,
         "errors": errors or [],

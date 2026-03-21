@@ -8,6 +8,7 @@ Run with:
     cd /tech/users/gisi/dev/repos/gishant-scripts
     .venv/bin/python -m pytest tests/test_diagnostic/ -v
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -72,8 +73,11 @@ class TestAyonEnvResolution:
 
         env = resolve_ayon_env("TestProject", "/test/path")
         required_keys = {
-            "AYON_SERVER_URL", "AYON_API_KEY", "AYON_PROJECT_NAME",
-            "AYON_FOLDER_PATH", "PYTHONPATH",
+            "AYON_SERVER_URL",
+            "AYON_API_KEY",
+            "AYON_PROJECT_NAME",
+            "AYON_FOLDER_PATH",
+            "PYTHONPATH",
         }
         assert required_keys.issubset(env.keys())
 
@@ -132,7 +136,7 @@ class TestMayaIntegration:
         yield
         result_file.unlink(missing_ok=True)
 
-    @pytest.fixture()
+    @pytest.fixture
     def maya_result(self):
         """Run the Maya hello world once and return the result."""
         from gishant_scripts.diagnostic.maya_runner import run_maya_script
@@ -145,30 +149,20 @@ class TestMayaIntegration:
         )
 
     def test_maya_engine_runs(self, maya_result):
-        assert maya_result.findings.get("maya_version"), (
-            f"Maya version not reported: {maya_result.errors}"
-        )
+        assert maya_result.findings.get("maya_version"), f"Maya version not reported: {maya_result.errors}"
 
     def test_ayon_api_connected(self, maya_result):
-        assert maya_result.findings.get("ayon_connected"), (
-            f"ayon_api not connected: {maya_result.errors}"
-        )
+        assert maya_result.findings.get("ayon_connected"), f"ayon_api not connected: {maya_result.errors}"
         assert maya_result.findings.get("project_name") == AYON_PROJECT
 
     def test_ayon_core_imported(self, maya_result):
-        assert maya_result.findings.get("ayon_core_imported"), (
-            f"ayon_core import failed: {maya_result.errors}"
-        )
+        assert maya_result.findings.get("ayon_core_imported"), f"ayon_core import failed: {maya_result.errors}"
 
     def test_ayon_maya_imported(self, maya_result):
-        assert maya_result.findings.get("ayon_maya_imported"), (
-            f"ayon_maya import failed: {maya_result.errors}"
-        )
+        assert maya_result.findings.get("ayon_maya_imported"), f"ayon_maya import failed: {maya_result.errors}"
 
     def test_ayon_host_installed(self, maya_result):
-        assert maya_result.findings.get("ayon_host_installed"), (
-            f"AYON host install failed: {maya_result.errors}"
-        )
+        assert maya_result.findings.get("ayon_host_installed"), f"AYON host install failed: {maya_result.errors}"
 
     def test_loaders_discovered(self, maya_result):
         count = maya_result.findings.get("loader_count", 0)
@@ -190,7 +184,7 @@ class TestUnrealIntegration:
         yield
         result_file.unlink(missing_ok=True)
 
-    @pytest.fixture()
+    @pytest.fixture
     def unreal_result(self):
         """Run the Unreal hello world once and return the result."""
         from gishant_scripts.diagnostic.unreal_runner import run_unreal_script
@@ -203,30 +197,20 @@ class TestUnrealIntegration:
         )
 
     def test_unreal_engine_runs(self, unreal_result):
-        assert unreal_result.findings.get("unreal_version"), (
-            f"UE version not reported: {unreal_result.errors}"
-        )
+        assert unreal_result.findings.get("unreal_version"), f"UE version not reported: {unreal_result.errors}"
 
     def test_ayon_api_connected(self, unreal_result):
-        assert unreal_result.findings.get("ayon_connected"), (
-            f"ayon_api not connected: {unreal_result.errors}"
-        )
+        assert unreal_result.findings.get("ayon_connected"), f"ayon_api not connected: {unreal_result.errors}"
         assert unreal_result.findings.get("project_name") == AYON_PROJECT
 
     def test_ayon_core_imported(self, unreal_result):
-        assert unreal_result.findings.get("ayon_core_imported"), (
-            f"ayon_core import failed: {unreal_result.errors}"
-        )
+        assert unreal_result.findings.get("ayon_core_imported"), f"ayon_core import failed: {unreal_result.errors}"
 
     def test_ayon_unreal_imported(self, unreal_result):
-        assert unreal_result.findings.get("ayon_unreal_imported"), (
-            f"ayon_unreal import failed: {unreal_result.errors}"
-        )
+        assert unreal_result.findings.get("ayon_unreal_imported"), f"ayon_unreal import failed: {unreal_result.errors}"
 
     def test_ayon_host_installed(self, unreal_result):
-        assert unreal_result.findings.get("ayon_host_installed"), (
-            f"AYON host install failed: {unreal_result.errors}"
-        )
+        assert unreal_result.findings.get("ayon_host_installed"), f"AYON host install failed: {unreal_result.errors}"
 
     def test_critical_loaders_discovered(self, unreal_result):
         missing = unreal_result.findings.get("critical_loaders_missing", [])

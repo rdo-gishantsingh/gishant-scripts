@@ -11,6 +11,7 @@ Checks:
 import json
 import os
 import sys
+from datetime import UTC
 from pathlib import Path
 
 # Unreal's embedded Python may not honor PYTHONPATH env var —
@@ -32,9 +33,9 @@ def main():
     }
 
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        result["timestamp"] = datetime.now(timezone.utc).isoformat()
+        result["timestamp"] = datetime.now(UTC).isoformat()
 
         # -- 1. Unreal engine --------------------------------------------------
         import unreal
@@ -62,7 +63,6 @@ def main():
             import ayon_core
             from ayon_core.pipeline import (
                 discover_loader_plugins,
-                get_current_project_name,
             )
 
             result["findings"]["ayon_core_imported"] = True
@@ -73,9 +73,6 @@ def main():
 
         # -- 5. ayon_unreal import ---------------------------------------------
         try:
-            import ayon_unreal
-            from ayon_unreal.api import pipeline as unreal_pipeline
-
             result["findings"]["ayon_unreal_imported"] = True
         except Exception as e:
             result["findings"]["ayon_unreal_imported"] = False
@@ -83,7 +80,7 @@ def main():
 
         # -- 6. AYON host registration -----------------------------------------
         try:
-            from ayon_core.pipeline import registered_host, install_host
+            from ayon_core.pipeline import install_host, registered_host
             from ayon_unreal.api import UnrealHost
 
             # Only install if not already registered

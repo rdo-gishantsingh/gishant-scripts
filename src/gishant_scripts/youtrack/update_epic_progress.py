@@ -1,5 +1,7 @@
 """Update YouTrack epic and child tasks with implementation progress comments.
 
+from __future__ import annotations
+
 This script fetches a YouTrack epic and its child tasks (using "subtask of" query),
 analyzes a codebase for implementation status, and posts structured progress comments
 to each ticket.
@@ -36,6 +38,7 @@ class YouTrackEpicProgressUpdater:
         Args:
             base_url: Your YouTrack instance URL (e.g., 'https://yourcompany.youtrack.cloud')
             token: Your permanent API token
+
         """
         self.base_url = base_url.rstrip("/")
         self.headers = {
@@ -54,6 +57,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             Dictionary containing epic and children information
+
         """
         self.console.print(f"[cyan]Fetching epic:[/cyan] {epic_id}")
 
@@ -104,6 +108,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             Dictionary containing the result
+
         """
         if dry_run:
             return {
@@ -139,6 +144,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             Dictionary containing analysis results
+
         """
         self.console.print(f"[cyan]Analyzing codebase:[/cyan] {codebase_path}")
 
@@ -236,6 +242,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             Dictionary mapping issue IDs to implementation status
+
         """
         self.console.print("[cyan]Mapping features to tickets...[/cyan]")
 
@@ -351,7 +358,7 @@ class YouTrackEpicProgressUpdater:
                 "summary": child["summary"],
                 "current_state": child.get("state", "Unknown"),
                 "status": status,
-                "details": details if details else ["No direct implementation found yet"],
+                "details": details or ["No direct implementation found yet"],
                 "test_info": test_info,
                 "doc_info": doc_info,
             }
@@ -372,6 +379,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             Formatted comment text
+
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -425,6 +433,7 @@ class YouTrackEpicProgressUpdater:
         Args:
             mapping: Mapping of issue IDs to implementation status
             epic_info: Epic and children information
+
         """
         self.console.print()
         self.console.print(
@@ -470,6 +479,7 @@ class YouTrackEpicProgressUpdater:
 
         Returns:
             List of posting results
+
         """
         results = []
 
@@ -512,7 +522,6 @@ def update_epic(
     Use --no-dry-run to actually post comments.
 
     Examples:
-
         # Dry run (preview only)
         update-epic-progress PIPE-617 /path/to/codebase
 
@@ -521,6 +530,7 @@ def update_epic(
 
         # Actually post comments (after reviewing dry run)
         update-epic-progress PIPE-617 /path/to/codebase --no-dry-run
+
     """
     from gishant_scripts._core.config import AppConfig
     from gishant_scripts._core.errors import ConfigurationError

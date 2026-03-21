@@ -39,6 +39,7 @@ class SearchResource(BaseResource):
 
         Returns:
             Search results with 'data' and 'total' fields
+
         """
         params = {
             "query": query,
@@ -60,6 +61,7 @@ class SearchResource(BaseResource):
 
         Returns:
             List of all matching items
+
         """
         results: list[dict[str, Any]] = []
         page = 1
@@ -87,6 +89,7 @@ class SearchResource(BaseResource):
 
         Returns:
             List of matching pages
+
         """
         results = self.search_all(query)
         return [r for r in results if r.get("type") == "page"]
@@ -99,6 +102,7 @@ class SearchResource(BaseResource):
 
         Returns:
             List of matching chapters
+
         """
         results = self.search_all(query)
         return [r for r in results if r.get("type") == "chapter"]
@@ -111,6 +115,7 @@ class SearchResource(BaseResource):
 
         Returns:
             List of matching books
+
         """
         results = self.search_all(query)
         return [r for r in results if r.get("type") == "book"]
@@ -123,6 +128,7 @@ class SearchResource(BaseResource):
 
         Returns:
             List of matching shelves
+
         """
         results = self.search_all(query)
         return [r for r in results if r.get("type") == "bookshelf"]

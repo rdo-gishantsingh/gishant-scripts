@@ -42,6 +42,7 @@ class PagesResource(ExportableResource):
 
         Returns:
             Created page data
+
         """
         if not book_id and not chapter_id:
             raise ValueError("Either book_id or chapter_id must be provided")
@@ -89,6 +90,7 @@ class PagesResource(ExportableResource):
 
         Returns:
             Updated page data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -116,6 +118,7 @@ class PagesResource(ExportableResource):
 
         Returns:
             List of pages
+
         """
         return self.list_all(filters={"book_id": book_id})
 
@@ -127,5 +130,6 @@ class PagesResource(ExportableResource):
 
         Returns:
             List of pages
+
         """
         return self.list_all(filters={"chapter_id": chapter_id})
