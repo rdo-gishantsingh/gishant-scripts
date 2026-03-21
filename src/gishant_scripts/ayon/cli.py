@@ -169,7 +169,7 @@ def list_users():
 
 # Lazy-import optional commands — modules may not exist yet
 try:
-    from gishant_scripts.ayon.cli.get_representation_cli import get_representation_cli
+    from gishant_scripts.ayon.representations import get_representation_cli
 
     app.command("get-representation", help="Get representation for a product in a folder")(get_representation_cli)
 except ImportError:
