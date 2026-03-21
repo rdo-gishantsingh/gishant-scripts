@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from gishant_scripts.media.ffmpeg_convert import (
+from gishant_scripts.media.converter import FFmpegConverter
+from gishant_scripts.media.presets import (
     ConversionPreset,
-    FFmpegConverter,
     get_all_presets,
     get_preset,
 )
