@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from gishant_scripts.common.logging import setup_logging
+from gishant_scripts._core.logging import setup_logging
 
 
 class TestSetupLogging:

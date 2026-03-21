@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from gishant_scripts.common.errors import ConfigurationError
+from gishant_scripts._core.errors import ConfigurationError
 
 
 @dataclass

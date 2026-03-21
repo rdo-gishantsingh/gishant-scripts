@@ -665,8 +665,8 @@ def create(
     dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Validate without creating (default: True)"),
 ):
     """Create a new YouTrack issue."""
-    from gishant_scripts.common.config import AppConfig
-    from gishant_scripts.common.errors import ConfigurationError
+    from gishant_scripts._core.config import AppConfig
+    from gishant_scripts._core.errors import ConfigurationError
 
     console = Console()
     try:
@@ -711,8 +711,8 @@ def fetch(
     save_json: bool = typer.Option(False, "--save-json", help="Save results to JSON file"),
 ):
     """Fetch YouTrack issues or a specific issue."""
-    from gishant_scripts.common.config import AppConfig
-    from gishant_scripts.common.errors import ConfigurationError
+    from gishant_scripts._core.config import AppConfig
+    from gishant_scripts._core.errors import ConfigurationError
 
     console = Console()
     try:
@@ -764,8 +764,8 @@ def update(
     dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Validate without updating (default: True)"),
 ):
     """Update a YouTrack issue."""
-    from gishant_scripts.common.config import AppConfig
-    from gishant_scripts.common.errors import ConfigurationError
+    from gishant_scripts._core.config import AppConfig
+    from gishant_scripts._core.errors import ConfigurationError
 
     console = Console()
     try:
@@ -835,7 +835,7 @@ def summary(
     console = Console()
 
     try:
-        from gishant_scripts.common.config import AppConfig, ConfigurationError
+        from gishant_scripts._core.config import AppConfig, ConfigurationError
         from gishant_scripts.youtrack.generate_work_summary import (
             filter_issues_by_time,
             generate_work_summary_with_gemini,

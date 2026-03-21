@@ -47,7 +47,7 @@ class WindowsConfig:
     """Paths and settings for the Windows (Unreal) side."""
 
     ssh_host: str = "gisi@10.1.68.205"
-    unreal_bin: str = r"C:\Program Files\Epic Games\UE_5.4\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+    unreal_bin: str = r"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
     ayon_launcher: str = r"C:\Program Files\Ynput\AYON 1.4.2\ayon_console.exe"
     ayon_server_url: str = "http://10.1.69.24:5000"
     ayon_storage_dir: str = r"%USERPROFILE%\.local\share\ayon-launcher-local"

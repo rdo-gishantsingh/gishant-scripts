@@ -17,8 +17,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from gishant_scripts.bookstack.client import BookStackClient
-from gishant_scripts.common.config import AppConfig
-from gishant_scripts.common.errors import APIError, ConfigurationError
+from gishant_scripts._core.config import AppConfig
+from gishant_scripts._core.errors import APIError, ConfigurationError
 
 # Main app
 app = typer.Typer(

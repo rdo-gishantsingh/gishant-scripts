@@ -20,7 +20,7 @@ This module provides reusable utilities for working with Google Gemini AI across
 ### Basic Usage with GeminiClient
 
 ```python
-from gishant_scripts.common.gemini import GeminiClient, DEFAULT_MODEL
+from gishant_scripts._core.gemini import GeminiClient, DEFAULT_MODEL
 
 # Initialize client
 client = GeminiClient(api_key="your-api-key", model=DEFAULT_MODEL)
@@ -34,7 +34,7 @@ print(response)
 ### Interactive Model Selection
 
 ```python
-from gishant_scripts.common.gemini import select_model_interactive
+from gishant_scripts._core.gemini import select_model_interactive
 
 # Let user select a model interactively
 selected_model = select_model_interactive(default="gemini-2.5-flash")
@@ -58,7 +58,7 @@ Enter model number or press Enter for default [1]: 2
 
 ```python
 import click
-from gishant_scripts.common.gemini import AVAILABLE_MODELS, DEFAULT_MODEL, GeminiClient
+from gishant_scripts._core.gemini import AVAILABLE_MODELS, DEFAULT_MODEL, GeminiClient
 
 @click.command()
 @click.option(
@@ -76,7 +76,7 @@ def my_command(model: str):
 ### Model Validation
 
 ```python
-from gishant_scripts.common.gemini import validate_model, AVAILABLE_MODELS
+from gishant_scripts._core.gemini import validate_model, AVAILABLE_MODELS
 
 try:
     model = validate_model("gemini-2.5-pro")

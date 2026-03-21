@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from gishant_scripts.common.logging import setup_logging
+from gishant_scripts._core.logging import setup_logging
 
 app = typer.Typer(
     name="gishant",

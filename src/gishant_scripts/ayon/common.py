@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-from gishant_scripts.common.config import AppConfig
+from gishant_scripts._core.config import AppConfig
 
 try:
     import ayon_api

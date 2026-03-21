@@ -3,7 +3,7 @@
 __version__ = "0.1.0"
 
 # Re-export common utilities for convenience
-from gishant_scripts.common import (
+from gishant_scripts._core import (
     APIError,
     AppConfig,
     ConfigurationError,

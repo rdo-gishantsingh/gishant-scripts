@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gishant_scripts.bookstack.client import BookStackClient
-from gishant_scripts.common.errors import APIError
+from gishant_scripts._core.errors import APIError
 
 
 class TestBookStackClient:

@@ -36,9 +36,9 @@ from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
-from gishant_scripts.common.config import AppConfig
-from gishant_scripts.common.errors import ConfigurationError
-from gishant_scripts.common.gemini import (
+from gishant_scripts._core.config import AppConfig
+from gishant_scripts._core.errors import ConfigurationError
+from gishant_scripts._core.gemini import (
     DEFAULT_MODEL,
     GeminiClient,
     GeminiModel,
