@@ -24,8 +24,8 @@ _SSH_HOST = WINDOWS.ssh_host
 _SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
 _UNREAL_BIN = WINDOWS.unreal_bin
 
-# gishant-scripts paths for PYTHONPATH injection
-_REPO = Path("/tech/users/gisi/dev/repos/gishant-scripts")
+# gishant-scripts paths for PYTHONPATH injection — derived from package location
+_REPO = Path(__file__).resolve().parents[3]
 _SITE_PKGS = _REPO / ".venv" / "lib" / "python3.11" / "site-packages"
 _SRC = _REPO / "src"
 

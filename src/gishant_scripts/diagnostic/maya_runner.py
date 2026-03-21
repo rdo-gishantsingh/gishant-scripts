@@ -105,7 +105,7 @@ def run_maya_script(
     # Add gishant-scripts src to PYTHONPATH so Maya's Python can import
     # gishant_scripts. Placed AFTER existing paths so Maya's own packages
     # (numpy, PySide6, etc.) take precedence over venv versions.
-    _repo = Path("/tech/users/gisi/dev/repos/gishant-scripts")
+    _repo = Path(__file__).resolve().parents[3]
     _site_pkgs = _repo / ".venv" / "lib" / "python3.11" / "site-packages"
     _src = _repo / "src"
     existing_pythonpath = ayon_env.get("PYTHONPATH", "")
