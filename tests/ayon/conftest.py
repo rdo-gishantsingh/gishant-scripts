@@ -1,6 +1,8 @@
 """Test fixtures for AYON tools."""
 
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
+
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -226,21 +228,3 @@ def temp_backup_dir(tmp_path):
     return backup_dir
 
 
-@pytest.fixture
-def mock_ayon_api():
-    """Mock ayon_api module at the point of import."""
-    with patch("gishant_scripts.ayon.analyze_bundles.ayon_api") as mock_api:
-        mock_api.is_service_user.return_value = False
-        mock_api.get_server_url.return_value = "http://test-server:5000"
-        mock_api.get_rest_url.return_value = "http://test-server:5000/api"
-        yield mock_api
-
-
-@pytest.fixture
-def mock_rdo_ayon_utils():
-    """Mock rdo_ayon_utils module at the point of import."""
-    with patch("gishant_scripts.ayon.analyze_bundles.ayon_utils") as mock_utils:
-        mock_utils.set_connection.return_value = None
-        mock_utils.get_server_url.return_value = "http://test-server:5000"
-        mock_utils.get_api_key.return_value = "test-api-key"
-        yield mock_utils
