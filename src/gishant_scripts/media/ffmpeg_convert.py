@@ -209,6 +209,7 @@ def get_preset(name: PresetType) -> ConversionPreset:
 
     Raises:
         KeyError: If preset name is not found
+
     """
     return PRESETS[name]
 
@@ -218,6 +219,7 @@ def get_all_presets() -> dict[PresetType, ConversionPreset]:
 
     Returns:
         Dictionary of all presets
+
     """
     return PRESETS.copy()
 
@@ -255,6 +257,7 @@ class FFmpegConverter:
             FileNotFoundError: If input file doesn't exist
             RuntimeError: If conversion fails
             ValueError: If neither preset nor custom_args provided
+
         """
         input_file = Path(input_path)
         if not input_file.exists():
@@ -333,6 +336,7 @@ class FFmpegConverter:
             FileNotFoundError: If input file doesn't exist
             RuntimeError: If conversion fails
             ValueError: If neither preset nor custom_args provided
+
         """
         if console is None:
             console = Console()
@@ -443,6 +447,7 @@ class FFmpegConverter:
         Raises:
             FileNotFoundError: If input file doesn't exist
             RuntimeError: If ffprobe fails
+
         """
         input_file = Path(input_path)
         if not input_file.exists():
@@ -544,6 +549,7 @@ def convert(
         ffmpeg-convert convert input.mov -p web-video
         ffmpeg-convert convert input.mov -o output.mp4 -p web-video-hq
         ffmpeg-convert convert video.mp4 -p gif
+
     """
     if not preset:
         _console.print("[red]Error: --preset is required[/red]")
@@ -617,6 +623,7 @@ def info(
     Examples:
         ffmpeg-convert info video.mp4
         ffmpeg-convert info video.mp4 --json
+
     """
     try:
         converter = FFmpegConverter()
@@ -671,6 +678,7 @@ def interactive(
 
     Example:
         ffmpeg-convert interactive video.mov
+
     """
     _console.print("[bold cyan]FFmpeg Interactive Converter[/bold cyan]\n")
     _console.print(f"Input file: [green]{input_file}[/green]\n")

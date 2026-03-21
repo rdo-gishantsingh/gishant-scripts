@@ -1,4 +1,4 @@
-"""
+"""from __future__ import annotations
 Fetch GitHub Pull Requests assigned to the authenticated user.
 Uses GitHub CLI to retrieve PR details.
 """
@@ -37,14 +37,14 @@ class GitHubPRFetcher:
             return None
 
     def fetch_user_prs(self, limit: int = 100) -> list[dict[str, Any]]:
-        """
-        Fetch PRs where user is author or assignee.
+        """Fetch PRs where user is author or assignee.
 
         Args:
             limit: Maximum number of PRs to fetch
 
         Returns:
             List of PR details
+
         """
         if not self.user_login:
             self.get_current_user()

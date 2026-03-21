@@ -38,6 +38,7 @@ class ShelvesResource(CRUDResource):
 
         Returns:
             Created shelf data
+
         """
         data: dict[str, Any] = {"name": name}
         if description:
@@ -78,6 +79,7 @@ class ShelvesResource(CRUDResource):
 
         Returns:
             Updated shelf data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -105,6 +107,7 @@ class ShelvesResource(CRUDResource):
 
         Returns:
             Shelf data with books list
+
         """
         result = self.client.get(self._get_endpoint(shelf_id))
         if isinstance(result, bytes):

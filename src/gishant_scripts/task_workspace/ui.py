@@ -77,7 +77,7 @@ def open_workspace_in_code(ws_file: Path) -> None:
     """Launch VS Code with the given workspace file. No-op if VS Code not found."""
     exe = _code_executable()
     if exe:
-        subprocess.Popen([exe, str(ws_file)], start_new_session=True)  # noqa: S603
+        subprocess.Popen([exe, str(ws_file)], start_new_session=True)
     else:
         console.print(
             "[yellow]VS Code not found in PATH.[/] Open the workspace manually:\n  [cyan]"

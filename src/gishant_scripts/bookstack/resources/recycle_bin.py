@@ -28,6 +28,7 @@ class RecycleBinResource(BaseResource):
 
         Returns:
             Response with 'data' list and 'total' count
+
         """
         params: dict[str, Any] = {}
         if count is not None:
@@ -35,7 +36,7 @@ class RecycleBinResource(BaseResource):
         if offset is not None:
             params["offset"] = offset
 
-        result = self.client.get(self.ENDPOINT, params=params if params else None)
+        result = self.client.get(self.ENDPOINT, params=params or None)
         if isinstance(result, bytes):
             return {"data": [], "total": 0}
         return result
@@ -45,6 +46,7 @@ class RecycleBinResource(BaseResource):
 
         Returns:
             List of all deleted items
+
         """
         return self.client.list_all(self.ENDPOINT)
 
@@ -56,6 +58,7 @@ class RecycleBinResource(BaseResource):
 
         Returns:
             Response with 'restore_count' indicating number of items restored
+
         """
         return self.client.put(self._get_endpoint(deletion_id))
 
@@ -69,6 +72,7 @@ class RecycleBinResource(BaseResource):
 
         Returns:
             Response with 'delete_count' indicating number of items deleted
+
         """
         return self.client.delete(self._get_endpoint(deletion_id))
 
@@ -79,6 +83,7 @@ class RecycleBinResource(BaseResource):
 
         Returns:
             List of deletion results
+
         """
         items = self.list_all()
         results = []

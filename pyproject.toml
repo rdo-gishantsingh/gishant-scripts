@@ -82,8 +82,52 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]
+select = ["ALL"]
+fixable = ["ALL"]
+ignore = [
+    "COM812",  # Conflicts with formatter (trailing comma)
+    "D203",    # Conflicts with D211 (no blank line before class docstring)
+    "D213",    # Conflicts with D212 (multi-line summary first line)
+    "EM101",   # Allow string literals in exception constructors
+    "EM102",   # Allow f-strings in exception constructors
+    "ISC001",  # Conflicts with formatter (implicit string concat)
+    "FBT",     # Allow boolean positional args (common in CLI code)
+    "TRY003",  # Allow long messages in raise statements
+    "S603",    # Allow subprocess calls without shell=True validation (CLI tool)
+    "S607",    # Allow partial executable paths in subprocess
+    "ANN",     # Type annotations — add incrementally, not all at once
+    "D1",      # Missing docstrings — add incrementally
+    "T201",    # print() used in CLI output (intentional)
+    "PLC0415", # Lazy imports at function level (intentional for optional deps)
+    "PLR0913", # Too many function arguments (common in CLI callbacks)
+    "BLE001",  # Blind exception catching — fix incrementally with comments
+    "TRY300",  # try-except-return pattern (acceptable in runners)
+    "TRY301",  # raise within try (acceptable pattern)
+    "C901",    # Function complexity — address when splitting large files
+    "PLR0912", # Too many branches — address when splitting large files
+    "PLR0915", # Too many statements — address when splitting large files
+    "PLR2004", # Magic value comparisons (acceptable in CLI/config code)
+    "E501",    # Line too long — handled by ruff format
+    "B008",    # Function call in default arg (typer.Option pattern)
+    "B904",    # raise X from Y — fix incrementally
+    "S105",    # Hardcoded password detection (false positives on env var names)
+    "S106",    # Hardcoded password detection (false positives on env var names)
+    "TC003",   # typing-only import — minor optimization, add later
+    "ERA001",  # Commented-out code — intentional in some cases
+    "PLW1510", # subprocess.run without check — intentional for CLI runners
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "D", "ANN", "PLR2004", "SLF001"]
+"scripts/**/*.py" = ["D", "ANN", "T201", "INP001"]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+# Use spaces for indentation
+indent-style = "space"
+# Respect trailing commas
+skip-magic-trailing-comma = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -38,6 +38,7 @@ class UsersResource(CRUDResource):
 
         Returns:
             Created user data
+
         """
         data: dict[str, Any] = {
             "name": name,
@@ -79,6 +80,7 @@ class UsersResource(CRUDResource):
 
         Returns:
             Updated user data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -109,9 +111,10 @@ class UsersResource(CRUDResource):
 
         Returns:
             Empty dict on success
+
         """
         data: dict[str, Any] = {}
         if migrate_ownership_id:
             data["migrate_ownership_id"] = migrate_ownership_id
 
-        return self.client.delete(self._get_endpoint(user_id), data=data if data else None)
+        return self.client.delete(self._get_endpoint(user_id), data=data or None)

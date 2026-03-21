@@ -20,7 +20,7 @@ from gishant_scripts.task_workspace.config import TaskWorkspaceConfig
 def _strip_jsonc(text: str) -> str:
     """Strip block comments, line comments, and trailing commas from JSONC text."""
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    text = re.sub(r'(?<!:)//[^\n]*', "", text)
+    text = re.sub(r"(?<!:)//[^\n]*", "", text)
     text = re.sub(r",\s*(?=[}\]])", "", text)
     return text
 
@@ -66,6 +66,7 @@ def generate_extra_paths(
     Returns:
         Ordered list of ``${workspaceFolder:<name>}/<sub>`` strings plus
         *config.global_extra_paths*.
+
     """
     if display_name_for is None:
         display_name_for = {path.name: name for name, path in selected_repos.items()}
@@ -104,6 +105,7 @@ def build_task_workspace(
             or the original repo dir (for adopted repos).
         config: Global task-workspace configuration.
         adopted_repos: Display names that are adopted (existing checkouts).
+
     """
     adopted_repos = adopted_repos or set()
 
@@ -180,7 +182,7 @@ def read_workspace_meta(ws_file: Path) -> dict:
     """Read ``__meta__`` from a workspace file; return empty dict if absent or unreadable."""
     try:
         return read_workspace_file(ws_file).get("__meta__", {})
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
 
 

@@ -28,6 +28,7 @@ class YouTrackConfig:
 
         Returns:
             YouTrackConfig instance
+
         """
         return cls(
             url=os.getenv("YOUTRACK_URL") or None,
@@ -39,6 +40,7 @@ class YouTrackConfig:
 
         Returns:
             Dict of field names to error messages (empty if valid)
+
         """
         errors = {}
         if not self.url:
@@ -63,6 +65,7 @@ class GitHubConfig:
 
         Returns:
             GitHubConfig instance
+
         """
         return cls(token=os.getenv("GITHUB_TOKEN"))
 
@@ -71,6 +74,7 @@ class GitHubConfig:
 
         Returns:
             Dict of field names to error messages (empty if valid)
+
         """
         # GitHub token is optional since we can use gh CLI
         return {}
@@ -91,6 +95,7 @@ class GoogleAIConfig:
 
         Returns:
             GoogleAIConfig instance
+
         """
         return cls(api_key=os.getenv("GOOGLE_AI_API_KEY") or None)
 
@@ -99,6 +104,7 @@ class GoogleAIConfig:
 
         Returns:
             Dict of field names to error messages (empty if valid)
+
         """
         errors = {}
         if not self.api_key:
@@ -127,6 +133,7 @@ class BookStackConfig:
 
         Returns:
             BookStackConfig instance
+
         """
         verify_ssl_env = os.getenv("BOOKSTACK_VERIFY_SSL", "true").lower()
         verify_ssl = verify_ssl_env not in ("false", "0", "no", "off")
@@ -143,6 +150,7 @@ class BookStackConfig:
 
         Returns:
             Dict of field names to error messages (empty if valid)
+
         """
         errors = {}
         if not self.url:
@@ -175,6 +183,7 @@ class AYONConfig:
 
         Returns:
             AYONConfig instance
+
         """
         suffix = ""
         if environment == "dev":
@@ -195,6 +204,7 @@ class AYONConfig:
 
         Returns:
             Dict of field names to error messages (empty if valid)
+
         """
         suffix = ""
         if self.environment == "dev":
@@ -231,6 +241,7 @@ class AppConfig:
 
         Raises:
             ConfigurationError: If configuration is invalid
+
         """
         # Load .env file
         if load_env:
@@ -272,6 +283,7 @@ class AppConfig:
             >>> errors = config.validate(['youtrack'])
             >>> if errors['youtrack']:
             ...     print("YouTrack config invalid")
+
         """
         all_services = {
             "youtrack": self.youtrack,
@@ -298,6 +310,7 @@ class AppConfig:
         Example:
             >>> config = AppConfig()
             >>> config.require_valid('youtrack')  # Raises if invalid
+
         """
         errors = self.validate(list(services))
 

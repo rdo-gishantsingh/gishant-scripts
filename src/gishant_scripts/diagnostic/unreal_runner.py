@@ -12,7 +12,7 @@ import json
 import logging
 import subprocess
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gishant_scripts.diagnostic.config import WINDOWS, linux_to_windows_path
@@ -34,11 +34,13 @@ _SRC = _REPO / "src"
 # Drive mapping
 # ---------------------------------------------------------------------------
 
+
 def _read_drive_credentials() -> tuple[str, str, list[tuple[str, str]]]:
     """Read Windows domain credentials and drive mappings from ``~/.rdo/.env``.
 
     Returns:
         (domain_user, domain_pass, [(drive_letter, unc_path), ...])
+
     """
     env_path = Path.home() / ".rdo" / ".env"
     domain_user = ""
@@ -77,9 +79,7 @@ def _build_drive_map_commands() -> str:
 
     cmds = []
     for drive_letter, unc_path in drive_maps:
-        cmds.append(
-            f"net use {drive_letter} {unc_path} /user:{domain_user} {domain_pass} /persistent:no >nul 2>&1"
-        )
+        cmds.append(f"net use {drive_letter} {unc_path} /user:{domain_user} {domain_pass} /persistent:no >nul 2>&1")
     # Use & (not &&) so failure on one drive doesn't block the rest
     return " & ".join(cmds)
 
@@ -111,7 +111,7 @@ def check_drive_access() -> bool:
     test_cmd = f"{drive_cmd} && dir Z: >nul 2>&1 && dir P: >nul 2>&1 && echo ok"
     try:
         result = subprocess.run(
-            ["ssh", *_SSH_OPTS, _SSH_HOST, f"cmd /c \"{test_cmd}\""],
+            ["ssh", *_SSH_OPTS, _SSH_HOST, f'cmd /c "{test_cmd}"'],
             capture_output=True,
             text=True,
             timeout=15,
@@ -126,7 +126,7 @@ def check_drive_access() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _stream_pipe_to_log(pipe, log_file: Path, collected: list[str]) -> None:  # noqa: ANN001
+def _stream_pipe_to_log(pipe, log_file: Path, collected: list[str]) -> None:
     """Read lines from a subprocess pipe, append to a log file, and collect."""
     with open(log_file, "a", encoding="utf-8") as f:
         for line in pipe:
@@ -153,7 +153,7 @@ def _error_result(
         status="error",
         dcc="unreal",
         issue=issue_name,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         context={"project": project_name, "folder": folder_path, "task": task_name},
         findings={},
         errors=errors,
@@ -186,6 +186,7 @@ def run_unreal_script(
         task_name: Optional AYON task name.
         timeout: SSH command timeout in seconds.
         unreal_project: Path to .uproject file (Windows path).
+
     """
     script_path = Path(script_path).resolve()
     issue_name = script_path.parent.name
@@ -201,7 +202,10 @@ def run_unreal_script(
 
     if not script_path.exists():
         return _error_result(
-            issue_name, project_name, folder_path, task_name,
+            issue_name,
+            project_name,
+            folder_path,
+            task_name,
             [f"Script not found: {script_path}"],
         )
 
@@ -213,7 +217,7 @@ def run_unreal_script(
     # ------------------------------------------------------------------
     # Resolve AYON environment variables
     # ------------------------------------------------------------------
-    from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env  # noqa: PLC0415
+    from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
 
     ayon_env = resolve_ayon_env(
         project_name=project_name,
@@ -250,10 +254,7 @@ def run_unreal_script(
         ue_project_path = unreal_project
         unreal_args.append(f'"{ue_project_path}"')
     unreal_args.append(f'-ExecutePythonScript="{win_script_path}"')
-    unreal_args.append(
-        "-stdout -FullStdOutLogOutput -Unattended -NullRHI "
-        '-LogCmds="LogUdpMessaging off"'
-    )
+    unreal_args.append('-stdout -FullStdOutLogOutput -Unattended -NullRHI -LogCmds="LogUdpMessaging off"')
     unreal_line = f'& "{_UNREAL_BIN}" {" ".join(unreal_args)}'
 
     ps1_content = "\n".join([*env_lines, unreal_line])
@@ -270,18 +271,25 @@ def run_unreal_script(
     if drive_cmds:
         # Use cmd /c to map drives, then launch PowerShell with stdin
         ssh_command = [
-            "ssh", *_SSH_OPTS, _SSH_HOST,
+            "ssh",
+            *_SSH_OPTS,
+            _SSH_HOST,
             f'cmd /c "{drive_cmds} && powershell -NoProfile -ExecutionPolicy Bypass -Command -"',
         ]
     else:
         ssh_command = [
-            "ssh", *_SSH_OPTS, _SSH_HOST,
+            "ssh",
+            *_SSH_OPTS,
+            _SSH_HOST,
             "powershell -NoProfile -ExecutionPolicy Bypass -Command -",
         ]
 
     logger.info(
         "Running Unreal diagnostic: issue=%s  project=%s  folder=%s  log=%s",
-        issue_name, project_name, folder_path, log_file,
+        issue_name,
+        project_name,
+        folder_path,
+        log_file,
     )
 
     # ------------------------------------------------------------------
@@ -330,14 +338,21 @@ def run_unreal_script(
         raw = "".join(stdout_lines) + "".join(stderr_lines)
         logger.error("SSH timed out after %ss for issue=%s", timeout, issue_name)
         return _error_result(
-            issue_name, project_name, folder_path, task_name,
-            [f"SSH timed out after {timeout}s"], raw,
+            issue_name,
+            project_name,
+            folder_path,
+            task_name,
+            [f"SSH timed out after {timeout}s"],
+            raw,
         )
     except OSError as exc:
         ps1_wrapper.unlink(missing_ok=True)
         logger.exception("Failed to execute SSH for issue=%s", issue_name)
         return _error_result(
-            issue_name, project_name, folder_path, task_name,
+            issue_name,
+            project_name,
+            folder_path,
+            task_name,
             [f"Failed to execute SSH: {exc}"],
         )
 
@@ -353,7 +368,12 @@ def run_unreal_script(
             errors.append(f"SSH exited with code {proc.returncode}")
         logger.warning("No result file for issue=%s, returncode=%s", issue_name, proc.returncode)
         return _error_result(
-            issue_name, project_name, folder_path, task_name, errors, raw_output,
+            issue_name,
+            project_name,
+            folder_path,
+            task_name,
+            errors,
+            raw_output,
         )
 
     try:
@@ -361,15 +381,19 @@ def run_unreal_script(
     except (json.JSONDecodeError, OSError) as exc:
         logger.error("Failed to parse result JSON for issue=%s: %s", issue_name, exc)
         return _error_result(
-            issue_name, project_name, folder_path, task_name,
-            [f"Result JSON parse error: {exc}"], raw_output,
+            issue_name,
+            project_name,
+            folder_path,
+            task_name,
+            [f"Result JSON parse error: {exc}"],
+            raw_output,
         )
 
     return DiagnosticResult(
         status=data.get("status", "error"),
         dcc="unreal",
         issue=data.get("issue", issue_name),
-        timestamp=data.get("timestamp", datetime.now(tz=timezone.utc).isoformat()),
+        timestamp=data.get("timestamp", datetime.now(tz=UTC).isoformat()),
         context=data.get("context", {}),
         findings=data.get("findings", {}),
         errors=data.get("errors", []),

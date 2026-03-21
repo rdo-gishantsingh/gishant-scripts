@@ -1,16 +1,18 @@
 """CLI command for fetching representations using AYON API.
 
+from __future__ import annotations
+
 This module provides a typer command with rich UI for fetching and displaying
 representations.
 """
 
-import json
 import os
+from typing import Literal
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from typing import Literal
 
 from gishant_scripts.ayon.common import AYONConnectionError, setup_ayon_connection
 from gishant_scripts.ayon.get_representation import get_representation
@@ -23,8 +25,8 @@ except ImportError:
 try:
     from ayon_core.pipeline import Anatomy
     from ayon_core.pipeline.load import (
-        get_representation_path_with_anatomy,
         InvalidRepresentationContext,
+        get_representation_path_with_anatomy,
     )
 
     AYON_CORE_AVAILABLE = True
@@ -47,6 +49,7 @@ def _resolve_representation_path(representation, project_name, debug=False):
 
     Returns:
         str: Resolved file path, or fallback to hardcoded path if resolution fails
+
     """
     if not AYON_CORE_AVAILABLE or Anatomy is None or get_representation_path_with_anatomy is None:
         # Fallback to hardcoded path if ayon_core is not available
@@ -118,7 +121,7 @@ def _resolve_representation_path(representation, project_name, debug=False):
             if not resolved_path_str.startswith(work_root) and resolved_path_str.startswith("/"):
                 if debug:
                     console.print(
-                        f"[cyan]DEBUG: Path doesn't start with work root, attempting prefix replacement[/cyan]"
+                        "[cyan]DEBUG: Path doesn't start with work root, attempting prefix replacement[/cyan]"
                     )
                 # Extract first path segment (e.g., /shows, /projects)
                 path_parts = resolved_path_str.split("/", 2)
@@ -184,6 +187,7 @@ def _format_representation_as_dict(
 
     Returns:
         dict: Formatted representation data
+
     """
     # Extract all fields
     representation_id = representation.get("id", "N/A")
@@ -232,13 +236,13 @@ def _format_representation_as_dict(
         "folder": folder_path,
         "product": product_name,
         "representation": representation_name,
-        "version": version_info if version_info else representation.get("versionId", "N/A"),
+        "version": version_info or representation.get("versionId", "N/A"),
         "status": status,
-        "tags": tags if tags else [],
+        "tags": tags or [],
         "attributes": {k: v for k, v in attrib.items()} if attrib else {},
-        "context": context if context else {},
-        "data": data if data else {},
-        "files": formatted_files if formatted_files else [],
+        "context": context or {},
+        "data": data or {},
+        "files": formatted_files or [],
     }
 
     # Add resolved path if available
@@ -301,7 +305,7 @@ def get_representation_cli(
         setup_ayon_connection(console, use_local=local, use_dev=dev)
 
         # Get representation
-        console.print(f"[dim]Fetching representation...[/dim]")
+        console.print("[dim]Fetching representation...[/dim]")
         representation = get_representation(
             project_name,
             folder_path,
@@ -311,7 +315,7 @@ def get_representation_cli(
 
         if not representation:
             # Try to provide helpful error messages
-            console.print(f"[red]✗ Representation not found[/red]")
+            console.print("[red]✗ Representation not found[/red]")
             console.print(f"\n[dim]Project:[/dim] {project_name}")
             console.print(f"[dim]Folder:[/dim] {folder_path}")
             console.print(f"[dim]Product:[/dim] {product_name}")
@@ -324,7 +328,7 @@ def get_representation_cli(
 
                     # If folder not found, try by name
                     if not folder:
-                        folder_name = folder_path.split("/")[-1]
+                        folder_name = folder_path.rsplit("/", maxsplit=1)[-1]
                         folders = list(
                             ayon_api.get_folders(
                                 project_name,
@@ -342,7 +346,7 @@ def get_representation_cli(
                             for f in folders:
                                 table.add_row(f.get("path", "N/A"), f.get("name", "N/A"))
                             console.print(table)
-                            console.print(f"[yellow]Please use the full folder path.[/yellow]")
+                            console.print("[yellow]Please use the full folder path.[/yellow]")
                             raise typer.Exit(code=1)
 
                     if folder:
@@ -368,7 +372,7 @@ def get_representation_cli(
                                 )
                             console.print(table)
                         else:
-                            console.print(f"[yellow]No products found in folder.[/yellow]")
+                            console.print("[yellow]No products found in folder.[/yellow]")
                 except Exception as e:
                     console.print(f"[dim]Could not fetch folder details: {e}[/dim]")
 
@@ -393,9 +397,8 @@ def get_representation_cli(
             if resolved_path and resolved_path != "N/A":
                 print(resolved_path)
                 return
-            else:
-                console.print(f"[red]Error: Could not resolve representation path[/red]")
-                raise typer.Exit(code=1)
+            console.print("[red]Error: Could not resolve representation path[/red]")
+            raise typer.Exit(code=1)
 
         # Resolve path for display (needed for both dict and table formats)
         resolved_path = _resolve_representation_path(representation, project_name, debug=debug)
@@ -439,7 +442,7 @@ def get_representation_cli(
         # Display attributes in table format
         # Filter out None values or show them dimmed
         non_none_attrib = {k: v for k, v in attrib.items() if v is not None}
-        all_attrib = attrib if attrib else {}
+        all_attrib = attrib or {}
 
         if all_attrib:
             console.print("\n[bold]Representation Attributes:[/bold]")

@@ -10,7 +10,7 @@ Checks:
 
 import json
 import os
-import sys
+from datetime import UTC
 from pathlib import Path
 
 
@@ -26,12 +26,12 @@ def main():
     }
 
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        result["timestamp"] = datetime.now(timezone.utc).isoformat()
+        result["timestamp"] = datetime.now(UTC).isoformat()
 
         # -- 1. Maya engine -----------------------------------------------------
-        import maya.cmds as cmds
+        from maya import cmds
 
         result["findings"]["maya_version"] = cmds.about(version=True)
 
@@ -64,8 +64,6 @@ def main():
 
         # -- 5. ayon_maya import ------------------------------------------------
         try:
-            import ayon_maya
-
             result["findings"]["ayon_maya_imported"] = True
         except Exception as e:
             result["findings"]["ayon_maya_imported"] = False
@@ -73,7 +71,7 @@ def main():
 
         # -- 6. AYON host registration ------------------------------------------
         try:
-            from ayon_core.pipeline import registered_host, install_host
+            from ayon_core.pipeline import install_host, registered_host
             from ayon_maya.api import MayaHost
 
             if not registered_host():

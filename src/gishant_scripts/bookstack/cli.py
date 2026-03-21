@@ -16,9 +16,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from gishant_scripts.bookstack.client import BookStackClient
 from gishant_scripts._core.config import AppConfig
 from gishant_scripts._core.errors import APIError, ConfigurationError
+from gishant_scripts.bookstack.client import BookStackClient
 
 # Main app
 app = typer.Typer(
@@ -107,7 +107,7 @@ def print_dry_run(action: str, data: dict[str, Any]) -> None:
     console.print(Panel.fit("[bold cyan]DRY RUN MODE[/bold cyan]", border_style="cyan"))
     console.print()
     console.print(f"[green]Action:[/green] {action}")
-    console.print(f"[green]Data:[/green]")
+    console.print("[green]Data:[/green]")
     console.print(json.dumps(data, indent=2))
     console.print()
     console.print("[yellow]To execute, run again with --no-dry-run[/yellow]")

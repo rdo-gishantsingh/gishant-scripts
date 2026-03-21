@@ -9,7 +9,6 @@ import os
 import pathlib
 from dataclasses import dataclass, field
 
-
 # ---------------------------------------------------------------------------
 # Path mapping between Linux and Windows mount points
 # ---------------------------------------------------------------------------
@@ -83,9 +82,7 @@ class WindowsConfig:
         default_factory=lambda: os.getenv("AYON_SERVER_URL_WIN", "http://10.1.69.24:5000"),
     )
     ayon_storage_dir: str = field(
-        default_factory=lambda: os.getenv(
-            "AYON_STORAGE_DIR_WIN", r"%USERPROFILE%\.local\share\ayon-launcher-local"
-        ),
+        default_factory=lambda: os.getenv("AYON_STORAGE_DIR_WIN", r"%USERPROFILE%\.local\share\ayon-launcher-local"),
     )
     diagnostic_base: str = field(
         default_factory=lambda: os.getenv("DIAGNOSTIC_BASE_DIR_WIN", r"Z:\users\gisi\dev\_diagnostic"),
@@ -110,6 +107,7 @@ def linux_to_windows_path(path: str, *, unc: bool = False) -> str:
         unc: If True, use UNC paths (``\\\\<NAS_HOST>\\tech\\``) instead of
             drive letters (``Z:\\``). Needed in SSH sessions where mapped
             drives are unavailable.
+
     """
     path_map = PATH_MAP_LINUX_TO_UNC if unc else PATH_MAP_LINUX_TO_WIN
     for linux_prefix, win_prefix in path_map.items():

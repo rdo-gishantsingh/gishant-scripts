@@ -1,5 +1,7 @@
 """Unified bulk data manager for AYON and Kitsu.
 
+from __future__ import annotations
+
 This script orchestrates cleanup and bulk data generation across both AYON and Kitsu
 systems with proper formatting and synchronization.
 """
@@ -8,7 +10,6 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console()
 app = typer.Typer(help="Unified bulk data management for AYON and Kitsu")
@@ -24,6 +25,7 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
 
     Returns:
         Combined cleanup results
+
     """
     results = {
         "ayon": {"success": False, "projects_deleted": 0, "users_deleted": 0, "errors": []},
@@ -49,8 +51,8 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
     # Cleanup AYON
     console.print("\n[bold cyan]━━━ Cleaning up AYON ━━━[/bold cyan]")
     try:
-        from gishant_scripts.ayon.batch_data_generator import get_connection as get_ayon_connection
         from gishant_scripts.ayon.batch_data_generator import cleanup_test_data as cleanup_ayon
+        from gishant_scripts.ayon.batch_data_generator import get_connection as get_ayon_connection
 
         api = get_ayon_connection()
         ayon_results = cleanup_ayon(api, prefix, dry_run)
@@ -73,8 +75,8 @@ def cleanup_all(prefix: str = "test", dry_run: bool = False, skip_confirmation: 
     # Cleanup Kitsu
     console.print("\n[bold cyan]━━━ Cleaning up Kitsu ━━━[/bold cyan]")
     try:
-        from gishant_scripts.kitsu.batch_data_generator import get_connection as get_kitsu_connection
         from gishant_scripts.kitsu.batch_data_generator import cleanup_test_data as cleanup_kitsu
+        from gishant_scripts.kitsu.batch_data_generator import get_connection as get_kitsu_connection
 
         get_kitsu_connection()
         kitsu_results = cleanup_kitsu(prefix, dry_run)
@@ -119,6 +121,7 @@ def generate_all(
 
     Returns:
         Combined generation results
+
     """
     results = {
         "ayon": {"success": False, "data": None, "errors": []},
@@ -131,8 +134,8 @@ def generate_all(
         f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
     )
     try:
-        from gishant_scripts.ayon.batch_data_generator import get_connection as get_ayon_connection
         from gishant_scripts.ayon.batch_data_generator import generate_batch_data as generate_ayon
+        from gishant_scripts.ayon.batch_data_generator import get_connection as get_ayon_connection
 
         api = get_ayon_connection()
         ayon_data = generate_ayon(
@@ -169,8 +172,8 @@ def generate_all(
         f"Projects: {num_projects}, Sequences: {num_sequences}, Shots: {num_shots}, Tasks: {num_tasks}, Users: {num_users}"
     )
     try:
-        from gishant_scripts.kitsu.batch_data_generator import get_connection as get_kitsu_connection
         from gishant_scripts.kitsu.batch_data_generator import generate_batch_data as generate_kitsu
+        from gishant_scripts.kitsu.batch_data_generator import get_connection as get_kitsu_connection
 
         get_kitsu_connection()
         kitsu_data = generate_kitsu(
@@ -227,7 +230,7 @@ def cleanup_cmd(
     if ayon_only:
         console.print("\n[bold cyan]━━━ Cleaning up AYON only ━━━[/bold cyan]")
         try:
-            from gishant_scripts.ayon.batch_data_generator import get_connection, cleanup_test_data
+            from gishant_scripts.ayon.batch_data_generator import cleanup_test_data, get_connection
 
             api = get_connection()
             results = cleanup_test_data(api, prefix, dry_run)
@@ -244,7 +247,7 @@ def cleanup_cmd(
     if kitsu_only:
         console.print("\n[bold cyan]━━━ Cleaning up Kitsu only ━━━[/bold cyan]")
         try:
-            from gishant_scripts.kitsu.batch_data_generator import get_connection, cleanup_test_data
+            from gishant_scripts.kitsu.batch_data_generator import cleanup_test_data, get_connection
 
             get_connection()
             results = cleanup_test_data(prefix, dry_run)
@@ -326,7 +329,7 @@ def generate_cmd(
     if ayon_only:
         console.print("\n[bold cyan]━━━ Generating data in AYON only ━━━[/bold cyan]")
         try:
-            from gishant_scripts.ayon.batch_data_generator import get_connection, generate_batch_data
+            from gishant_scripts.ayon.batch_data_generator import generate_batch_data, get_connection
 
             api = get_connection()
             results = generate_batch_data(
@@ -340,7 +343,7 @@ def generate_cmd(
                 prefix=prefix,
             )
 
-            console.print(f"\n[green]✓ Generation completed[/green]")
+            console.print("\n[green]✓ Generation completed[/green]")
             table = Table(title="Generation Results")
             table.add_column("Type", style="cyan")
             table.add_column("Created", style="green")
@@ -363,7 +366,7 @@ def generate_cmd(
     if kitsu_only:
         console.print("\n[bold cyan]━━━ Generating data in Kitsu only ━━━[/bold cyan]")
         try:
-            from gishant_scripts.kitsu.batch_data_generator import get_connection, generate_batch_data
+            from gishant_scripts.kitsu.batch_data_generator import generate_batch_data, get_connection
 
             get_connection()
             results = generate_batch_data(
@@ -376,7 +379,7 @@ def generate_cmd(
                 prefix=prefix,
             )
 
-            console.print(f"\n[green]✓ Generation completed[/green]")
+            console.print("\n[green]✓ Generation completed[/green]")
             table = Table(title="Generation Results")
             table.add_column("Type", style="cyan")
             table.add_column("Created", style="green")

@@ -1,5 +1,7 @@
 """Docker Compose utility functions for database operations."""
 
+from __future__ import annotations
+
 import ipaddress
 import subprocess
 import time
@@ -16,14 +18,13 @@ BackupFormat = Literal["custom", "gzip", "sql"]
 class DockerComposeError(Exception):
     """Exception raised when docker compose commands fail."""
 
-    pass
-
 
 def check_docker_compose() -> None:
     """Check if docker compose is available.
 
     Raises:
         DockerComposeError: If docker compose is not found
+
     """
     try:
         subprocess.run(
@@ -55,6 +56,7 @@ def docker_compose_cmd(
 
     Raises:
         DockerComposeError: If command fails and check=True
+
     """
     if not compose_file.exists():
         raise DockerComposeError(f"Docker compose file not found: {compose_file}")
@@ -84,6 +86,7 @@ def stop_services(compose_file: Path, services: list[str]) -> None:
 
     Raises:
         DockerComposeError: If stop command fails
+
     """
     try:
         docker_compose_cmd(compose_file, ["stop"] + services, check=False)
@@ -101,6 +104,7 @@ def start_services(compose_file: Path, services: list[str]) -> None:
 
     Raises:
         DockerComposeError: If start command fails
+
     """
     docker_compose_cmd(compose_file, ["start"] + services)
 
@@ -115,6 +119,7 @@ def ensure_service_running(compose_file: Path, service: str, wait_seconds: int =
 
     Raises:
         DockerComposeError: If service cannot be started
+
     """
     start_services(compose_file, [service])
     time.sleep(wait_seconds)
@@ -141,6 +146,7 @@ def exec_in_service(
 
     Raises:
         DockerComposeError: If command fails and check=True
+
     """
     exec_cmd = ["exec", "-T", service] + command
 
@@ -171,6 +177,7 @@ def copy_to_container(compose_file: Path, service: str, local_path: Path, contai
 
     Raises:
         DockerComposeError: If copy fails
+
     """
     docker_compose_cmd(compose_file, ["cp", str(local_path), f"{service}:{container_path}"])
 
@@ -183,15 +190,15 @@ def detect_backup_format(backup_file: Path) -> BackupFormat:
 
     Returns:
         Backup format type: 'custom', 'gzip', or 'sql'
+
     """
     suffix = backup_file.suffix.lower()
 
     if suffix in [".dump", ".backup"]:
         return "custom"
-    elif suffix == ".gz":
+    if suffix == ".gz":
         return "gzip"
-    else:
-        return "sql"
+    return "sql"
 
 
 def get_service_ip(compose_file: Path, service: str) -> str | None:
@@ -203,6 +210,7 @@ def get_service_ip(compose_file: Path, service: str) -> str | None:
 
     Returns:
         IP address of the service, or None if not found
+
     """
     try:
         # Get the container name from docker compose
@@ -227,7 +235,7 @@ def get_service_ip(compose_file: Path, service: str) -> str | None:
         )
 
         ip = ip_result.stdout.strip()
-        return ip if ip else None
+        return ip or None
     except Exception:
         return None
 
@@ -240,6 +248,7 @@ def is_local_ip(ip: str) -> bool:
 
     Returns:
         True if the IP is local, False otherwise
+
     """
     if not ip:
         return False
@@ -268,6 +277,7 @@ def is_local_database_host(host: str) -> bool:
 
     Returns:
         True if the host is local, False otherwise
+
     """
     if not host:
         return False
@@ -301,6 +311,7 @@ def validate_database_is_local(compose_file: Path, db_service: str = "db") -> tu
 
     Returns:
         Tuple of (is_local, message) where is_local is True if database is local
+
     """
     # Check 1: Get database service IP
     db_ip = get_service_ip(compose_file, db_service)
@@ -419,6 +430,7 @@ def get_service_hostname_and_port(compose_file: Path, service: str) -> tuple[str
 
     Returns:
         Tuple of (hostname, port) or (None, None) if not found
+
     """
     try:
         # First try to get port from running container
@@ -472,52 +484,52 @@ def get_service_hostname_and_port(compose_file: Path, service: str) -> tuple[str
                     return (None, None)
                 ports = service_config.get("ports", [])
                 if ports:
-                        # Parse first port mapping
-                        # Format can be:
-                        # - "5000:5000" (string)
-                        # - "5000:5000/tcp" (string with protocol)
-                        # - "${VAR:-5000}:5000" (string with env var)
-                        # - {"published": 5000, "target": 5000} (dict)
-                        port_mapping = ports[0]
-                        if isinstance(port_mapping, str):
-                            # String format: "5000:5000" or "${VAR:-5000}:5000"
-                            # Split by colon, but be careful with ${VAR:-default} syntax
-                            # First check if it's an env var with default
-                            if "${" in port_mapping and ":-" in port_mapping:
-                                # Format: "${VAR:-default}:container_port"
-                                # Extract the part before the first colon that's not part of ${...}
-                                # Find the colon that separates host:container (after the closing })
-                                closing_brace = port_mapping.find("}")
-                                if closing_brace != -1:
-                                    # Everything before the colon after the closing brace is the host port part
-                                    remaining = port_mapping[closing_brace + 1 :]
-                                    if ":" in remaining:
-                                        # Extract default value from ${VAR:-default}
-                                        default_start = port_mapping.find(":-") + 2
-                                        default_end = port_mapping.find("}", default_start)
-                                        if default_end != -1:
-                                            default_val = port_mapping[default_start:default_end]
-                                            try:
-                                                host_port = int(default_val)
-                                                return ("localhost", host_port)
-                                            except ValueError:
-                                                return (None, None)
-                            else:
-                                # Plain format: "5000:5000" or "5000:5000/tcp"
-                                host_port_str = port_mapping.split(":")[0].split("/")[0]
-                                try:
-                                    host_port = int(host_port_str)
-                                    return ("localhost", host_port)
-                                except ValueError:
-                                    return (None, None)
-                        elif isinstance(port_mapping, dict):
-                            # Dict format: {"published": 5000, "target": 5000}
-                            if "published" in port_mapping:
-                                try:
-                                    host_port = int(port_mapping["published"])
-                                    return ("localhost", host_port)
-                                except (ValueError, TypeError):
-                                    return (None, None)
+                    # Parse first port mapping
+                    # Format can be:
+                    # - "5000:5000" (string)
+                    # - "5000:5000/tcp" (string with protocol)
+                    # - "${VAR:-5000}:5000" (string with env var)
+                    # - {"published": 5000, "target": 5000} (dict)
+                    port_mapping = ports[0]
+                    if isinstance(port_mapping, str):
+                        # String format: "5000:5000" or "${VAR:-5000}:5000"
+                        # Split by colon, but be careful with ${VAR:-default} syntax
+                        # First check if it's an env var with default
+                        if "${" in port_mapping and ":-" in port_mapping:
+                            # Format: "${VAR:-default}:container_port"
+                            # Extract the part before the first colon that's not part of ${...}
+                            # Find the colon that separates host:container (after the closing })
+                            closing_brace = port_mapping.find("}")
+                            if closing_brace != -1:
+                                # Everything before the colon after the closing brace is the host port part
+                                remaining = port_mapping[closing_brace + 1 :]
+                                if ":" in remaining:
+                                    # Extract default value from ${VAR:-default}
+                                    default_start = port_mapping.find(":-") + 2
+                                    default_end = port_mapping.find("}", default_start)
+                                    if default_end != -1:
+                                        default_val = port_mapping[default_start:default_end]
+                                        try:
+                                            host_port = int(default_val)
+                                            return ("localhost", host_port)
+                                        except ValueError:
+                                            return (None, None)
+                        else:
+                            # Plain format: "5000:5000" or "5000:5000/tcp"
+                            host_port_str = port_mapping.split(":")[0].split("/")[0]
+                            try:
+                                host_port = int(host_port_str)
+                                return ("localhost", host_port)
+                            except ValueError:
+                                return (None, None)
+                    elif isinstance(port_mapping, dict):
+                        # Dict format: {"published": 5000, "target": 5000}
+                        if "published" in port_mapping:
+                            try:
+                                host_port = int(port_mapping["published"])
+                                return ("localhost", host_port)
+                            except (ValueError, TypeError):
+                                return (None, None)
         except Exception:
             # Silently fail - service might not have ports or yaml might not be available
             return (None, None)

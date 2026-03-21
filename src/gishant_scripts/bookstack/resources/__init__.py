@@ -1,5 +1,7 @@
 """BookStack API resource modules."""
 
+from __future__ import annotations
+
 from gishant_scripts.bookstack.resources.attachments import AttachmentsResource
 from gishant_scripts.bookstack.resources.audit_log import AuditLogResource
 from gishant_scripts.bookstack.resources.books import BooksResource

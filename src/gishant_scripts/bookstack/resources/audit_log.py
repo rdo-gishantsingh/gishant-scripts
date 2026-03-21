@@ -32,6 +32,7 @@ class AuditLogResource(BaseResource):
 
         Returns:
             Response with 'data' list and 'total' count
+
         """
         params: dict[str, Any] = {}
         if count is not None:
@@ -44,7 +45,7 @@ class AuditLogResource(BaseResource):
             for key, value in filters.items():
                 params[f"filter[{key}]"] = value
 
-        result = self.client.get(self.ENDPOINT, params=params if params else None)
+        result = self.client.get(self.ENDPOINT, params=params or None)
         if isinstance(result, bytes):
             return {"data": [], "total": 0}
         return result
@@ -62,6 +63,7 @@ class AuditLogResource(BaseResource):
 
         Returns:
             List of all audit log entries
+
         """
         params: dict[str, Any] = {}
         if sort is not None:
@@ -80,6 +82,7 @@ class AuditLogResource(BaseResource):
 
         Returns:
             List of audit log entries
+
         """
         return self.list_all(filters={"user_id": user_id})
 
@@ -91,5 +94,6 @@ class AuditLogResource(BaseResource):
 
         Returns:
             List of audit log entries
+
         """
         return self.list_all(filters={"type": event_type})

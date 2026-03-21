@@ -1,5 +1,7 @@
 """Reusable decorators for gishant scripts."""
 
+from __future__ import annotations
+
 import functools
 import logging
 import time
@@ -19,6 +21,7 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
         >>> @retry(max_attempts=3, delay=1.0, backoff=2.0)
         ... def fetch_data():
         ...     return api_call()
+
     """
 
     def decorator(func: Callable) -> Callable:
@@ -51,6 +54,7 @@ def timing(func: Callable) -> Callable:
         >>> @timing
         ... def process_data(items):
         ...     return [process(item) for item in items]
+
     """
 
     @functools.wraps(func)

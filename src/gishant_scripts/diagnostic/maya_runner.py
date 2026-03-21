@@ -6,7 +6,7 @@ import json
 import logging
 import subprocess
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gishant_scripts.diagnostic.config import LINUX
@@ -23,9 +23,7 @@ def _create_mel_wrapper(script_path: Path) -> Path:
     """
     mel_file = script_path.parent / f"_runner_{script_path.stem}.mel"
     # Set __file__ before exec() so the diagnostic script can use it
-    mel_content = (
-        f'python("__file__ = \'{script_path}\'; exec(open(\'{script_path}\').read())");\n'
-    )
+    mel_content = f"python(\"__file__ = '{script_path}'; exec(open('{script_path}').read())\");\n"
     mel_file.write_text(mel_content, encoding="utf-8")
     return mel_file
 
@@ -62,6 +60,7 @@ def run_maya_script(
     Returns:
         A populated :class:`DiagnosticResult`. On timeout or crash the
         ``status`` field will be ``"error"``.
+
     """
     script_path = Path(script_path).resolve()
     script_dir = script_path.parent
@@ -77,7 +76,7 @@ def run_maya_script(
     # ------------------------------------------------------------------
     # Resolve AYON environment variables
     # ------------------------------------------------------------------
-    from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env  # noqa: PLC0415
+    from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
 
     ayon_env = resolve_ayon_env(
         project_name=project_name,
@@ -109,9 +108,7 @@ def run_maya_script(
     _site_pkgs = _repo / ".venv" / "lib" / "python3.11" / "site-packages"
     _src = _repo / "src"
     existing_pythonpath = ayon_env.get("PYTHONPATH", "")
-    ayon_env["PYTHONPATH"] = ":".join(
-        filter(None, [existing_pythonpath, str(_src), str(_site_pkgs)])
-    )
+    ayon_env["PYTHONPATH"] = ":".join(filter(None, [existing_pythonpath, str(_src), str(_site_pkgs)]))
 
     logger.info(
         "Launching mayabatch for issue=%s  project=%s  folder=%s  log=%s",
@@ -169,20 +166,20 @@ def run_maya_script(
             status="error",
             dcc="maya",
             issue=issue_name,
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+            timestamp=datetime.now(tz=UTC).isoformat(),
             context={"project": project_name, "folder": folder_path, "task": task_name},
             findings={},
             errors=[f"mayabatch timed out after {timeout}s"],
             raw_output=raw,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         mel_wrapper.unlink(missing_ok=True)
         logger.exception("mayabatch failed to launch for issue=%s", issue_name)
         return DiagnosticResult(
             status="error",
             dcc="maya",
             issue=issue_name,
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+            timestamp=datetime.now(tz=UTC).isoformat(),
             context={"project": project_name, "folder": folder_path, "task": task_name},
             findings={},
             errors=[str(exc)],
@@ -202,7 +199,7 @@ def run_maya_script(
                 status=data.get("status", "error"),
                 dcc="maya",
                 issue=data.get("issue", issue_name),
-                timestamp=data.get("timestamp", datetime.now(tz=timezone.utc).isoformat()),
+                timestamp=data.get("timestamp", datetime.now(tz=UTC).isoformat()),
                 context=data.get("context", {}),
                 findings=data.get("findings", {}),
                 errors=data.get("errors", []),
@@ -214,7 +211,7 @@ def run_maya_script(
                 status="error",
                 dcc="maya",
                 issue=issue_name,
-                timestamp=datetime.now(tz=timezone.utc).isoformat(),
+                timestamp=datetime.now(tz=UTC).isoformat(),
                 context={"project": project_name, "folder": folder_path, "task": task_name},
                 findings={},
                 errors=[f"Result JSON parse error: {exc}"],
@@ -231,7 +228,7 @@ def run_maya_script(
         status="error",
         dcc="maya",
         issue=issue_name,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         context={"project": project_name, "folder": folder_path, "task": task_name},
         findings={},
         errors=errors,

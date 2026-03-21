@@ -41,6 +41,7 @@ class BookStackClient:
             token_secret: API token secret
             timeout: Request timeout in seconds
             verify_ssl: Whether to verify SSL certificates (set to False for self-signed certs)
+
         """
         self.base_url = base_url.rstrip("/")
         self.token_id = token_id
@@ -69,6 +70,7 @@ class BookStackClient:
 
         Returns:
             Full URL
+
         """
         endpoint = endpoint.lstrip("/")
         if not endpoint.startswith("api/"):
@@ -86,6 +88,7 @@ class BookStackClient:
 
         Raises:
             APIError: If the request failed
+
         """
         # Handle rate limiting
         if response.status_code == 429:
@@ -136,6 +139,7 @@ class BookStackClient:
 
         Raises:
             APIError: If the request failed
+
         """
         url = self._build_url(endpoint)
 
@@ -184,6 +188,7 @@ class BookStackClient:
 
         Returns:
             API response data
+
         """
         return self._request("GET", endpoint, params=params)
 
@@ -202,6 +207,7 @@ class BookStackClient:
 
         Returns:
             API response data
+
         """
         result = self._request("POST", endpoint, json_data=data, files=files)
         if isinstance(result, bytes):
@@ -223,6 +229,7 @@ class BookStackClient:
 
         Returns:
             API response data
+
         """
         result = self._request("PUT", endpoint, json_data=data, files=files)
         if isinstance(result, bytes):
@@ -242,6 +249,7 @@ class BookStackClient:
 
         Returns:
             API response data (usually empty)
+
         """
         result = self._request("DELETE", endpoint, json_data=data)
         if isinstance(result, bytes):
@@ -263,6 +271,7 @@ class BookStackClient:
 
         Returns:
             List of all items
+
         """
         if params is None:
             params = {}
@@ -313,6 +322,7 @@ class BookStackClient:
 
         Raises:
             APIError: If download failed or response is not binary
+
         """
         response = self.get(endpoint, params=params)
 

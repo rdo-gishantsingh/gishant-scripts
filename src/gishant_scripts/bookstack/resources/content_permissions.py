@@ -26,6 +26,7 @@ class ContentPermissionsResource(BaseResource):
             - owner: Owner details
             - role_permissions: List of role-specific permissions
             - fallback_permissions: Default permissions when no role matches
+
         """
         endpoint = f"{self.ENDPOINT}/{content_type}/{content_id}"
         result = self.client.get(endpoint)
@@ -54,6 +55,7 @@ class ContentPermissionsResource(BaseResource):
 
         Returns:
             Updated permission data
+
         """
         data: dict[str, Any] = {}
         if owner_id is not None:
@@ -92,6 +94,7 @@ class ContentPermissionsResource(BaseResource):
 
         Returns:
             Updated permission data
+
         """
         # Fetch existing permissions
         existing = self.read(content_type, content_id)
@@ -134,5 +137,6 @@ class ContentPermissionsResource(BaseResource):
 
         Returns:
             Updated permission data
+
         """
         return self.update(content_type, content_id, role_permissions=[])

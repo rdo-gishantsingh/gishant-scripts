@@ -38,6 +38,7 @@ class BooksResource(ExportableResource):
 
         Returns:
             Created book data
+
         """
         data: dict[str, Any] = {"name": name}
         if description:
@@ -79,6 +80,7 @@ class BooksResource(ExportableResource):
 
         Returns:
             Updated book data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -109,6 +111,7 @@ class BooksResource(ExportableResource):
 
         Returns:
             Book data with contents
+
         """
         result = self.client.get(self._get_endpoint(book_id))
         if isinstance(result, bytes):

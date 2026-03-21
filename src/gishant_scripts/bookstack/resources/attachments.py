@@ -32,6 +32,7 @@ class AttachmentsResource(CRUDResource):
 
         Returns:
             Created attachment data
+
         """
         return self.client.post(
             self.ENDPOINT,
@@ -57,6 +58,7 @@ class AttachmentsResource(CRUDResource):
 
         Returns:
             Created attachment data
+
         """
         files = {"file": (file_path.name, file_path.open("rb"))}
         data = {
@@ -84,6 +86,7 @@ class AttachmentsResource(CRUDResource):
 
         Returns:
             Updated attachment data
+
         """
         data: dict[str, Any] = {}
         if name is not None:
@@ -110,6 +113,7 @@ class AttachmentsResource(CRUDResource):
 
         Returns:
             Attachment data with content
+
         """
         result = self.client.get(self._get_endpoint(attachment_id))
         if isinstance(result, bytes):
@@ -124,5 +128,6 @@ class AttachmentsResource(CRUDResource):
 
         Returns:
             List of attachments
+
         """
         return self.list_all(filters={"uploaded_to": page_id})

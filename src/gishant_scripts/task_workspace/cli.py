@@ -61,13 +61,9 @@ def _check_template_drift(config) -> None:
     if not stale:
         return
 
-    console.print(
-        f"\n[yellow]⚠  Workspace template has changed — {len(stale)} workspace(s) are out of date.[/]"
-    )
+    console.print(f"\n[yellow]⚠  Workspace template has changed — {len(stale)} workspace(s) are out of date.[/]")
 
-    proceed = questionary.confirm(
-        f"Update {len(stale)} workspace(s) now?", default=True, style=Q_STYLE
-    ).ask()
+    proceed = questionary.confirm(f"Update {len(stale)} workspace(s) now?", default=True, style=Q_STYLE).ask()
 
     if not proceed:
         console.print("[dim]Skipped. Run [cyan]task-workspace sync-settings[/] later.[/]\n")
@@ -123,8 +119,7 @@ def _ask_base_branch(repo_name: str, branch_name: str, repo_path: Path) -> str |
 def new(
     dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Preview without creating anything."),
 ) -> None:
-    """
-    [bold cyan]Interactive wizard[/] — create fresh worktrees + a VS Code workspace for a new issue.
+    """[bold cyan]Interactive wizard[/] — create fresh worktrees + a VS Code workspace for a new issue.
 
     Each selected repo gets a new worktree on a shared branch name. Use [bold]adopt[/] instead
     if your repos are already checked out on their own WIP branches.
@@ -134,8 +129,7 @@ def new(
 
     console.print(
         Panel.fit(
-            "[bold cyan]RDO Dev — New Task Workspace[/]\n"
-            "[dim]Creates git worktrees + a VS Code task workspace.[/]",
+            "[bold cyan]RDO Dev — New Task Workspace[/]\n[dim]Creates git worktrees + a VS Code task workspace.[/]",
             border_style="cyan",
             padding=(0, 2),
         )
@@ -228,7 +222,9 @@ def new(
         console.print(f"[bold]{display_name}[/]")
         wt_path = issue_wt_root / repo_path.name
         result = create_worktree(
-            repo_path, wt_path, branch_name,
+            repo_path,
+            wt_path,
+            branch_name,
             base_branch=base_branches[display_name],
             dry_run=dry_run,
         )
@@ -236,15 +232,12 @@ def new(
             worktree_paths[display_name] = result
         console.print()
 
-    ws_dict = build_task_workspace(
-        issue_slug, selected_repos, worktree_paths, config, adopted_repos=set()
-    )
+    ws_dict = build_task_workspace(issue_slug, selected_repos, worktree_paths, config, adopted_repos=set())
 
     if dry_run:
         console.print(
             Panel(
-                "[yellow]DRY RUN complete — nothing was written.[/]\n"
-                "Run without [cyan]--dry-run[/] to apply.",
+                "[yellow]DRY RUN complete — nothing was written.[/]\nRun without [cyan]--dry-run[/] to apply.",
                 border_style="yellow",
             )
         )
@@ -279,8 +272,7 @@ def new(
 def adopt(
     dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Preview without creating anything."),
 ) -> None:
-    """
-    [bold cyan]Adopt existing WIP checkouts[/] into a VS Code task workspace.
+    """[bold cyan]Adopt existing WIP checkouts[/] into a VS Code task workspace.
 
     Use this when your repos are already checked out on feature branches (with or
     without uncommitted changes). The command migrates selected repositories into
@@ -300,9 +292,7 @@ def adopt(
 
     with console.status("[dim]Scanning repositories…[/]"):
         repos = discover_repos(config)
-        statuses: dict[str, tuple[str, bool, bool]] = {
-            name: get_repo_status(path) for name, path in repos.items()
-        }
+        statuses: dict[str, tuple[str, bool, bool]] = {name: get_repo_status(path) for name, path in repos.items()}
 
     if not repos:
         console.print("[red]✖  No git repos found.[/]")
@@ -389,9 +379,7 @@ def adopt(
                 style=Q_STYLE,
             ).ask()
             target_branch = (
-                raw_detached_branch.strip()
-                if raw_detached_branch and raw_detached_branch.strip()
-                else issue_slug
+                raw_detached_branch.strip() if raw_detached_branch and raw_detached_branch.strip() else issue_slug
             )
             target_branch_repos[name] = target_branch
             base_branches[name] = None
@@ -405,11 +393,7 @@ def adopt(
                 instruction=f"Press Enter to use '{issue_slug}'",
                 style=Q_STYLE,
             ).ask()
-            new_branch = (
-                raw_new_branch.strip()
-                if raw_new_branch and raw_new_branch.strip()
-                else issue_slug
-            )
+            new_branch = raw_new_branch.strip() if raw_new_branch and raw_new_branch.strip() else issue_slug
             target_branch_repos[name] = new_branch
             base_branches[name] = _ask_base_branch(name, new_branch, repos[name])
 
@@ -476,7 +460,9 @@ def adopt(
             )
         else:
             result = create_worktree(
-                repo_path, wt_path, target_branch,
+                repo_path,
+                wt_path,
+                target_branch,
                 base_branch=base_branches.get(name),
                 dry_run=dry_run,
             )
@@ -490,20 +476,15 @@ def adopt(
         console.print("\n[red]✖  Some worktrees failed; workspace file was not created.[/]")
         for name in failed_names:
             console.print(f"  [red]•[/] {table_repo_name(name)}")
-        console.print(
-            "\n[dim]Fix the failing repos (or re-run with fewer selections), then run adopt again.[/]"
-        )
+        console.print("\n[dim]Fix the failing repos (or re-run with fewer selections), then run adopt again.[/]")
         raise typer.Exit(1)
 
-    ws_dict = build_task_workspace(
-        issue_slug, selected_repos, worktree_paths, config, adopted_repos=set()
-    )
+    ws_dict = build_task_workspace(issue_slug, selected_repos, worktree_paths, config, adopted_repos=set())
 
     if dry_run:
         console.print(
             Panel(
-                "[yellow]DRY RUN complete — nothing was written.[/]\n"
-                "Run without [cyan]--dry-run[/] to apply.",
+                "[yellow]DRY RUN complete — nothing was written.[/]\nRun without [cyan]--dry-run[/] to apply.",
                 border_style="yellow",
             )
         )
@@ -541,16 +522,13 @@ def adopt(
 def modify(
     dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Preview without creating anything."),
 ) -> None:
-    """
-    [bold cyan]Add or remove repositories[/] from an existing task workspace.
-    """
+    """[bold cyan]Add or remove repositories[/] from an existing task workspace."""
     config = load_config()
     _check_template_drift(config)
 
     console.print(
         Panel.fit(
-            "[bold cyan]RDO Dev — Modify Task Workspace[/]\n"
-            "[dim]Add or remove repositories from an existing task.[/]",
+            "[bold cyan]RDO Dev — Modify Task Workspace[/]\n[dim]Add or remove repositories from an existing task.[/]",
             border_style="cyan",
             padding=(0, 2),
         )
@@ -583,10 +561,7 @@ def modify(
     with console.status("[dim]Scanning repositories…[/]"):
         all_repos = discover_repos(config)
 
-    choices = [
-        questionary.Choice(name, checked=name in current_repo_names)
-        for name in all_repos
-    ]
+    choices = [questionary.Choice(name, checked=name in current_repo_names) for name in all_repos]
 
     chosen_names: list[str] = questionary.checkbox(
         f"Select repositories for task '{slug}':",
@@ -626,11 +601,7 @@ def modify(
         base_label = f"[dim]from {base}[/]" if base else "[dim]from default[/]"
         summary.add_row("[green]+ ADD[/]", f"[bold]{name}[/]", f"[cyan]{branch_name}[/] {base_label}")
     for name in to_remove:
-        strategy = (
-            "[red]remove worktree[/]"
-            if name in meta.get("worktrees", [])
-            else "[yellow]remove folder[/]"
-        )
+        strategy = "[red]remove worktree[/]" if name in meta.get("worktrees", []) else "[yellow]remove folder[/]"
         summary.add_row("[red]- REMOVE[/]", f"[dim]{name}[/]", strategy)
 
     if dry_run:
@@ -666,15 +637,13 @@ def modify(
                             cwd=source_repo,
                             capture_output=True,
                             text=True,
-                        )  # noqa: S603
+                        )
                         if r.returncode != 0:
                             console.print(f"  [yellow]⚠  Failed:[/] {r.stderr.strip()}")
                         else:
                             console.print("  [green]✔  Removed[/]")
                 else:
-                    console.print(
-                        f"  [yellow]⚠  Source repo not found for '{name}', skipping worktree removal.[/]"
-                    )
+                    console.print(f"  [yellow]⚠  Source repo not found for '{name}', skipping worktree removal.[/]")
 
     # Execute additions
     worktree_paths: dict[str, Path] = {}
@@ -688,7 +657,9 @@ def modify(
         repo_path = all_repos[name]
         wt_path = issue_wt_root / repo_path.name
         result = create_worktree(
-            repo_path, wt_path, branch_name,
+            repo_path,
+            wt_path,
+            branch_name,
             base_branch=base_branches.get(name),
             dry_run=dry_run,
         )
@@ -710,9 +681,7 @@ def modify(
     current_adopted = set(meta.get("adopted", []))
     new_adopted = {n for n in current_adopted if n in chosen_names}
 
-    ws_dict = build_task_workspace(
-        slug, selected_repos, worktree_paths, config, adopted_repos=new_adopted
-    )
+    ws_dict = build_task_workspace(slug, selected_repos, worktree_paths, config, adopted_repos=new_adopted)
 
     if not dry_run:
         write_workspace_file(slug, ws_dict, config)
@@ -728,8 +697,7 @@ def modify(
 
 @app.command()
 def cleanup() -> None:
-    """
-    [bold red]Remove[/] a task workspace file and unregister its git worktrees.
+    """[bold red]Remove[/] a task workspace file and unregister its git worktrees.
 
     Adopted repos (existing checkouts) are never touched — only worktrees that
     were created by [bold]new[/] or [bold]adopt[/] are removed.
@@ -739,19 +707,14 @@ def cleanup() -> None:
 
     console.print(
         Panel.fit(
-            "[bold red]RDO Dev — Cleanup Task[/]\n"
-            "[dim]Unregisters git worktrees and removes the workspace file.[/]",
+            "[bold red]RDO Dev — Cleanup Task[/]\n[dim]Unregisters git worktrees and removes the workspace file.[/]",
             border_style="red",
             padding=(0, 2),
         )
     )
 
     task_files = {f.stem: f for f in config.workspaces_dir.glob("*.code-workspace")}
-    wt_dirs = (
-        {d.name: d for d in config.worktrees_dir.iterdir() if d.is_dir()}
-        if config.worktrees_dir.exists()
-        else {}
-    )
+    wt_dirs = {d.name: d for d in config.worktrees_dir.iterdir() if d.is_dir()} if config.worktrees_dir.exists() else {}
 
     task_files.pop("rdo-dev", None)
 
@@ -789,9 +752,7 @@ def cleanup() -> None:
         console.print(f"  [dim]Worktrees :[/] {wt_dir}")
     console.print()
 
-    confirm: bool = questionary.confirm(
-        f"Remove task '{slug}'?", default=False, style=Q_STYLE
-    ).ask()
+    confirm: bool = questionary.confirm(f"Remove task '{slug}'?", default=False, style=Q_STYLE).ask()
 
     if not confirm:
         console.print("[dim]Aborted.[/]")
@@ -815,7 +776,7 @@ def cleanup() -> None:
                     cwd=source_repo,
                     capture_output=True,
                     text=True,
-                )  # noqa: S603
+                )
                 if r.returncode == 0:
                     console.print(f"  [green]✔  Removed:[/] {repo_wt.name}")
                 else:
@@ -845,8 +806,7 @@ def cleanup() -> None:
 
 @app.command(name="sync-settings")
 def sync_settings() -> None:
-    """
-    [bold cyan]Sync workspace settings[/] from the master template to all task workspaces.
+    """[bold cyan]Sync workspace settings[/] from the master template to all task workspaces.
 
     Re-applies settings and extensions from [bold]workspace_settings.yaml[/] to every
     existing task workspace. Dynamic paths (extraPaths, per-folder interpreters)
@@ -879,9 +839,7 @@ def sync_settings() -> None:
         console.print(f"  [dim]•[/] {ws_file.stem}")
     console.print()
 
-    proceed: bool = questionary.confirm(
-        f"Update {len(stale)} workspace(s)?", default=True, style=Q_STYLE
-    ).ask()
+    proceed: bool = questionary.confirm(f"Update {len(stale)} workspace(s)?", default=True, style=Q_STYLE).ask()
 
     if not proceed:
         console.print("[dim]Skipped.[/]")

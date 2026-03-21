@@ -1,5 +1,7 @@
 """Media processing utilities for FFmpeg conversions."""
 
+from __future__ import annotations
+
 from gishant_scripts.media.ffmpeg_convert import (
     ConversionPreset,
     FFmpegConverter,

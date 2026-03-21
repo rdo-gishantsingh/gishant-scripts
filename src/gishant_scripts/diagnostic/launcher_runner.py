@@ -37,7 +37,7 @@ import json
 import logging
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
@@ -119,7 +119,7 @@ def _parse_result_file(
                 status=data.get("status", "error"),
                 dcc=dcc,
                 issue=data.get("issue", issue_name),
-                timestamp=data.get("timestamp", datetime.now(tz=timezone.utc).isoformat()),
+                timestamp=data.get("timestamp", datetime.now(tz=UTC).isoformat()),
                 context=data.get("context", {}),
                 findings=data.get("findings", {}),
                 errors=data.get("errors", []),
@@ -131,7 +131,7 @@ def _parse_result_file(
                 status="error",
                 dcc=dcc,
                 issue=issue_name,
-                timestamp=datetime.now(tz=timezone.utc).isoformat(),
+                timestamp=datetime.now(tz=UTC).isoformat(),
                 context={"project": project_name, "folder": folder_path, "task": task_name},
                 findings={},
                 errors=["Result JSON parse error: " + str(exc)],
@@ -142,7 +142,7 @@ def _parse_result_file(
         status="error",
         dcc=dcc,
         issue=issue_name,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         context={"project": project_name, "folder": folder_path, "task": task_name},
         findings={},
         errors=["No result file produced at " + str(result_file)],
@@ -164,7 +164,7 @@ def _error_result(
         status="error",
         dcc=dcc,
         issue=issue_name,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         context={"project": project_name, "folder": folder_path, "task": task_name},
         findings={},
         errors=errors,
@@ -207,6 +207,7 @@ def run_via_launcher_maya(
     Returns:
         A populated :class:`DiagnosticResult`. On timeout or crash the
         ``status`` field will be ``"error"``.
+
     """
     script_path = Path(script_path).resolve()
     issue_name = script_path.parent.name
@@ -240,9 +241,9 @@ def run_via_launcher_maya(
         )
         raw_output = proc.stdout + proc.stderr
     except subprocess.TimeoutExpired as exc:
-        raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (
-            exc.stderr or b""
-        ).decode("utf-8", errors="replace")
+        raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (exc.stderr or b"").decode(
+            "utf-8", errors="replace"
+        )
         logger.error("mayabatch timed out after %s seconds for issue=%s", timeout, issue_name)
         return _error_result(
             dcc="maya",
@@ -253,7 +254,7 @@ def run_via_launcher_maya(
             errors=["mayabatch (via-launcher) timed out after " + str(timeout) + "s"],
             raw_output=raw,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("mayabatch failed to launch (via-launcher) for issue=%s", issue_name)
         return _error_result(
             dcc="maya",
@@ -357,6 +358,7 @@ def run_via_launcher_unreal(
     Returns:
         A populated :class:`DiagnosticResult`. On timeout or SSH failure the
         ``status`` field will be ``"error"``.
+
     """
     script_path = Path(script_path).resolve()
     issue_name = script_path.parent.name
@@ -392,9 +394,10 @@ def run_via_launcher_unreal(
 
     ssh_command = [
         "ssh",
-        "-o", "BatchMode=yes",
+        "-o",
+        "BatchMode=yes",
         _SSH_HOST,
-        "powershell -NoProfile -Command \"" + ps_command + "\"",
+        'powershell -NoProfile -Command "' + ps_command + '"',
     ]
 
     logger.info(
@@ -412,9 +415,9 @@ def run_via_launcher_unreal(
         )
         raw_output = proc.stdout + proc.stderr
     except subprocess.TimeoutExpired as exc:
-        raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (
-            exc.stderr or b""
-        ).decode("utf-8", errors="replace")
+        raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (exc.stderr or b"").decode(
+            "utf-8", errors="replace"
+        )
         logger.error(
             "SSH command timed out after %s seconds (via-launcher) for issue=%s",
             timeout,
