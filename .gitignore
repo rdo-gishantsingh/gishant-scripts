@@ -87,3 +87,13 @@ Thumbs.db
 *.temp
 tmp/
 temp/
+
+# DCC artifacts
+mayaLog
+projects/
+
+# Personal notes
+work_summary_*.md
+
+# Legacy
+poetry.lock

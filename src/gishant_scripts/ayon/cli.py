@@ -167,37 +167,14 @@ def list_users():
         raise typer.Exit(code=1)
 
 
-# Import batch data generator commands (lazy import to avoid circular dependencies)
-def _register_batch_commands():
-    """Register batch data generation commands."""
-    from gishant_scripts.ayon.batch_data_generator import generate_data_cli, simulate_load_cli
-
-    app.command("generate-batch-data", help="Generate batch test data for load testing")(generate_data_cli)
-    app.command("simulate-load", help="Simulate concurrent user load to stress-test sync service")(simulate_load_cli)
-
-
-def _register_representation_commands():
-    """Register representation commands."""
+# Lazy-import optional commands — modules may not exist yet
+try:
     from gishant_scripts.ayon.cli.get_representation_cli import get_representation_cli
 
     app.command("get-representation", help="Get representation for a product in a folder")(get_representation_cli)
+except ImportError:
+    pass
 
-
-def _register_restore_commands():
-    """Register database restore commands."""
-    from gishant_scripts.ayon.restore_db_cli import restore
-
-    app.command("restore-db", help="Restore AYON database from backup file")(restore)
-
-
-# Register batch commands
-_register_batch_commands()
-
-# Register representation commands
-_register_representation_commands()
-
-# Register restore commands
-_register_restore_commands()
 
 if __name__ == "__main__":
     app()
