@@ -9,30 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- FFmpeg video conversion tools with 10 presets (web, mobile, archive, GIF, etc.)
-- FFmpeg audio conversion tools with podcast and compression presets
-- Rich library integration for beautiful terminal output across all commands
-- Colored, styled CLI output with consistent formatting
+- `youtrack summary` subcommand for generating work summaries with Gemini AI
+- `bookstack` subcommand for managing BookStack documentation (search, pages, books, chapters, shelves, attachments, users)
+- `task-workspace` subcommand for creating VS Code task workspaces from YouTrack issues (new, adopt, modify, cleanup, sync-settings)
+- `ayon` subcommand for AYON CRUD operations (list/get/create/delete projects, list users) with `--local`/`--dev` environment flags
+- `kitsu` subcommand for Kitsu CRUD operations (login, list/get/create/update projects)
+- `media` subcommand with FFmpeg presets for video/audio conversion, file info, and interactive mode
+- `diagnostic` module for running Maya and Unreal through AYON Launcher environment with env-var overrides
+- `_core` package with shared config, logging, decorators, error handling, and Gemini integration
+- Standalone DCC scripts under `scripts/` (maya, unreal, nuke, rez)
 
 ### Changed
 
-- **BREAKING**: Renamed commands for better organization:
-  - `convert-video` → `ffmpeg-video`
-  - `convert-audio` → `ffmpeg-audio`
-  - `list-presets` → `list-ffmpeg-presets`
-- Standardized all CLI output to use Rich Console with:
-  - Green colored success messages
-  - Red colored errors (routed to stderr)
-  - Cyan colored progress indicators
-  - Yellow colored warnings and hints
-  - Dim styled secondary statistics
-- Improved help text and command examples throughout
+- Restructured all CLI commands under a single `gishant` entry point with domain subcommands
+- Moved shared configuration (YouTrack, GitHub, Google AI, BookStack credentials) into `_core/config.py`
+- Corrected environment variable names: `YOUTRACK_API_TOKEN` (not `YOUTRACK_TOKEN`), `GOOGLE_AI_API_KEY` (not `GOOGLE_API_KEY`)
+
+### Removed
+
+- Removed standalone entry points (`fetch-youtrack`, `fetch-github-prs`, `generate-report`, `generate-work-summary`)
+- Removed `utils/` package (functionality moved to `_core/` and domain packages)
 
 ### Fixed
 
-- Type checking issue with Google AI API key configuration
-- Proper stderr routing for all error messages
-- Trailing whitespace in CLI module
+- README.md rewritten to match actual codebase (correct env vars, CLI commands, project structure)
+- Makefile cleaned up: removed dead targets, added test-unit/test-integration/test-all targets
 
 ## [0.1.0] - 2025-11-10
 
@@ -40,37 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial repository organization using uv package manager
 - Organized project structure with proper Python package layout
-- Created modular structure with separate packages for:
-  - `youtrack/`: YouTrack integration scripts
-  - `github/`: GitHub automation and PR fetching
-  - `maya/`: Maya utility scripts for pipeline work
-  - `unreal/`: Unreal Engine integration utilities
-  - `utils/`: General utilities and report generation
-- Command-line entry points for common tasks:
-  - `fetch-youtrack`: Fetch YouTrack issues
-  - `fetch-github-prs`: Fetch GitHub pull requests
-  - `generate-report`: Generate management reports
-  - `generate-work-summary`: Generate work summary emails
+- YouTrack integration for fetching and analyzing issues
+- GitHub PR fetching via `gh` CLI
+- Work summary generation using Google Gemini AI
+- Maya utility scripts (mesh benchmarks, namespace fixes, attribute queries)
+- Unreal utility scripts (SM auto-assign, FBX import benchmarks, lib reload)
 - Comprehensive README.md with usage instructions
 - Makefile with common development tasks
 - Test infrastructure with pytest
-- Proper .gitignore for Python/uv projects
-- .env.example for credential configuration
-
-### Scripts Included
-
-- **YouTrack**: fetch_issues.py
-- **GitHub**: fetch_prs.py
-- **Reports**: generate_report.py, generate_work_summary.py
-- **Maya**: benchmark_mesh_optimization.py, fix_namespace.py, queryMayaAttributes.py, and more
-- **Unreal**: autoassign_sm.py, unreal_benchmark_fbxsm_import.py, reload_libs.py, and more
-- **Utils**: ayon_products.py, check_bundles.py, kitsu_integration_demo.py, search_executable.py
 
 ### Dependencies
 
 - requests: HTTP client for API interactions
 - google-genai: Google Gemini AI for report generation
 - python-dotenv: Environment variable management
+- typer + rich: CLI framework with styled terminal output
+- ayon-python-api: AYON server communication
+- gazu: Kitsu API client
 
 ### Development
 

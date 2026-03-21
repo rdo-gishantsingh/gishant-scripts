@@ -1,212 +1,89 @@
-# Gishant's Custom Scripts
+# Gishant Scripts
 
-Collection of custom scripts for AYON pipeline, YouTrack integration, GitHub automation, and Maya/Unreal utilities.
-
-## Overview
-
-This repository contains personal utility scripts for:
-- **YouTrack Integration**: Fetch and analyze issues
-- **GitHub Automation**: PR fetching and analysis
-- **Report Generation**: Automated work summaries using AI
-- **Maya Utilities**: Mesh optimization, namespace fixes, attribute queries
-- **Unreal Integration**: FBX imports, SM auto-assignment, benchmarking
-- **AYON Tools**: Product management and bundle checking
-- **Bulk Data Management**: Generate and clean test data for AYON and Kitsu (NEW! 🎉)
+Personal pipeline automation utilities for YouTrack, GitHub, AYON, Kitsu, BookStack, media conversion, and DCC diagnostics.
 
 ## Installation
 
-This project uses [uv](https://github.com/astral-sh/uv) for package management.
+Requires [uv](https://github.com/astral-sh/uv) and Python 3.11+.
 
-### Install uv (if not already installed)
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Install the package
-```bash
-# Clone the repository
 git clone https://github.com/yourusername/gishant-scripts.git
 cd gishant-scripts
 
-# Install dependencies and package (creates venv automatically)
-uv sync
+# Install with dev dependencies (recommended)
+uv sync --extra dev
 ```
+
+Some dependencies (`ayon-python-api`, `gazu`) connect to RDO infrastructure and are only useful inside that environment. They are declared as direct deps but will install fine anywhere.
 
 ## Configuration
 
-Create a `.env` file in the root directory with your credentials:
+Set credentials as environment variables or in a `.env` file at the project root:
 
 ```bash
 # YouTrack
 YOUTRACK_URL=https://your-instance.youtrack.cloud
-YOUTRACK_TOKEN=your-permanent-token
+YOUTRACK_API_TOKEN=your-permanent-token
 
-# GitHub (uses gh CLI, no token needed)
-# Install: https://cli.github.com/
+# GitHub
+GITHUB_TOKEN=your-personal-access-token   # optional if gh CLI is authenticated
 
-# Google AI (for report generation)
-GOOGLE_API_KEY=your-google-ai-api-key
+# Google AI (Gemini, used by youtrack summary)
+GOOGLE_AI_API_KEY=your-google-ai-api-key
 
-# AYON (for bulk data management)
-AYON_SERVER_URL_LOCAL=http://localhost:5000
-AYON_API_KEY_LOCAL=your-ayon-api-key
+# BookStack
+BOOKSTACK_URL=https://your-bookstack-instance
+BOOKSTACK_TOKEN_ID=your-token-id
+BOOKSTACK_TOKEN_SECRET=your-token-secret
 
-# Kitsu (for bulk data management)
+# AYON (optional, for ayon subcommand)
+AYON_SERVER_URL=http://localhost:5000
+AYON_API_KEY=your-ayon-api-key
+
+# Kitsu (optional, for kitsu subcommand)
 KITSU_API_URL_LOCAL=http://localhost:8080/api
 KITSU_LOGIN_LOCAL=admin@example.com
 KITSU_PASSWORD_LOCAL=your-password
 ```
 
-## Usage
+## CLI Usage
 
-### Command-Line Tools
-
-After installation, use `uv run` to execute commands:
+All commands live under the `gishant` entry point:
 
 ```bash
-# Fetch YouTrack issues
-uv run fetch-youtrack
-
-# Fetch GitHub PRs
-uv run fetch-github-prs
-
-# Generate management report
-uv run generate-report
-
-# Generate work summary email
-uv run generate-work-summary
-
-# Compare AYON bundles
-uv run gishant analyze-bundles --interactive
-
-# Bulk data management for AYON and Kitsu
-source .venv/bin/activate
-bulk-data reset-and-generate --projects 2 --sequences 10 --shots 10 --yes
-
-# Publish test asset (Bollywoof/test episode only; requires ffmpeg)
-uv run publish-test-asset --dry-run
-uv run publish-test-asset --folder-path /test
+uv run gishant --help
 ```
 
-### Python Scripts
+### Subcommands
 
-You can also import and use modules directly:
+| Command | Description |
+|---------|-------------|
+| `gishant youtrack fetch` | Fetch YouTrack issues (all or by ID) |
+| `gishant youtrack create` | Create a new YouTrack issue |
+| `gishant youtrack update` | Update an existing issue |
+| `gishant youtrack summary` | Generate a work summary using Gemini AI |
+| `gishant github fetch-prs` | Fetch GitHub PRs assigned to you |
+| `gishant media convert` | Convert media files using FFmpeg presets |
+| `gishant media presets` | List available conversion presets |
+| `gishant media info` | Display media file information |
+| `gishant media interactive` | Interactive preset selection |
+| `gishant ayon list-projects` | List AYON projects (supports `--local`/`--dev` flags) |
+| `gishant kitsu list-projects` | List Kitsu projects |
+| `gishant bookstack search` | Search BookStack documentation |
+| `gishant bookstack pages/books/chapters/shelves` | Manage BookStack content |
+| `gishant task-workspace new` | Create worktrees + VS Code workspace for an issue |
+| `gishant task-workspace adopt` | Adopt existing checkouts into a workspace |
+| `gishant task-workspace cleanup` | Remove a task workspace and its worktrees |
 
-```python
-from gishant_scripts.youtrack.fetch_issues import YouTrackIssuesFetcher
-from gishant_scripts.github.fetch_prs import GitHubPRFetcher
-
-# Use the modules...
-```
-
-## Scripts Overview
-
-### YouTrack Integration
-- **`fetch_issues.py`**: Fetch all YouTrack issues where you're involved (assigned or commented)
-- Output: `my_youtrack_issues.json`, `my_youtrack_issue_ids.txt`
-
-### GitHub Integration
-- **`fetch_prs.py`**: Fetch GitHub PRs where you're author or assignee
-- Requires: GitHub CLI (`gh`) installed and authenticated
-- Output: `my_github_prs.json`
-
-### Report Generation
-- **`generate_report.py`**: Generate management-ready reports from YouTrack/GitHub data
-- **`generate_work_summary.py`**: Create email summaries using Google Gemini AI
-- Formats: Bullet points (audit-style) or paragraphs (executive-style)
-
-### Maya Utilities
-- **`benchmark_mesh_optimization.py`**: Benchmark mesh reduction performance
-- **`create_unknown_nodes_and_plugins_maya.py`**: Create test scenes with unknown nodes
-- **`createAndCheckIntermediateShapes.py`**: Manage intermediate shapes
-- **`fix_namespace.py`**: Clean up namespace issues
-- **`queryMayaAttributes.py`**: Query and analyze Maya attributes
-
-### Unreal Utilities
-- **`autoassign_sm.py`**: Auto-assign static meshes to actors
-- **`maya_fbx_triangulate.py`**: Triangulate meshes for FBX export
-- **`reload_libs.py`**: Hot-reload Python libraries in Unreal
-- **`unreal_benchmark_fbxsm_import.py`**: Benchmark FBX static mesh import
-
-### AYON/Pipeline Utilities
-- **`ayon_products.py`**: Manage AYON products
-- **`check_bundles.py`**: Check AYON bundle configurations
-- **`kitsu_integration_demo.py`**: Kitsu integration examples
-- **`search_executable.py`**: Find executables in system PATH
-- **`publish-test-asset`**: Publish a test movie to AYON with Kitsu linking (Bollywoof/test episode only; safeguards enforced)
-
-### Bulk Data Management (NEW! 🎉)
-Unified tool for managing test data across AYON and Kitsu systems.
-
-**Quick Start:**
-```bash
-source .venv/bin/activate
-
-# Clean up and generate fresh data (one command!)
-bulk-data reset-and-generate \
-  --projects 2 \
-  --sequences 10 \
-  --shots 10 \
-  --tasks 3 \
-  --users 5 \
-  --yes
-
-# Or use the shell script
-scripts/reset-and-populate.sh
-```
-
-**Features:**
-- ✅ Clean up test data from both AYON and Kitsu
-- ✅ Generate realistic bulk data with production naming conventions
-- ✅ Dry-run mode to preview changes safely
-- ✅ Progress bars and beautiful console output
-- ✅ Handles errors gracefully
-- ✅ Can target individual systems (--ayon-only, --kitsu-only)
-
-**Commands:**
-```bash
-bulk-data cleanup --dry-run              # Preview what will be deleted
-bulk-data cleanup --yes                  # Delete all test data
-bulk-data generate -p 2 -s 10 --shots 10 # Generate data only
-bulk-data reset-and-generate --yes       # Clean + generate (recommended)
-```
-
-**Documentation:**
-- **Quick Start:** [QUICK_START_BULK_DATA.md](QUICK_START_BULK_DATA.md)
-- **Full Guide:** [BULK_DATA_MANAGER_GUIDE.md](BULK_DATA_MANAGER_GUIDE.md)
-- **Usage Summary:** [USAGE_SUMMARY.md](USAGE_SUMMARY.md)
-- **Test Results:** [TEST_RESULTS.md](TEST_RESULTS.md)
-
-### publish-test-asset (AYON-Kitsu linking test)
-Publishes a minimal movie to AYON in **Bollywoof/test** with Kitsu linking for validating USER-319 / PIPE-523.
-
-**Safeguards:** Only project `Bollywoof` and episode `test` are allowed. All target folders must be under that episode.
+### Examples
 
 ```bash
-uv run publish-test-asset --dry-run           # Validate context only
-uv run publish-test-asset                    # Publish to /test (generates placeholder)
-uv run publish-test-asset -f /test/sq001/sh1 # Publish to a specific shot
-uv run publish-test-asset --file ./video.mov # Use custom video file
-```
-
-**Requires:** ffmpeg (for placeholder), AYON + Kitsu credentials (~/.rdo/.env or env vars).
-
-## Development
-
-### Install with dev dependencies
-```bash
-uv sync --extra dev
-```
-
-### Run linting
-```bash
-uv run ruff check .
-uv run ruff format .
-```
-
-### Run tests
-```bash
-uv run pytest
+gishant youtrack fetch
+gishant youtrack summary --weeks 4
+gishant github fetch-prs --limit 50
+gishant media convert input.mov -p web-video
+gishant bookstack search 'render pipeline'
+gishant task-workspace new PIPE-123
 ```
 
 ## Project Structure
@@ -215,41 +92,63 @@ uv run pytest
 gishant-scripts/
 ├── src/
 │   └── gishant_scripts/
-│       ├── __init__.py
-│       ├── youtrack/       # YouTrack integration
-│       ├── github/         # GitHub automation
-│       ├── maya/           # Maya utilities
-│       ├── unreal/         # Unreal utilities
-│       └── utils/          # General utilities
+│       ├── cli.py              # Main Typer app and subcommand registration
+│       ├── _core/              # Shared config, logging, decorators, errors
+│       ├── ayon/               # AYON CRUD operations
+│       ├── bookstack/          # BookStack API client and CLI
+│       ├── diagnostic/         # DCC diagnostic runners (Maya, Unreal, AYON env)
+│       ├── github/             # GitHub PR fetching
+│       ├── kitsu/              # Kitsu CRUD operations
+│       ├── media/              # FFmpeg media conversion with presets
+│       ├── task_workspace/     # VS Code task-workspace generator
+│       └── youtrack/           # YouTrack fetch, create, update, summary
+├── scripts/                    # Standalone DCC scripts (not part of the package)
+│   ├── maya/                   # Maya utilities (mesh benchmarks, namespace fixes)
+│   ├── unreal/                 # Unreal utilities (SM auto-assign, FBX import)
+│   ├── nuke/                   # Nuke diagnostic scripts
+│   └── rez/                    # Rez package build helpers
 ├── tests/
-├── .env                    # Your credentials (gitignored)
-├── .gitignore
+├── .env                        # Credentials (gitignored)
 ├── pyproject.toml
 ├── Makefile
+├── CHANGELOG.md
 └── README.md
 ```
 
-## Makefile Commands
+## Diagnostic Module
+
+The `diagnostic` package runs Maya and Unreal through the AYON Launcher environment for artist-parity testing. Defaults can be overridden via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAYA_BIN` | `/usr/autodesk/maya2025/bin/maya` | Path to Maya binary |
+| `DIAGNOSTIC_SSH_HOST` | `gisi@10.1.68.205` | SSH target for remote Windows runs |
+| `DIAGNOSTIC_BASE_DIR` | `/tech/users/gisi/dev/_diagnostic` | Output directory (Linux) |
+| `DIAGNOSTIC_BASE_DIR_WIN` | `Z:\users\gisi\dev\_diagnostic` | Output directory (Windows) |
+| `AYON_SERVER_URL` | `http://localhost:5000` | AYON server for diagnostic context |
+| `AYON_SERVER_URL_WIN` | `http://10.1.69.24:5000` | AYON server (Windows side) |
+
+## Development
 
 ```bash
-make install    # Install dependencies
-make dev        # Install with dev dependencies
 make format     # Format code with ruff
-make lint       # Lint code with ruff
-make test       # Run tests
-make clean      # Clean build artifacts
+make lint       # Lint and auto-fix with ruff
+make lint-check # Lint without fixing
+make test       # Run all tests
+make test-unit  # Run unit tests only
+make test-all   # Run all tests (ignore addopts)
+make clean      # Remove caches and build artifacts
 ```
 
 ## Notes
 
-- **Security**: Never commit `.env` file - it contains sensitive credentials
-- **GitHub CLI**: Some scripts require `gh` CLI to be installed and authenticated
-- **Maya Scripts**: Must be run within Maya's Python environment
-- **Unreal Scripts**: Must be run within Unreal Editor's Python environment
+- Never commit `.env` -- it contains sensitive credentials.
+- Some GitHub commands require the `gh` CLI to be installed and authenticated.
+- Scripts in `scripts/maya/` and `scripts/unreal/` must be run inside their respective DCC Python environments.
 
 ## License
 
-Private repository - Internal use only
+Private repository -- internal use only.
 
 ## Author
 
