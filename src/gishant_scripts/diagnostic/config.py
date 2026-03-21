@@ -1,7 +1,11 @@
-"""Central configuration for diagnostic infrastructure (Maya on Linux, Unreal on Windows)."""
+"""Central configuration for diagnostic infrastructure (Maya on Linux, Unreal on Windows).
+
+All hardcoded defaults can be overridden via environment variables.
+"""
 
 from __future__ import annotations
 
+import os
 import pathlib
 from dataclasses import dataclass, field
 
@@ -18,14 +22,15 @@ PATH_MAP_LINUX_TO_WIN: dict[str, str] = {
 PATH_MAP_WIN_TO_LINUX: dict[str, str] = {v: k for k, v in PATH_MAP_LINUX_TO_WIN.items()}
 
 # UNC paths for SSH sessions where mapped drives are unavailable
+_NAS_HOST = os.getenv("NAS_HOSTNAME", "rdoshyd")
 PATH_MAP_LINUX_TO_UNC: dict[str, str] = {
-    "/projects/": "\\\\rdoshyd\\projects\\",
-    "/tech/": "\\\\rdoshyd\\tech\\",
+    "/projects/": f"\\\\{_NAS_HOST}\\projects\\",
+    "/tech/": f"\\\\{_NAS_HOST}\\tech\\",
 }
 
 
 # ---------------------------------------------------------------------------
-# Config dataclasses
+# Config dataclasses — every field is overridable via env var
 # ---------------------------------------------------------------------------
 
 
@@ -33,25 +38,58 @@ PATH_MAP_LINUX_TO_UNC: dict[str, str] = {
 class LinuxConfig:
     """Paths and settings for the Linux (Maya) side."""
 
-    maya_bin: str = "/usr/autodesk/maya2025/bin/maya"
-    ayon_launcher: str = "/tech/apps/rocky9.5/ayon/launcher/AYON-1.4.2-linux-rocky9/ayon"
-    ayon_server_url: str = "http://localhost:5000"
-    ayon_storage_dir: pathlib.Path = field(
-        default_factory=lambda: pathlib.Path.home() / ".local/share/ayon-launcher-local",
+    maya_bin: str = field(
+        default_factory=lambda: os.getenv("MAYA_BIN", "/usr/autodesk/maya2025/bin/maya"),
     )
-    diagnostic_base: str = "/tech/users/gisi/dev/_diagnostic"
+    ayon_launcher: str = field(
+        default_factory=lambda: os.getenv(
+            "AYON_LAUNCHER_PATH", "/tech/apps/rocky9.5/ayon/launcher/AYON-1.4.2-linux-rocky9/ayon"
+        ),
+    )
+    ayon_server_url: str = field(
+        default_factory=lambda: os.getenv("AYON_SERVER_URL", "http://localhost:5000"),
+    )
+    ayon_storage_dir: pathlib.Path = field(
+        default_factory=lambda: pathlib.Path(
+            os.getenv(
+                "AYON_STORAGE_DIR",
+                str(pathlib.Path.home() / ".local/share/ayon-launcher-local"),
+            )
+        ),
+    )
+    diagnostic_base: str = field(
+        default_factory=lambda: os.getenv("DIAGNOSTIC_BASE_DIR", "/tech/users/gisi/dev/_diagnostic"),
+    )
 
 
 @dataclass(frozen=True)
 class WindowsConfig:
     """Paths and settings for the Windows (Unreal) side."""
 
-    ssh_host: str = "gisi@10.1.68.205"
-    unreal_bin: str = r"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-    ayon_launcher: str = r"C:\Program Files\Ynput\AYON 1.4.2\ayon_console.exe"
-    ayon_server_url: str = "http://10.1.69.24:5000"
-    ayon_storage_dir: str = r"%USERPROFILE%\.local\share\ayon-launcher-local"
-    diagnostic_base: str = r"Z:\users\gisi\dev\_diagnostic"
+    ssh_host: str = field(
+        default_factory=lambda: os.getenv("DIAGNOSTIC_SSH_HOST", "gisi@10.1.68.205"),
+    )
+    unreal_bin: str = field(
+        default_factory=lambda: os.getenv(
+            "UNREAL_BIN", r"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+        ),
+    )
+    ayon_launcher: str = field(
+        default_factory=lambda: os.getenv(
+            "AYON_LAUNCHER_PATH_WIN", r"C:\Program Files\Ynput\AYON 1.4.2\ayon_console.exe"
+        ),
+    )
+    ayon_server_url: str = field(
+        default_factory=lambda: os.getenv("AYON_SERVER_URL_WIN", "http://10.1.69.24:5000"),
+    )
+    ayon_storage_dir: str = field(
+        default_factory=lambda: os.getenv(
+            "AYON_STORAGE_DIR_WIN", r"%USERPROFILE%\.local\share\ayon-launcher-local"
+        ),
+    )
+    diagnostic_base: str = field(
+        default_factory=lambda: os.getenv("DIAGNOSTIC_BASE_DIR_WIN", r"Z:\users\gisi\dev\_diagnostic"),
+    )
 
 
 # Singleton instances
@@ -69,7 +107,7 @@ def linux_to_windows_path(path: str, *, unc: bool = False) -> str:
 
     Args:
         path: Linux filesystem path.
-        unc: If True, use UNC paths (``\\\\rdoshyd\\tech\\``) instead of
+        unc: If True, use UNC paths (``\\\\<NAS_HOST>\\tech\\``) instead of
             drive letters (``Z:\\``). Needed in SSH sessions where mapped
             drives are unavailable.
     """

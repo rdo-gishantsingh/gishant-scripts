@@ -7,7 +7,7 @@ package-level imports that require pip-installed packages (e.g. dotenv).
 Usage from inside a DCC script::
 
     import sys
-    sys.path.insert(0, "/tech/users/gisi/dev/repos/gishant-scripts/src/gishant_scripts/diagnostic")
+    sys.path.insert(0, "<path-to-repo>/src/gishant_scripts/diagnostic")
     from result_writer_standalone import write_result
 
     write_result(
