@@ -5,14 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from gishant_scripts.common.config import (
+from gishant_scripts._core.config import (
     AppConfig,
     AYONConfig,
     GitHubConfig,
     GoogleAIConfig,
     YouTrackConfig,
 )
-from gishant_scripts.common.errors import ConfigurationError
+from gishant_scripts._core.errors import ConfigurationError
 
 
 class TestYouTrackConfig:

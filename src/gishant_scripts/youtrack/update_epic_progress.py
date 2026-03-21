@@ -522,8 +522,8 @@ def update_epic(
         # Actually post comments (after reviewing dry run)
         update-epic-progress PIPE-617 /path/to/codebase --no-dry-run
     """
-    from gishant_scripts.common.config import AppConfig
-    from gishant_scripts.common.errors import ConfigurationError
+    from gishant_scripts._core.config import AppConfig
+    from gishant_scripts._core.errors import ConfigurationError
 
     console = Console()
 

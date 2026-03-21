@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from gishant_scripts.common.decorators import retry, timing
+from gishant_scripts._core.decorators import retry, timing
 
 
 class TestRetryDecorator:

@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from gishant_scripts.common.config import AppConfig, BookStackConfig
-from gishant_scripts.common.errors import ConfigurationError
+from gishant_scripts._core.config import AppConfig, BookStackConfig
+from gishant_scripts._core.errors import ConfigurationError
 
 
 class TestBookStackConfig:

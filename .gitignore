@@ -97,3 +97,4 @@ work_summary_*.md
 
 # Legacy
 poetry.lock
+.nfs*

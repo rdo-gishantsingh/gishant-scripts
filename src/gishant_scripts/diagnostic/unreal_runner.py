@@ -250,7 +250,10 @@ def run_unreal_script(
         ue_project_path = unreal_project
         unreal_args.append(f'"{ue_project_path}"')
     unreal_args.append(f'-ExecutePythonScript="{win_script_path}"')
-    unreal_args.append("-stdout -FullStdOutLogOutput -Unattended -NullRHI")
+    unreal_args.append(
+        "-stdout -FullStdOutLogOutput -Unattended -NullRHI "
+        '-LogCmds="LogUdpMessaging off"'
+    )
     unreal_line = f'& "{_UNREAL_BIN}" {" ".join(unreal_args)}'
 
     ps1_content = "\n".join([*env_lines, unreal_line])

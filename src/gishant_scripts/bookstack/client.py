@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import requests
 from rich.console import Console
 
-from gishant_scripts.common.errors import APIError
+from gishant_scripts._core.errors import APIError
 
 if TYPE_CHECKING:
     from pathlib import Path

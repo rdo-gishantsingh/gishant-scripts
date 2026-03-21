@@ -2,7 +2,7 @@
 
 import pytest
 
-from gishant_scripts.common.errors import (
+from gishant_scripts._core.errors import (
     APIError,
     ConfigurationError,
     GishantScriptsError,
