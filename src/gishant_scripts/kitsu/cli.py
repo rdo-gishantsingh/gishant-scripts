@@ -191,27 +191,5 @@ def update_project(
         raise typer.Exit(code=1)
 
 
-# Import batch data generator commands (lazy import to avoid circular dependencies)
-def _register_batch_commands():
-    """Register batch data generation commands."""
-    from gishant_scripts.kitsu.batch_data_generator import generate_data_cli, simulate_load_cli
-
-    app.command("generate-batch-data", help="Generate batch test data for load testing")(generate_data_cli)
-    app.command("simulate-load", help="Simulate concurrent user load to stress-test sync service")(simulate_load_cli)
-
-
-def _register_restore_commands():
-    """Register database restore commands."""
-    from gishant_scripts.kitsu.restore_db_cli import restore
-
-    app.command("restore-db", help="Restore Kitsu database from backup file")(restore)
-
-
-# Register batch commands
-_register_batch_commands()
-
-# Register restore commands
-_register_restore_commands()
-
 if __name__ == "__main__":
     app()

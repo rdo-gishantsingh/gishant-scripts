@@ -4,7 +4,6 @@ This script orchestrates cleanup and bulk data generation across both AYON and K
 systems with proper formatting and synchronization.
 """
 
-import sys
 import typer
 from rich.console import Console
 from rich.panel import Panel
