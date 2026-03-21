@@ -27,6 +27,15 @@ lint-check: ## Check linting without fixing
 test: ## Run tests with pytest
 	uv run pytest tests/ -v
 
+test-unit: ## Run unit tests only
+	uv run pytest tests/unit/ -v
+
+test-integration: ## Run integration tests only
+	uv run pytest tests/ -m integration -v
+
+test-all: ## Run all tests (ignore addopts overrides)
+	uv run pytest tests/ -v --override-ini="addopts="
+
 test-cov: ## Run tests with coverage
 	uv run pytest tests/ -v --cov=src/gishant_scripts --cov-report=html --cov-report=term
 
@@ -40,18 +49,6 @@ clean: ## Clean build artifacts and cache files
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find . -type f -name ".coverage" -delete 2>/dev/null || true
 	@rm -rf build/ dist/ 2>/dev/null || true
-	@echo "✨ Clean complete!"
-
-fetch-youtrack: ## Fetch YouTrack issues
-	uv run fetch-youtrack
-
-fetch-github: ## Fetch GitHub PRs
-	uv run fetch-github-prs
-
-generate-report: ## Generate management report
-	uv run generate-report
-
-generate-summary: ## Generate work summary email
-	uv run generate-work-summary
+	@echo "Clean complete."
 
 all: clean install lint test ## Run full CI pipeline
