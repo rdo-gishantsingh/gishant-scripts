@@ -41,9 +41,10 @@ from gishant_scripts._core.gemini import (
     DEFAULT_MODEL,
     GeminiClient,
     GeminiModel,
+    UsageStats,
     validate_model,
 )
-from gishant_scripts.youtrack.cli import YouTrackIssuesFetcher
+from gishant_scripts.youtrack.fetcher import YouTrackIssuesFetcher
 
 
 class Phase(Enum):
@@ -327,7 +328,7 @@ def generate_work_summary_with_gemini(
     audience: str = "management",
     *,
     show_progress: bool = True,
-) -> str:
+) -> tuple[str, UsageStats | None]:
     """Use Gemini AI to generate a structured work summary.
 
     Args:
@@ -338,7 +339,7 @@ def generate_work_summary_with_gemini(
         show_progress: Whether to print progress messages (set False when using Live TUI)
 
     Returns:
-        Generated work summary text
+        Tuple of (generated summary text, usage stats or None).
 
     """
     gemini_client = GeminiClient(api_key=api_key, model=model)
@@ -507,8 +508,7 @@ State distribution: {json.dumps(data["state_groups"], indent=2)}
             show_progress=show_progress,
             show_usage=show_progress,
         )
-        gemini_client.print_usage_summary()
-        return result
+        return result, gemini_client.get_last_usage()
     except Exception as e:
         gemini_client.console.print(f"[red]Error generating summary: {e}[/red]")
         raise
@@ -790,7 +790,7 @@ def main(
                 with_activity_count = prepared_data["total_issues"]
                 status_message = "Generating with Gemini... (30-60s)"
 
-                result_holder: list[str | None] = [None]
+                result_holder: list[tuple[str, UsageStats | None] | None] = [None]
                 exc_holder: list[Exception | None] = [None]
 
                 def run_gemini() -> None:
@@ -825,8 +825,8 @@ def main(
 
                 if exc_holder[0]:
                     raise exc_holder[0]
-                summary = result_holder[0]
-                assert summary is not None
+                assert result_holder[0] is not None
+                summary, usage_stats = result_holder[0]
 
                 completed_phases.add(Phase.GENERATE)
                 current_phase = Phase.SAVE
@@ -878,7 +878,20 @@ def main(
                 console.print(f"\n[green]✓ Saved to: {save_to_file}[/green]")
 
             console.print(f"\n[dim]Generated from {prepared_data['total_issues']} issues over {weeks} weeks[/dim]")
-            console.print(f"[dim]Model: {model}[/dim]\n")
+            console.print(f"[dim]Model: {model}[/dim]")
+
+            if usage_stats:
+                cost_table = Table(box=SIMPLE, show_header=True, header_style="bold cyan")
+                cost_table.add_column("Metric", style="dim")
+                cost_table.add_column("Value", justify="right")
+                cost_table.add_row("Input tokens", f"{usage_stats.prompt_tokens:,}")
+                cost_table.add_row("Output tokens", f"{usage_stats.completion_tokens:,}")
+                cost_table.add_row("Total tokens", f"{usage_stats.total_tokens:,}")
+                cost_table.add_row("Input cost", f"${usage_stats.input_cost:.6f}")
+                cost_table.add_row("Output cost", f"${usage_stats.output_cost:.6f}")
+                cost_table.add_row("Total cost", f"[bold]${usage_stats.total_cost:.6f}[/bold]")
+                console.print(Panel(cost_table, title="[bold cyan]Cost Analysis[/bold cyan]", border_style="cyan"))
+            console.print()
 
         return 0
 

@@ -13,6 +13,8 @@ from rich.prompt import Prompt
 class GeminiModel(Enum):
     """Available Gemini models with pricing (input, output per million tokens)."""
 
+    GEMINI_3_1_PRO_PREVIEW = ("gemini-3.1-pro-preview", 2.00, 12.00)
+    GEMINI_3_1_FLASH_LITE_PREVIEW = ("gemini-3.1-flash-lite-preview", 0.25, 1.50)
     GEMINI_3_PRO_PREVIEW = ("gemini-3-pro-preview", 2.00, 12.00)
     GEMINI_3_FLASH_PREVIEW = ("gemini-3-flash-preview", 0.30, 2.50)
     GEMINI_2_5_FLASH = ("gemini-2.5-flash", 0.30, 2.50)
@@ -25,7 +27,7 @@ class GeminiModel(Enum):
         self.output_price = output_price
 
 
-DEFAULT_MODEL = GeminiModel.GEMINI_3_PRO_PREVIEW
+DEFAULT_MODEL = GeminiModel.GEMINI_3_FLASH_PREVIEW
 
 
 @dataclass
