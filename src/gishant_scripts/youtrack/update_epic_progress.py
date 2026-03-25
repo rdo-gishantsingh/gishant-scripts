@@ -22,7 +22,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from gishant_scripts.youtrack.cli import YouTrackIssuesFetcher
+from gishant_scripts.youtrack.fetcher import YouTrackIssuesFetcher
 
 
 class YouTrackEpicProgressUpdater:
