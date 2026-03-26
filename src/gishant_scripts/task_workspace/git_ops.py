@@ -110,8 +110,6 @@ def create_worktree(
         console.print(f"  [yellow]⚠  Already exists, skipping:[/] {worktree_path.name}")
         return worktree_path
 
-    worktree_path.parent.mkdir(parents=True, exist_ok=True)
-
     if branch_exists_local(repo_path, branch):
         cmd = ["git", "worktree", "add", str(worktree_path), branch]
         strategy = "existing local branch"
@@ -128,6 +126,8 @@ def create_worktree(
     if dry_run:
         console.print(f"  [green]✔  [DRY RUN][/] Would create worktree ({strategy})")
         return worktree_path
+
+    worktree_path.parent.mkdir(parents=True, exist_ok=True)
 
     result = _run(cmd, cwd=repo_path)
     if result.returncode != 0:

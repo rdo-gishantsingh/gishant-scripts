@@ -91,8 +91,9 @@ def _ask_base_branch(repo_name: str, branch_name: str, repo_path: Path) -> str |
     all_branches = list_local_branches(repo_path)
     in_worktree = list_worktree_branches(repo_path)  # {branch: wt_path}
 
+    _USE_DEFAULT = "__default__"
     choices: list[questionary.Choice] = [
-        questionary.Choice(f"Default branch ({default_b})", value=None),
+        questionary.Choice(f"Default branch ({default_b})", value=_USE_DEFAULT),
     ]
     for b in all_branches:
         if b == default_b:
@@ -103,11 +104,12 @@ def _ask_base_branch(repo_name: str, branch_name: str, repo_path: Path) -> str |
             label = f"{b}  [dim](worktree: {wt_name})[/]"
         choices.append(questionary.Choice(label, value=b))
 
-    return questionary.select(
+    answer = questionary.select(
         f"Base '{branch_name}' for '{repo_name}' off:",
         choices=choices,
         style=Q_STYLE,
     ).ask()
+    return None if answer == _USE_DEFAULT else answer
 
 
 # ============================================================================
