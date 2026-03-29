@@ -90,8 +90,17 @@ def main():
             result["findings"]["ayon_host_installed"] = True
             result["findings"]["registered_host"] = str(type(registered_host()).__name__)
         except Exception as e:
-            result["findings"]["ayon_host_installed"] = False
-            result["errors"].append(f"AYON host install failed: {e}")
+            # install_host() may partially succeed (register host) but fail
+            # on settings init (missing project_plugins, qtawesome, etc.)
+            from ayon_core.pipeline import registered_host as _rh
+            if _rh():
+                result["findings"]["ayon_host_installed"] = True
+                result["findings"]["registered_host"] = str(type(_rh()).__name__)
+                result["findings"]["host_install_warning"] = str(e)
+            else:
+                result["findings"]["ayon_host_installed"] = False
+                result["errors"].append(f"AYON host install failed: {e}")
+
 
         # -- 7. Discover loader plugins ----------------------------------------
         try:
