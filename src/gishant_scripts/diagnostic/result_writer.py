@@ -16,7 +16,7 @@ Usage from inside a DCC script::
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -51,7 +51,7 @@ def write_result(
         "status": status,
         "dcc": dcc,
         "issue": script_dir.name,
-        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "context": context,
         "findings": findings,
         "errors": errors or [],

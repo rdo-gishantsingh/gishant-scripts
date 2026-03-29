@@ -1,8 +1,10 @@
-"""Run diagnostic scripts via the AYON Launcher binary for exact artist-environment reproduction.
+"""Run diagnostic scripts inside DCCs with the AYON Launcher environment.
 
-This module provides "via-launcher" execution mode.  Instead of manually resolving
-addon paths and PYTHONPATH (as ``maya_runner`` / ``unreal_runner`` do), it delegates
-environment setup to the real AYON Launcher — the same binary artists double-click.
+Reproduces the environment the AYON Launcher sets for artists, then launches
+the DCC binary directly.  This is the only execution mode —.
+
+Both runners execute LOCALLY on their target OS.  Agent-deck sessions SSH
+directly into the correct machine — no cross-machine SSH hops.
 
 Limitations
 -----------
@@ -56,10 +58,17 @@ _LINUX_LAUNCHER_DIR = str(Path(_LINUX_LAUNCHER).parent)
 _WIN_LAUNCHER = WINDOWS.ayon_launcher
 _WIN_LAUNCHER_DIR = str(Path(WINDOWS.ayon_launcher).parent)
 
-_SSH_HOST = WINDOWS.ssh_host
 
-# Maya Python command template (same as maya_runner).
-_MAYA_PYTHON_CMD = "python(\"exec(open('{script_path}').read())\")"
+def _create_mel_wrapper(script_path: Path) -> Path:
+    """Create a temporary MEL script that calls ``exec(open(...).read())``.
+
+    Using ``maya -script wrapper.mel`` avoids shell quote-escaping issues
+    that break ``maya -batch -command`` on Linux.
+    """
+    mel_file = script_path.parent / f"_runner_{script_path.stem}.mel"
+    mel_content = f"python(\"__file__ = '{script_path}'; exec(open('{script_path}').read())\");\n"
+    mel_file.write_text(mel_content, encoding="utf-8")
+    return mel_file
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +135,7 @@ def _parse_result_file(
                 raw_output=raw_output,
             )
         except (json.JSONDecodeError, KeyError) as exc:
-            logger.error("Failed to parse result JSON for issue=%s: %s", issue_name, exc)
+            logger.exception("Failed to parse result JSON for issue=%s", issue_name)
             return DiagnosticResult(
                 status="error",
                 dcc=dcc,
@@ -177,7 +186,7 @@ def _error_result(
 # ---------------------------------------------------------------------------
 
 
-def run_via_launcher_maya(
+def run_maya(
     script_path: str | Path,
     project_name: str,
     folder_path: str,
@@ -220,12 +229,13 @@ def run_via_launcher_maya(
         task_name=task_name,
     )
 
-    # Build maya -batch command.
-    maya_cmd = _MAYA_PYTHON_CMD.format(script_path=script_path)
-    cmd = [LINUX.maya_bin, "-batch", "-command", maya_cmd]
+    # Build maya -batch command using a MEL wrapper file
+    # to avoid shell quote-escaping issues with python("exec(...)").
+    mel_wrapper = _create_mel_wrapper(script_path)
+    cmd = [LINUX.maya_bin, "-batch", "-script", str(mel_wrapper)]
 
     logger.info(
-        "Launching mayabatch (via-launcher mode) for issue=%s  project=%s  folder=%s",
+        "Launching mayabatch for issue=%s  project=%s  folder=%s",
         issue_name,
         project_name,
         folder_path,
@@ -244,18 +254,20 @@ def run_via_launcher_maya(
         raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (exc.stderr or b"").decode(
             "utf-8", errors="replace"
         )
-        logger.error("mayabatch timed out after %s seconds for issue=%s", timeout, issue_name)
+        mel_wrapper.unlink(missing_ok=True)
+        logger.exception("mayabatch timed out after %s seconds for issue=%s", timeout, issue_name)
         return _error_result(
             dcc="maya",
             issue_name=issue_name,
             project_name=project_name,
             folder_path=folder_path,
             task_name=task_name,
-            errors=["mayabatch (via-launcher) timed out after " + str(timeout) + "s"],
+            errors=["mayabatch timed out after " + str(timeout) + "s"],
             raw_output=raw,
         )
     except Exception as exc:
-        logger.exception("mayabatch failed to launch (via-launcher) for issue=%s", issue_name)
+        mel_wrapper.unlink(missing_ok=True)
+        logger.exception("mayabatch failed to launch for issue=%s", issue_name)
         return _error_result(
             dcc="maya",
             issue_name=issue_name,
@@ -265,9 +277,11 @@ def run_via_launcher_maya(
             errors=[str(exc)],
         )
 
+    mel_wrapper.unlink(missing_ok=True)
+
     if proc.returncode != 0:
         logger.warning(
-            "mayabatch (via-launcher) exited with code %s for issue=%s",
+            "mayabatch exited with code %s for issue=%s",
             proc.returncode,
             issue_name,
         )
@@ -284,16 +298,16 @@ def run_via_launcher_maya(
 
 
 # ---------------------------------------------------------------------------
-# Unreal via Launcher (Windows over SSH)
+# Unreal via Launcher (local Windows execution)
 # ---------------------------------------------------------------------------
 
 
-def _build_powershell_launcher_command(
+def _build_ps1_launcher_content(
     win_script_path: str,
     ayon_env: dict[str, str],
     unreal_project: str | None = None,
 ) -> str:
-    """Build a PowerShell command that mimics the AYON Launcher's environment on Windows.
+    """Build PowerShell content that mimics the AYON Launcher's environment on Windows.
 
     Sets all AYON env vars, prepends the launcher directory to ``PATH``,
     enables headless mode, then invokes ``UnrealEditor-Cmd``.
@@ -315,15 +329,16 @@ def _build_powershell_launcher_command(
     unreal_args: list[str] = []
     if unreal_project:
         unreal_args.append("'" + unreal_project + "'")
-    unreal_args.append('-ExecutePythonScript="' + win_script_path + '"')
+    unreal_args.append("-ExecutePythonScript='" + win_script_path + "'")
+    unreal_args.append("-stdout -FullStdOutLogOutput -Unattended -NullRHI")
 
     args_str = " ".join(unreal_args)
-    lines.append("& '" + unreal_bin + "' " + args_str + " -stdout -FullStdOutLogOutput -Unattended -NullRHI")
+    lines.append('& "' + unreal_bin + '" ' + args_str)
 
-    return "; ".join(lines)
+    return "\n".join(lines)
 
 
-def run_via_launcher_unreal(
+def run_unreal(
     script_path: str | Path,
     project_name: str,
     folder_path: str,
@@ -331,11 +346,11 @@ def run_via_launcher_unreal(
     unreal_project: str | None = None,
     timeout: int = 600,
 ) -> DiagnosticResult:
-    """Launch Unreal via AYON Launcher on Windows for exact artist-environment reproduction.
+    """Launch Unreal via AYON Launcher locally on Windows for exact artist-environment reproduction.
 
-    Connects to the Windows machine over SSH, sets the AYON Launcher
-    environment (server URL, addon paths, project context, headless flags),
-    and invokes ``UnrealEditor-Cmd``.  The launcher binary directory is
+    Sets the AYON Launcher environment (server URL, addon paths, project
+    context, headless flags) via a PowerShell wrapper script, then invokes
+    ``UnrealEditor-Cmd`` directly.  The launcher binary directory is
     prepended to ``PATH`` so addons that invoke ``ayon_console.exe`` will
     find it.
 
@@ -346,17 +361,17 @@ def run_via_launcher_unreal(
         closely as possible without that feature.
 
     Args:
-        script_path: Path to the ``.py`` script (Linux path — will be converted
-            to a Windows path for the SSH command).
+        script_path: Path to the ``.py`` script.  Linux NAS paths are
+            auto-converted to Windows format.
         project_name: AYON project name.
         folder_path: AYON folder path.
         task_name: Optional AYON task name.
         unreal_project: Windows path to ``.uproject`` file.  If ``None``,
             Unreal runs without a project.
-        timeout: SSH command timeout in seconds.
+        timeout: Process timeout in seconds.
 
     Returns:
-        A populated :class:`DiagnosticResult`. On timeout or SSH failure the
+        A populated :class:`DiagnosticResult`. On timeout or failure the
         ``status`` field will be ``"error"``.
 
     """
@@ -375,7 +390,7 @@ def run_via_launcher_unreal(
         )
 
     win_script_path = linux_to_windows_path(str(script_path))
-    logger.info("Linux script path: %s -> Windows: %s", script_path, win_script_path)
+    logger.info("Script path: %s -> Windows: %s", script_path, win_script_path)
 
     # Resolve AYON env vars targeting Windows.
     ayon_env = resolve_ayon_env(
@@ -385,30 +400,27 @@ def run_via_launcher_unreal(
         target="windows",
     )
 
-    ps_command = _build_powershell_launcher_command(
+    # Write a .ps1 wrapper to the issue dir and execute locally.
+    ps1_wrapper = script_path.parent / "_run_unreal_launcher.ps1"
+    ps1_content = _build_ps1_launcher_content(
         win_script_path=win_script_path,
         ayon_env=ayon_env,
         unreal_project=unreal_project,
     )
-    logger.debug("PowerShell command: %s", ps_command)
+    ps1_wrapper.write_text(ps1_content, encoding="utf-8")
+    logger.debug("Wrote PowerShell launcher wrapper: %s", ps1_wrapper)
 
-    ssh_command = [
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        _SSH_HOST,
-        'powershell -NoProfile -Command "' + ps_command + '"',
-    ]
+    cmd = ["pwsh", "-NoProfile", "-NonInteractive", "-File", str(ps1_wrapper)]
 
     logger.info(
-        "Executing SSH command (via-launcher mode, timeout=%ds) for issue=%s",
+        "Executing Unreal (via-launcher mode, timeout=%ds) for issue=%s",
         timeout,
         issue_name,
     )
 
     try:
         proc = subprocess.run(
-            ssh_command,
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -418,36 +430,40 @@ def run_via_launcher_unreal(
         raw = (exc.stdout or b"").decode("utf-8", errors="replace") + (exc.stderr or b"").decode(
             "utf-8", errors="replace"
         )
-        logger.error(
-            "SSH command timed out after %s seconds (via-launcher) for issue=%s",
+        logger.exception(
+            "Unreal process timed out after %s seconds for issue=%s",
             timeout,
             issue_name,
         )
+        ps1_wrapper.unlink(missing_ok=True)
         return _error_result(
             dcc="unreal",
             issue_name=issue_name,
             project_name=project_name,
             folder_path=folder_path,
             task_name=task_name,
-            errors=["SSH command (via-launcher) timed out after " + str(timeout) + "s"],
+            errors=["Unreal process timed out after " + str(timeout) + "s"],
             raw_output=raw,
         )
     except OSError as exc:
-        logger.exception("Failed to execute SSH (via-launcher) for issue=%s", issue_name)
+        logger.exception("Failed to execute Unreal for issue=%s", issue_name)
+        ps1_wrapper.unlink(missing_ok=True)
         return _error_result(
             dcc="unreal",
             issue_name=issue_name,
             project_name=project_name,
             folder_path=folder_path,
             task_name=task_name,
-            errors=["Failed to execute SSH: " + str(exc)],
+            errors=["Failed to execute Unreal: " + str(exc)],
         )
 
-    logger.info("SSH returncode: %s", proc.returncode)
+    ps1_wrapper.unlink(missing_ok=True)
+
+    logger.info("Unreal returncode: %s", proc.returncode)
     if proc.stdout:
-        logger.debug("SSH stdout (last 2000 chars):\n%s", proc.stdout[-2000:])
+        logger.debug("stdout (last 2000 chars):\n%s", proc.stdout[-2000:])
     if proc.stderr:
-        logger.debug("SSH stderr (last 2000 chars):\n%s", proc.stderr[-2000:])
+        logger.debug("stderr (last 2000 chars):\n%s", proc.stderr[-2000:])
 
     return _parse_result_file(
         result_file=result_file,

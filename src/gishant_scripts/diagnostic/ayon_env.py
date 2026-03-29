@@ -9,9 +9,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pathlib
+import sys
 from pathlib import Path
 
-from gishant_scripts.diagnostic.config import LINUX, WINDOWS
+from gishant_scripts.diagnostic.config import (
+    LINUX,
+    WINDOWS,
+    linux_to_windows_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +26,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _ADDONS_JSON = "addons.json"
+
+# Project root and venv paths — resolved once at import time.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]  # …/gishant-scripts
+_SRC = _PROJECT_ROOT / "src"
+_SITE_PKGS = _PROJECT_ROOT / ".venv" / "lib" / "python3.11" / "site-packages"
+_WIN_VENV_SITE_PKGS = r"C:\Users\gisi\.venvs\gishant-scripts\Lib\site-packages"
+_WIN_SYS_SITE_PKGS = r"C:\Users\gisi\AppData\Local\Programs\Python\Python311\Lib\site-packages"
 
 
 def _read_site_id(is_windows: bool) -> str:
@@ -32,7 +45,9 @@ def _read_site_id(is_windows: bool) -> str:
 
 
 def _launcher_storage_dir() -> Path:
-    """Return the AYON Launcher local storage directory."""
+    """Return the AYON Launcher local storage directory for the current OS."""
+    if sys.platform == "win32":
+        return Path(WINDOWS.ayon_storage_dir)
     return LINUX.ayon_storage_dir
 
 
@@ -137,6 +152,28 @@ def list_all_addon_paths() -> dict[str, Path]:
     return paths
 
 
+def _load_api_key_from_dotenv() -> str:
+    """Search candidate .env paths for AYON_TEST_API_KEY.
+
+    On Linux: ``~/.rdo/.env``.
+    On Windows: ``~/.rdo/.env`` first (works if a symlink exists), then the
+    NAS UNC path as fallback.
+    """
+    candidates = [Path.home() / ".rdo" / ".env"]
+    if sys.platform == "win32":
+        _nas = os.getenv("NAS_HOSTNAME", "rdoshyd")
+        candidates.append(Path(rf"\\{_nas}\tech\users\gisi\.rdo\.env"))
+
+    for env_path in candidates:
+        if not env_path.exists():
+            continue
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            stripped = raw_line.strip()
+            if stripped.startswith("AYON_TEST_API_KEY="):
+                return stripped.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
 def resolve_ayon_env(
     project_name: str,
     folder_path: str,
@@ -174,8 +211,8 @@ def resolve_ayon_env(
 
     if is_windows:
         # Windows has its own addon storage — use addon folder names from
-        # the Linux manifest but prefix with the Windows storage base path.
-        win_addons_base = "C:\\Users\\gisi\\.local\\share\\ayon-launcher-local\\addons"
+        # the manifest but prefix with the Windows storage base path.
+        win_addons_base = str(Path(WINDOWS.ayon_storage_dir) / "addons")
         for _addon_name, addon_dir in sorted(addon_paths.items()):
             folder_name = addon_dir.name  # e.g. "core_1.6.7+dev.rdo.4"
             addon_path = f"{win_addons_base}\\{folder_name}"
@@ -191,20 +228,38 @@ def resolve_ayon_env(
                 if vendor_path.is_dir():
                     python_paths.append(str(vendor_path))
 
+    # -- Dependency packages (bundled third-party libs like clique, semver) --
+    # Always scan from the Linux storage (we're running on Linux), but convert
+    # paths to Windows format when the target is Windows.
+    dep_packages_dir = LINUX.ayon_storage_dir / "dependency_packages"
+    if dep_packages_dir.is_dir():
+        if is_windows:
+            win_dep_base = str(pathlib.Path(WINDOWS.ayon_storage_dir) / "dependency_packages")
+            for dep_zip in sorted(dep_packages_dir.glob("*.zip")):
+                python_paths.extend(
+                    f"{win_dep_base}\\{dep_zip.name}\\{subdir}" for subdir in ("dependencies", "runtime")
+                )
+        else:
+            for dep_zip in sorted(dep_packages_dir.glob("*.zip")):
+                python_paths.extend(str(dep_zip / subdir) for subdir in ("dependencies", "runtime"))
+
+    # -- gishant-scripts src + venv paths (ayon_api, test helpers, etc.) -----
+    if is_windows:
+        win_src = linux_to_windows_path(str(_SRC), unc=True)
+        win_site_pkgs = linux_to_windows_path(str(_SITE_PKGS), unc=True)
+        python_paths.extend([_WIN_SYS_SITE_PKGS, win_src, win_site_pkgs, _WIN_VENV_SITE_PKGS])
+    else:
+        python_paths.extend([str(_SRC), str(_SITE_PKGS)])
+
     # -- Storage dir --------------------------------------------------------
     storage_dir = str(LINUX.ayon_storage_dir)
     if is_windows:
         storage_dir = str(config.ayon_storage_dir)
 
     # -- Load API key from RDO shared credentials ----------------------------
-    _rdo_env_path = Path.home() / ".rdo" / ".env"
     api_key = os.environ.get("AYON_TEST_API_KEY", "")
-    if not api_key and _rdo_env_path.exists():
-        for line in _rdo_env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("AYON_TEST_API_KEY="):
-                api_key = line.split("=", 1)[1].strip().strip('"')
-                break
+    if not api_key:
+        api_key = _load_api_key_from_dotenv()
 
     # -- Resolve active bundle name -----------------------------------------
     bundle_name = ""
@@ -213,7 +268,7 @@ def resolve_ayon_env(
 
         _prev_url = os.environ.get("AYON_SERVER_URL")
         _prev_key = os.environ.get("AYON_API_KEY")
-        os.environ["AYON_SERVER_URL"] = LINUX.ayon_server_url
+        os.environ["AYON_SERVER_URL"] = config.ayon_server_url
         os.environ["AYON_API_KEY"] = api_key
         resp = _ayon_api.get("bundles")
         if resp.data:
@@ -246,6 +301,10 @@ def resolve_ayon_env(
         "PYTHONPATH": path_sep.join(python_paths),
         "AYON_LAUNCHER_STORAGE_DIR": storage_dir,
         "AYON_LAUNCHER_LOCAL_DIR": storage_dir,
+        # Qt offscreen mode — prevents headless crashes when AYON imports
+        # qtawesome/qtpy in environments without a display (e.g. UE -NullRHI).
+        "QT_QPA_PLATFORM": "offscreen",
+        "AYON_HEADLESS_MODE": "1",
     }
 
     if task_name is not None:

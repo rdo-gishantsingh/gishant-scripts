@@ -75,10 +75,21 @@ def main():
             from ayon_maya.api import MayaHost
 
             if not registered_host():
-                install_host(MayaHost())
+                try:
+                    install_host(MayaHost())
+                except KeyError as ke:
+                    # Incomplete project settings (e.g. missing project_plugins)
+                    # are a server-side data issue, not a host registration failure.
+                    result["errors"].append(
+                        f"Incomplete project settings (missing key: {ke})"
+                        " - host may still be registered"
+                    )
 
-            result["findings"]["ayon_host_installed"] = True
-            result["findings"]["registered_host"] = str(type(registered_host()).__name__)
+            host = registered_host()
+            result["findings"]["ayon_host_installed"] = host is not None
+            result["findings"]["registered_host"] = (
+                str(type(host).__name__) if host else None
+            )
         except Exception as e:
             result["findings"]["ayon_host_installed"] = False
             result["errors"].append(f"AYON host install failed: {e}")
