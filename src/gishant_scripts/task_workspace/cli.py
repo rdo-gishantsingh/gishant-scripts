@@ -21,6 +21,7 @@ from gishant_scripts.task_workspace.git_ops import (
     list_worktree_branches,
     migrate_checked_out_branch_to_worktree,
 )
+from gishant_scripts.task_workspace.migrator import vscode_to_zed, zed_to_vscode
 from gishant_scripts.task_workspace.repo_discovery import discover_repos
 from gishant_scripts.task_workspace.ui import Q_STYLE, console, open_workspace_in_code, slugify, table_repo_name
 from gishant_scripts.task_workspace.workspace_builder import (
@@ -32,6 +33,7 @@ from gishant_scripts.task_workspace.workspace_builder import (
     sync_workspace_settings,
     write_workspace_file,
 )
+from gishant_scripts.task_workspace.zed_builder import read_zed_launch_script_paths
 
 app = typer.Typer(
     name="task-workspace",
@@ -852,6 +854,285 @@ def sync_settings() -> None:
         console.print(f"  [green]✔[/]  {ws_file.stem}")
 
     console.print(f"\n[bold green]Updated {len(stale)} workspace(s).[/]")
+
+
+# ============================================================================
+# migrate-to-zed command
+# ============================================================================
+
+
+@app.command(name="migrate-to-zed")
+def migrate_to_zed() -> None:
+    """[bold blue]Migrate[/] a VS Code workspace to Zed project format.
+
+    Reads an existing [bold].code-workspace[/] file and generates:
+    [dim]•[/] [cyan].zed/settings.json[/] in the worktree root (pyright extraPaths, editor settings)
+    [dim]•[/] [cyan]{slug}_open_in_zed.sh[/] launch script in the workspaces directory
+    """
+    config = load_config()
+    _check_template_drift(config)
+
+    console.print(
+        Panel.fit(
+            "[bold blue]RDO Dev — Migrate to Zed[/]\n"
+            "[dim]Generates Zed settings and launch script from a VS Code workspace.[/]",
+            border_style="blue",
+            padding=(0, 2),
+        )
+    )
+
+    task_files = {f.stem: f for f in config.workspaces_dir.glob("*.code-workspace")}
+    task_files.pop("rdo-dev", None)
+
+    if not task_files:
+        console.print("[dim]No task workspaces found.[/]")
+        raise typer.Exit(0)
+
+    slug: str = questionary.select(
+        "Select workspace to migrate:",
+        choices=sorted(task_files),
+        style=Q_STYLE,
+    ).ask()
+
+    if not slug:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    ws_file = task_files[slug]
+    zed_settings_path = config.worktrees_dir / slug / ".zed" / "settings.json"
+    launch_script_path = config.workspaces_dir / f"{slug}_open_in_zed.sh"
+
+    table = Table(box=box.ROUNDED, border_style="dim", header_style="bold cyan", show_header=True)
+    table.add_column("Output", style="dim", no_wrap=True)
+    table.add_column("Path")
+    table.add_row("Zed settings", str(zed_settings_path))
+    table.add_row("Launch script", str(launch_script_path))
+    console.print(table)
+    console.print()
+
+    confirm: bool = questionary.confirm("Generate Zed files?", default=True, style=Q_STYLE).ask()
+    if not confirm:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    settings_out, script_out = vscode_to_zed(ws_file, config)
+
+    console.print(
+        Panel.fit(
+            f"[bold green]Done.[/]\n"
+            f"  [dim]Zed settings :[/] [cyan]{settings_out}[/]\n"
+            f"  [dim]Launch script:[/] [cyan]{script_out}[/]",
+            border_style="green",
+            padding=(0, 2),
+        )
+    )
+
+
+# ============================================================================
+# migrate-to-vscode command
+# ============================================================================
+
+
+@app.command(name="migrate-to-vscode")
+def migrate_to_vscode() -> None:
+    """[bold blue]Migrate[/] a Zed project back to VS Code workspace format.
+
+    Reads [cyan].zed/settings.json[/] and the Zed launch script for a task,
+    then generates a [cyan].code-workspace[/] file.
+
+    Run [bold]sync-settings[/] afterwards to re-apply the full VS Code template
+    (extensions, theme, …) that are not stored in Zed format.
+    """
+    config = load_config()
+
+    console.print(
+        Panel.fit(
+            "[bold blue]RDO Dev — Migrate to VS Code[/]\n"
+            "[dim]Generates a .code-workspace file from Zed settings and launch script.[/]",
+            border_style="blue",
+            padding=(0, 2),
+        )
+    )
+
+    # Discover slugs that have Zed files (settings.json or launch script)
+    zed_slugs: set[str] = set()
+
+    if config.worktrees_dir.exists():
+        for wt_dir in config.worktrees_dir.iterdir():
+            if wt_dir.is_dir() and (wt_dir / ".zed" / "settings.json").exists():
+                zed_slugs.add(wt_dir.name)
+
+    for script in config.workspaces_dir.glob("*_open_in_zed.sh"):
+        # Strip the "_open_in_zed" suffix to recover the slug
+        zed_slugs.add(script.stem[: -len("_open_in_zed")])
+
+    zed_slugs.discard("rdo-dev")
+
+    if not zed_slugs:
+        console.print("[dim]No Zed workspaces found.[/]")
+        raise typer.Exit(0)
+
+    slug: str = questionary.select(
+        "Select Zed workspace to migrate:",
+        choices=sorted(zed_slugs),
+        style=Q_STYLE,
+    ).ask()
+
+    if not slug:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    ws_out_path = config.workspaces_dir / f"{slug}.code-workspace"
+
+    table = Table(box=box.ROUNDED, border_style="dim", header_style="bold cyan", show_header=True)
+    table.add_column("Output", style="dim", no_wrap=True)
+    table.add_column("Path")
+    table.add_row("VS Code workspace", str(ws_out_path))
+    console.print(table)
+    console.print()
+
+    confirm: bool = questionary.confirm("Generate VS Code workspace?", default=True, style=Q_STYLE).ask()
+    if not confirm:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    try:
+        ws_path = zed_to_vscode(slug, config)
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold green]Done.[/]\n  [dim]Workspace:[/] [cyan]{ws_path}[/]\n\n"
+            "[dim]Tip: run [cyan]task-workspace sync-settings[/] to re-apply the full VS Code template.[/]",
+            border_style="green",
+            padding=(0, 2),
+        )
+    )
+
+
+# ============================================================================
+# to-zed command
+# ============================================================================
+
+
+@app.command(name="to-zed")
+def to_zed() -> None:
+    """[bold blue]Convert[/] a VS Code workspace to Zed project format.
+
+    Reads an existing [cyan].code-workspace[/] file and generates:
+
+    [dim]•[/] [cyan].zed/settings.json[/] in the worktree root (pyright extraPaths, editor settings)
+    [dim]•[/] [cyan]{slug}_open_in_zed.sh[/] launch script in the workspaces directory
+    """
+    config = load_config()
+
+    task_files = {f.stem: f for f in config.workspaces_dir.glob("*.code-workspace")}
+    task_files.pop("rdo-dev", None)
+
+    if not task_files:
+        console.print("[dim]No task workspaces found.[/]")
+        raise typer.Exit(0)
+
+    slug: str = questionary.select(
+        "Select workspace to convert to Zed:",
+        choices=sorted(task_files),
+        style=Q_STYLE,
+    ).ask()
+
+    if not slug:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    ws_file = task_files[slug]
+    ws_data = json.loads(_strip_jsonc(ws_file.read_text(encoding="utf-8")))
+    folders = ws_data.get("folders", [])
+
+    zed_settings_path = config.worktrees_dir / slug / ".zed" / "settings.json"
+    launch_script_path = config.workspaces_dir / f"{slug}_open_in_zed.sh"
+
+    table = Table(box=box.ROUNDED, border_style="dim", header_style="bold cyan", show_header=True)
+    table.add_column("Folder", style="bold", no_wrap=True)
+    table.add_column("Path", style="dim")
+    for folder in folders:
+        table.add_row(folder.get("name", ""), folder.get("path", ""))
+    table.add_row("[dim]→ Zed settings[/]", str(zed_settings_path))
+    table.add_row("[dim]→ Launch script[/]", str(launch_script_path))
+    console.print(table)
+    console.print()
+
+    confirm: bool = questionary.confirm("Convert to Zed?", default=True, style=Q_STYLE).ask()
+    if not confirm:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    settings_out, script_out = vscode_to_zed(ws_file, config)
+
+    console.print(f"\n[green]✔  Zed settings :[/] {settings_out}")
+    console.print(f"[green]✔  Launch script:[/] {script_out}\n")
+
+
+# ============================================================================
+# to-vscode command
+# ============================================================================
+
+
+@app.command(name="to-vscode")
+def to_vscode() -> None:
+    """[bold blue]Convert[/] a Zed workspace back to VS Code [cyan].code-workspace[/] format.
+
+    Discovers tasks from [cyan]{slug}_open_in_zed.sh[/] files in the workspaces
+    directory, reads the folder list, and generates the VS Code workspace file.
+
+    Run [bold]sync-settings[/] afterwards to re-apply the full template.
+    """
+    config = load_config()
+
+    scripts = sorted(config.workspaces_dir.glob("*_open_in_zed.sh"))
+    if not scripts:
+        console.print("[dim]No Zed workspaces found (no *_open_in_zed.sh files in workspaces directory).[/]")
+        raise typer.Exit(0)
+
+    slugs = sorted({s.stem[: -len("_open_in_zed")] for s in scripts})
+
+    slug: str = questionary.select(
+        "Select Zed workspace to convert to VS Code:",
+        choices=slugs,
+        style=Q_STYLE,
+    ).ask()
+
+    if not slug:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    folder_paths = read_zed_launch_script_paths(slug, config)
+    ws_out_path = config.workspaces_dir / f"{slug}.code-workspace"
+
+    if not folder_paths:
+        console.print(f"[yellow]⚠  No folder paths found in launch script for '{slug}'.[/]")
+        raise typer.Exit(1)
+
+    table = Table(box=box.ROUNDED, border_style="dim", header_style="bold cyan", show_header=True)
+    table.add_column("Folder path", style="dim")
+    for p in folder_paths:
+        table.add_row(p)
+    console.print(table)
+    console.print(f"\n  [dim]→ Workspace:[/] {ws_out_path}\n")
+
+    confirm: bool = questionary.confirm("Generate VS Code workspace?", default=True, style=Q_STYLE).ask()
+    if not confirm:
+        console.print("[dim]Aborted.[/]")
+        raise typer.Exit(0)
+
+    try:
+        ws_path = zed_to_vscode(slug, config)
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/] {exc}")
+        raise typer.Exit(1)
+
+    console.print(f"\n[green]✔  Workspace:[/] {ws_path}")
+    console.print("[dim]Run [cyan]task-workspace sync-settings[/] to re-apply the full VS Code template.[/]\n")
 
 
 # ============================================================================
