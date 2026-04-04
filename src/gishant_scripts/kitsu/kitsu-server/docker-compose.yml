@@ -39,7 +39,7 @@ services:
       - DB_DATABASE=zoudb
       - KV_HOST=redis
       - KV_PORT=6379
-      - SECRET_KEY=bb768d5d3c096cb339d681b123ee44f0dba000d2e91875abdd0f93df1f4a71b1
+      - SECRET_KEY=aingaiJio0BaeCoiKohkaiziep3coteo
       - PREVIEW_FOLDER=/opt/zou/previews
       - TMP_DIR=/opt/zou/tmp
     depends_on:
@@ -67,7 +67,7 @@ services:
       - DB_DATABASE=zoudb
       - KV_HOST=redis
       - KV_PORT=6379
-      - SECRET_KEY=bb768d5d3c096cb339d681b123ee44f0dba000d2e91875abdd0f93df1f4a71b1
+      - SECRET_KEY=aingaiJio0BaeCoiKohkaiziep3coteo
       - PREVIEW_FOLDER=/opt/zou/previews
       - TMP_DIR=/opt/zou/tmp
     depends_on:
