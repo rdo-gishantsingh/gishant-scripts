@@ -122,6 +122,7 @@ def _ask_base_branch(repo_name: str, branch_name: str, repo_path: Path) -> str |
 @app.command()
 def new(
     dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Preview without creating anything."),
+    no_workspace: bool = typer.Option(False, "--no-workspace", help="Create worktrees only; skip writing the VS Code workspace file."),
 ) -> None:
     """[bold cyan]Interactive wizard[/] — create fresh worktrees + a VS Code workspace for a new issue.
 
@@ -201,10 +202,13 @@ def new(
         base = base_branches[name]
         base_label = f" [dim](from {base})[/]" if base else ""
         table.add_row("", f"[dim]• {table_repo_name(name)}[/]{base_label}")
-    table.add_row(
-        "Workspace file",
-        f"[dim]{config.workspaces_dir / f'{issue_slug}.code-workspace'}[/]",
-    )
+    if no_workspace:
+        table.add_row("Workspace file", "[dim]skipped (--no-workspace)[/]")
+    else:
+        table.add_row(
+            "Workspace file",
+            f"[dim]{config.workspaces_dir / f'{issue_slug}.code-workspace'}[/]",
+        )
     table.add_row("Worktrees root", f"[dim]{config.worktrees_dir / issue_slug}[/]")
     if dry_run:
         table.add_row("Mode", "[yellow bold]DRY RUN[/]")
@@ -236,7 +240,8 @@ def new(
             worktree_paths[display_name] = result
         console.print()
 
-    ws_dict = build_task_workspace(issue_slug, selected_repos, worktree_paths, config, adopted_repos=set())
+    if not no_workspace:
+        ws_dict = build_task_workspace(issue_slug, selected_repos, worktree_paths, config, adopted_repos=set())
 
     if dry_run:
         console.print(
@@ -247,24 +252,20 @@ def new(
         )
         return
 
-    ws_file = write_workspace_file(issue_slug, ws_dict, config)
-    console.print(f"[green]✔  Workspace file:[/] {ws_file}")
+    ws_file: Path | None = None
+    if not no_workspace:
+        ws_file = write_workspace_file(issue_slug, ws_dict, config)
+        console.print(f"[green]✔  Workspace file:[/] {ws_file}")
 
-    open_now: bool = questionary.confirm("Open in VS Code now?", default=True, style=Q_STYLE).ask()
-    if open_now:
-        open_workspace_in_code(ws_file)
+        open_now: bool = questionary.confirm("Open in VS Code now?", default=True, style=Q_STYLE).ask()
+        if open_now:
+            open_workspace_in_code(ws_file)
 
-    console.print(
-        Panel.fit(
-            f"[bold green]Task '{issue_slug}' is ready![/]\n\n"
-            f"[dim]Workspace :[/]  {ws_file}\n"
-            f"[dim]Worktrees :[/]  {issue_wt_root}\n\n"
-            "[dim]When done:[/]  "
-            "[cyan]gishant task-workspace cleanup[/]",
-            border_style="green",
-            padding=(0, 2),
-        )
-    )
+    summary_lines = f"[bold green]Task '{issue_slug}' is ready![/]\n\n"
+    if ws_file:
+        summary_lines += f"[dim]Workspace :[/]  {ws_file}\n"
+    summary_lines += f"[dim]Worktrees :[/]  {issue_wt_root}\n\n[dim]When done:[/]  [cyan]gishant task-workspace cleanup[/]"
+    console.print(Panel.fit(summary_lines, border_style="green", padding=(0, 2)))
 
 
 # ============================================================================
