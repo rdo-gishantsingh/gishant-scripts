@@ -260,15 +260,51 @@ restore_database() {
             docker compose cp "$backup_file" "${db_service}:/tmp/restore.dump"
         fi
 
-        log "$label: Restoring with pg_restore (objects logged as they are restored)..."
-        docker compose exec -T "$db_service" pg_restore \
-            -U "$db_user" \
-            -d "$db_name" \
-            -j "$(nproc)" \
-            -v \
-            --no-owner \
-            --no-acl \
-            /tmp/restore.dump || true
+        # Count total items in the dump for progress tracking
+        local total_items
+        total_items=$(docker compose exec -T "$db_service" \
+            pg_restore -l /tmp/restore.dump 2>/dev/null | grep -c "^[0-9]")
+
+        if [[ $INTERACTIVE -eq 1 ]] && [[ "$total_items" -gt 0 ]]; then
+            log "$label: Restoring $total_items items with pg_restore..."
+
+            # Run pg_restore with -v, parse stderr line count into a progress bar.
+            # Each verbose line ~ one restored item. Stderr is piped through awk
+            # which redraws a single terminal line with a bar and percentage.
+            docker compose exec -T "$db_service" pg_restore \
+                -U "$db_user" \
+                -d "$db_name" \
+                -j "$(nproc)" \
+                -v \
+                --no-owner \
+                --no-acl \
+                /tmp/restore.dump 2>&1 >/dev/null \
+            | awk -v total="$total_items" '
+                BEGIN { count = 0; bar_width = 30 }
+                {
+                    count++
+                    pct = (count > total) ? 100 : int(count * 100 / total)
+                    filled = int(pct * bar_width / 100)
+                    empty = bar_width - filled
+                    bar = ""
+                    for (i = 0; i < filled; i++) bar = bar "#"
+                    for (i = 0; i < empty;  i++) bar = bar "-"
+                    printf "\r  Restoring: %d/%d items [%s] %d%%", count, total, bar, pct
+                }
+                END { printf "\n" }
+            ' || true
+        else
+            # Non-interactive (cron) - run silently, log only errors
+            log "$label: Restoring with pg_restore (non-interactive, errors only)..."
+            docker compose exec -T "$db_service" pg_restore \
+                -U "$db_user" \
+                -d "$db_name" \
+                -j "$(nproc)" \
+                --no-owner \
+                --no-acl \
+                /tmp/restore.dump 2>&1 \
+            | grep -i "error" || true
+        fi
 
         docker compose exec -T "$db_service" rm /tmp/restore.dump
 
