@@ -81,21 +81,27 @@ def _parse_env_file(body: str) -> dict[str, str]:
 
 
 def _default_ssh_reader(target: Target) -> str:
-    """Default reader: ``ssh <target> "cat ~/.rdo/.env"``.
+    """Read ``~/.rdo/.env`` — locally for linux, via SSH for windows.
 
-    Uses ``cat`` even on Windows (Git Bash / OpenSSH for Windows both ship it
-    in practice, and pwsh inside cmd.exe OpenSSH produces mangled output for
-    backslash paths — see tools notes). The target's ``~`` is resolved
-    server-side by the login shell.
+    The CLI always runs on the office Linux box (invoked via SSH from WSL).
+    For the linux target we therefore read the file directly from disk.
+    For the windows target we SSH from the Linux box to the Windows box.
     """
+    if target == "linux":
+        import pathlib as _pl  # noqa: PLC0415
+        env_path = _pl.Path.home() / ".rdo" / ".env"
+        if not env_path.exists():
+            msg = f"~/.rdo/.env not found at {env_path}; cannot validate test server config"
+            raise TestServerConfigError(msg)
+        return env_path.read_text(encoding="utf-8")
+
+    # Windows: SSH from the Linux box.
     host = _TARGET_HOSTS[target]
-    if target == "windows":
-        # On Windows, the default shell for SSH is pwsh 7 per the Forge adapter.
-        # Use Get-Content with the user profile; it handles backslash paths.
-        cmd = ["ssh", "-o", "BatchMode=yes", host, "pwsh", "-NoProfile", "-NonInteractive", "-Command",
-               "Get-Content -Raw $HOME\\.rdo\\.env"]
-    else:
-        cmd = ["ssh", "-o", "BatchMode=yes", host, "cat ~/.rdo/.env"]
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", host,
+        "pwsh", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-Content -Raw $HOME\\.rdo\\.env",
+    ]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if proc.returncode != 0:
         msg = (
@@ -104,6 +110,7 @@ def _default_ssh_reader(target: Target) -> str:
         )
         raise TestServerConfigError(msg)
     return proc.stdout
+
 
 
 # ---------------------------------------------------------------------------
