@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
-from gishant_scripts.diagnostic import result_fetcher, ssh_runner, test_server_guard
+from gishant_scripts.diagnostic import ayon_env, result_fetcher, ssh_runner, test_server_guard
 
 DIAGNOSTIC_BASE_LINUX = "/tech/users/gisi/dev/_diagnostic"
 
@@ -29,31 +29,6 @@ class DiagnosticRun:
     log_path: Path
 
 
-def _build_context_env(
-    project_name: str,
-    folder_path: str,
-    bundle_name: str | None,
-    app_name: str,
-    site_id: str | None,
-    workdir: str | None,
-) -> dict[str, str]:
-    """Return the AYON context env vars the diagnostic script expects."""
-    env: dict[str, str] = {
-        "AYON_PROJECT_NAME": project_name,
-        "AYON_FOLDER_PATH": folder_path,
-        "AYON_APP_NAME": app_name,
-        "AYON_HEADLESS_MODE": "1",
-        "QT_QPA_PLATFORM": "offscreen",
-    }
-    if bundle_name:
-        env["AYON_BUNDLE_NAME"] = bundle_name
-    if site_id:
-        env["AYON_SITE_ID"] = site_id
-    if workdir:
-        env["AYON_WORKDIR"] = workdir
-    return env
-
-
 def run_maya(
     script_path_linux: str,
     project_name: str,
@@ -68,12 +43,13 @@ def run_maya(
     runner: ssh_runner.LinuxSshRunner | None = None,
     fetch: object = result_fetcher.fetch_result,
     guard: object = test_server_guard.resolve_and_validate_test_env,
+    env_resolver: Callable[..., dict[str, str]] = ayon_env.resolve_ayon_env,
 ) -> DiagnosticRun:
     """Run a Maya diagnostic script on the Linux box.
 
-    ``runner``, ``fetch``, ``guard`` are injected for testability. In
-    production they default to the real SSH runner, SSH-fetched result, and
-    test-server guard respectively.
+    ``runner``, ``fetch``, ``guard``, and ``env_resolver`` are injected for
+    testability. In production they default to the real runner, result fetcher,
+    test-server guard, and AYON env resolver.
     """
     runner = runner or ssh_runner.LinuxSshRunner()
     issue = issue_name or Path(script_path_linux).parent.name
@@ -83,16 +59,23 @@ def run_maya(
     local_cache = Path.home() / ".cache" / "gishant-diagnostic" / issue
     live_log = local_cache / "maya.log"
 
-    test_env = guard("linux")
-    ctx_env = _build_context_env(
+    full_env = env_resolver(
         project_name=project_name,
         folder_path=folder_path,
-        bundle_name=bundle_name,
-        app_name=app_name,
-        site_id=site_id,
-        workdir=workdir,
+        task_name=None,
+        target="linux",
     )
-    full_env = {**test_env, **ctx_env}
+    if bundle_name is not None:
+        full_env["AYON_BUNDLE_NAME"] = bundle_name
+    if app_name is not None:
+        full_env["AYON_APP_NAME"] = app_name
+    if site_id is not None:
+        full_env["AYON_SITE_ID"] = site_id
+    if workdir is not None:
+        full_env["AYON_WORKDIR"] = workdir
+
+    # Guard remains the policy choke-point for test-only credentials.
+    full_env.update(guard("linux"))
 
     exit_code = runner.run(
         script_path_linux=script_path_linux,
@@ -115,8 +98,6 @@ def run_maya(
         except result_fetcher.ResultFetchError:
             status = "error"
     else:
-        # Best-effort fetch even on non-zero; diagnostic scripts sometimes
-        # write result JSON before failing.
         try:
             result_local = fetch(runner.host, result_path_linux, local_cache)
             result_payload = json.loads(result_local.read_text(encoding="utf-8"))

@@ -130,10 +130,10 @@ class TestPs1Builder:
             "AYON_PROJECT_NAME": "P",
         }
         return ps1_builder.build(
-            script_drive="Z:\\script.py",
-            uproject_drive="P:\\x.uproject",
+            script_path_windows="Z:\\script.py",
+            uproject_path_windows="P:\\x.uproject",
             env=env,
-            output_log_drive="Z:\\log.txt",
+            output_log_path_windows="Z:\\log.txt",
         )
 
     def test_contains_map_drives(self):
@@ -165,6 +165,12 @@ class TestPs1Builder:
         out = self._sample()
         assert "Tee-Object" in out
         assert "'Z:\\log.txt'" in out
+
+    def test_runtime_dependency_packages_are_added_to_pythonpath(self):
+        out = self._sample()
+        assert "$candidateRaw = $env:AYON_LAUNCHER_STORAGE_CANDIDATES" in out
+        assert "$candidateRaw.Split('|')" in out
+        assert "Get-ChildItem -Path $depRoot -Directory -Filter '*.zip'" in out
 
 
 # ---------------------------------------------------------------------------
@@ -239,9 +245,12 @@ class TestSshRunner:
         fake_proc.__exit__ = MagicMock(return_value=False)
         return fake_proc
 
-    def test_linux_runner_invokes_ssh_bash_s(self, tmp_path):
+    def test_linux_runner_invokes_local_bash_when_mode_local(self, tmp_path):
         fake = self._stub_popen()
-        with patch("gishant_scripts.diagnostic.ssh_runner.subprocess.Popen", return_value=fake) as popen_mock:
+        with (
+            patch("gishant_scripts.diagnostic.ssh_runner.resolve_linux_exec_mode", return_value="local"),
+            patch("gishant_scripts.diagnostic.ssh_runner.subprocess.Popen", return_value=fake) as popen_mock,
+        ):
             runner = ssh_runner.LinuxSshRunner()
             rc = runner.run(
                 script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
@@ -261,6 +270,28 @@ class TestSshRunner:
         payload = fake.stdin.write.call_args[0][0]
         assert "maya" in payload
         assert "source " in payload
+
+    def test_linux_runner_invokes_ssh_bash_when_mode_ssh(self, tmp_path):
+        fake = self._stub_popen()
+        with (
+            patch("gishant_scripts.diagnostic.ssh_runner.resolve_linux_exec_mode", return_value="ssh"),
+            patch("gishant_scripts.diagnostic.ssh_runner.subprocess.Popen", return_value=fake) as popen_mock,
+        ):
+            runner = ssh_runner.LinuxSshRunner()
+            rc = runner.run(
+                script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
+                env={"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"},
+                issue_dir_linux="/tech/users/gisi/dev/_diagnostic/issues/X",
+                timeout_s=30,
+                live_log_local=tmp_path / "maya.log",
+            )
+        assert rc == 0
+        argv = popen_mock.call_args[0][0]
+        assert argv[0] == "ssh"
+        assert "gisi@10.1.69.24" in argv
+        assert argv[-1] == "bash -s"
+        payload = fake.stdin.write.call_args[0][0]
+        assert "maya" in payload
 
     def test_windows_runner_invokes_ssh_pwsh_remote_not_local_pwsh(self, tmp_path):
         """REGRESSION: the local-pwsh bug must never return — argv[0] is ssh."""
@@ -319,6 +350,19 @@ class TestMayaRunnerFacade:
         def fake_guard(target):  # noqa: ARG001
             return {"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"}
 
+        def fake_env_resolver(**kwargs):
+            assert kwargs["project_name"] == "P"
+            assert kwargs["folder_path"] == "/ep01/sh010"
+            assert kwargs["target"] == "linux"
+            return {
+                "AYON_SERVER_URL": "http://prod-should-be-overridden",
+                "AYON_API_KEY": "old-key",
+                "AYON_PROJECT_NAME": kwargs["project_name"],
+                "AYON_FOLDER_PATH": kwargs["folder_path"],
+                "AYON_APP_NAME": "maya/2025",
+                "PYTHONPATH": "/tmp/mock-pythonpath",
+            }
+
         run = run_maya(
             script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
             project_name="P",
@@ -329,6 +373,7 @@ class TestMayaRunnerFacade:
             runner=fake_runner,
             fetch=fake_fetch,
             guard=fake_guard,
+            env_resolver=fake_env_resolver,
         )
 
         assert isinstance(run, DiagnosticRun)
@@ -343,6 +388,7 @@ class TestMayaRunnerFacade:
         assert captured_env["AYON_BUNDLE_NAME"] == "my_bundle"
         assert captured_env["AYON_WORKDIR"] == "/tech/work"
         assert captured_env["AYON_SITE_ID"] == "site-a"
+        assert captured_env["PYTHONPATH"] == "/tmp/mock-pythonpath"
 
     def test_guard_exception_propagates(self):
         from gishant_scripts.diagnostic.test_server_guard import TestServerConfigError
@@ -357,13 +403,14 @@ class TestMayaRunnerFacade:
                 folder_path="/f",
                 runner=MagicMock(host="h", run=MagicMock(return_value=0)),
                 guard=bad_guard,
+                env_resolver=lambda **kwargs: {},
             )
 
 
 class TestUnrealRunnerFacade:
     """Verify uproject conversion + env composition for Unreal."""
 
-    def test_uproject_linux_to_drive(self):
+    def test_uproject_linux_to_unc(self):
         fake_runner = MagicMock()
         fake_runner.host = "gisi@10.1.69.122"
         captured: dict = {}
@@ -383,6 +430,19 @@ class TestUnrealRunnerFacade:
         def fake_guard(target):  # noqa: ARG001
             return {"AYON_SERVER_URL": "http://10.1.69.24:5000", "AYON_API_KEY": "k"}
 
+        def fake_env_resolver(**kwargs):
+            assert kwargs["project_name"] == "P"
+            assert kwargs["folder_path"] == "/f"
+            assert kwargs["target"] == "windows"
+            return {
+                "AYON_SERVER_URL": "http://wrong",
+                "AYON_API_KEY": "old-key",
+                "AYON_PROJECT_NAME": kwargs["project_name"],
+                "AYON_FOLDER_PATH": kwargs["folder_path"],
+                "AYON_APP_NAME": "unreal/5.5",
+                "PYTHONPATH": r"C:\mock\site-packages",
+            }
+
         run = run_unreal(
             script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
             project_name="P",
@@ -392,10 +452,11 @@ class TestUnrealRunnerFacade:
             runner=fake_runner,
             fetch=fake_fetch,
             guard=fake_guard,
+            env_resolver=fake_env_resolver,
         )
         assert run.status == "pass"
         assert run.dcc == "unreal"
-        assert captured["uproject_drive"] == "P:\\Barbie\\Barbie.uproject"
+        assert captured["uproject_drive"] == "\\\\rdoshyd\\projects\\Barbie\\Barbie.uproject"
         assert captured["env"]["AYON_BUNDLE_NAME"] == "b"
 
     def test_uproject_drive_passthrough(self):
@@ -429,3 +490,18 @@ class TestUnrealRunnerFacade:
         )
         assert captured["uproject_drive"] == "P:\\already\\drive.uproject"
         assert run.status == "fail"
+
+    def test_unreal_runner_rejects_non_windows_ssh_host(self):
+        fake_runner = MagicMock()
+        fake_runner.host = "localhost"
+
+        with pytest.raises(ValueError, match="SSH-only"):
+            run_unreal(
+                script_path_linux="/tech/x/issues/Y/s.py",
+                project_name="P",
+                folder_path="/f",
+                uproject_path="P:\\already\\drive.uproject",
+                runner=fake_runner,
+                fetch=lambda *_args, **_kwargs: Path("/tmp/not-used"),
+                guard=lambda _target: {"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"},
+            )
