@@ -252,9 +252,9 @@ class TestSshRunner:
             )
         assert rc == 0
         argv = popen_mock.call_args[0][0]
-        assert argv[0] == "ssh"
-        assert "gisi@10.1.69.24" in argv
-        assert argv[-1] == "bash -s"
+        assert argv == ["bash", "-s"]  # local execution on Linux box
+        assert "gisi@10.1.69.24" not in argv  # must NOT SSH to self
+        # argv[-1] removed: bash -s is now the full argv
         # Regression guard: Linux runner must NOT be local pwsh.
         assert argv[0] != "pwsh"
         # Payload piped via stdin, not argv.
