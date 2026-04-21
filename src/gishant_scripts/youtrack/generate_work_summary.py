@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
@@ -177,6 +178,188 @@ def load_work_logs(worktrees_dir: Path | None = None) -> dict[str, str]:
     return work_logs
 
 
+def fetch_github_prs_by_ticket(
+    weeks: int,
+    gh_org: str = "redefineoriginals",
+    gh_author: str = "rdo-gishantsingh",
+) -> dict[str, list[dict]]:
+    """Fetch GitHub PRs authored by the user and group them by YouTrack ticket ID.
+
+    Uses the ``gh`` CLI search API to find PRs updated in the last N weeks.
+    Ticket IDs are extracted from the PR title first (e.g. ``PIPE-693:``), then
+    from the branch ``head.ref`` as a fallback for PRs without a ticket prefix.
+
+    Args:
+        weeks: Number of weeks to look back.
+        gh_org: GitHub organisation to search within.
+        gh_author: GitHub login of the PR author.
+
+    Returns:
+        Dict mapping ticket ID (e.g. ``"PIPE-693"``) to a list of PR dicts.
+        PRs that cannot be tied to any ticket are stored under the key
+        ``"UNLINKED"`` and are excluded from issue enrichment.
+
+    """
+    since_date = (datetime.now() - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+    ticket_re = re.compile(r"\b(PIPE|USER)-(\d+)\b", re.IGNORECASE)
+
+    try:
+        proc = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"search/issues?q=author:{gh_author}+type:pr+updated:>={since_date}+org:{gh_org}&per_page=100",
+                "--jq",
+                ".items",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return {}
+        items = json.loads(proc.stdout)
+    except Exception:  # gh not installed, network unreachable, or malformed JSON
+        return {}
+
+    prs_by_ticket: dict[str, list[dict]] = {}
+
+    for item in items:
+        title: str = item.get("title", "")
+        repo_url: str = item.get("repository_url", "")
+        repo_name = repo_url.rsplit("/", 1)[-1] if repo_url else ""
+        pr_number = item.get("number")
+        state: str = item.get("state", "")
+
+        # Try to extract ticket ID from the PR title first.
+        m = ticket_re.search(title)
+        ticket_id: str | None = f"{m.group(1).upper()}-{m.group(2)}" if m else None
+
+        # Fallback: fetch the branch head.ref and parse the ticket from there.
+        if not ticket_id and repo_name and pr_number:
+            try:
+                br = subprocess.run(
+                    [
+                        "gh",
+                        "api",
+                        f"repos/{gh_org}/{repo_name}/pulls/{pr_number}",
+                        "--jq",
+                        ".head.ref",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if br.returncode == 0:
+                    m = ticket_re.search(br.stdout.strip())
+                    ticket_id = f"{m.group(1).upper()}-{m.group(2)}" if m else None
+            except Exception:  # per-PR fallback failure is non-fatal
+                pass
+
+        pr_entry: dict = {
+            "number": pr_number,
+            "title": title,
+            "url": item.get("html_url", ""),
+            "state": state,
+            "repo": repo_name,
+            "updated_at": item.get("updated_at", ""),
+            "merged_at": None,
+        }
+
+        # Resolve merge status for closed PRs — one extra call per closed PR.
+        if state == "closed" and repo_name and pr_number:
+            try:
+                mr = subprocess.run(
+                    [
+                        "gh",
+                        "api",
+                        f"repos/{gh_org}/{repo_name}/pulls/{pr_number}",
+                        "--jq",
+                        ".merged_at",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if mr.returncode == 0:
+                    raw = mr.stdout.strip().strip('"')
+                    pr_entry["merged_at"] = raw if raw not in ("null", "", "None") else None
+            except Exception:  # merge status is a nice-to-have; don't fail the whole run
+                pass
+
+        prs_by_ticket.setdefault(ticket_id or "UNLINKED", []).append(pr_entry)
+
+    return prs_by_ticket
+
+
+def fetch_worktree_commits(
+    weeks: int,
+    worktrees_dir: Path | None = None,
+    git_author: str = "Gishant",
+) -> dict[str, list[str]]:
+    """Scan worktree sub-repos for recent commits and group them by YouTrack ticket ID.
+
+    Each directory under ``~/dev/worktrees/`` is a multi-repo workspace (one
+    sub-directory per package), not a single git repo.  The function iterates
+    every sub-directory and runs ``git log --since --oneline --author``.
+
+    Args:
+        weeks: Number of weeks to look back.
+        worktrees_dir: Parent worktrees directory.  Defaults to ``~/dev/worktrees``.
+        git_author: Author name passed to ``git log --author`` (partial match).
+
+    Returns:
+        Dict mapping ticket ID to a list of ``"[repo] <hash> <message>"`` strings.
+
+    """
+    if worktrees_dir is None:
+        worktrees_dir = Path.home() / "dev" / "worktrees"
+
+    if not worktrees_dir.is_dir():
+        return {}
+
+    since_date = (datetime.now() - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+    slug_re = re.compile(r"^(pipe|user)-(\d+)", re.IGNORECASE)
+    commits_by_ticket: dict[str, list[str]] = {}
+
+    for slug_dir in sorted(worktrees_dir.iterdir()):
+        if not slug_dir.is_dir():
+            continue
+        m = slug_re.match(slug_dir.name)
+        if not m:
+            continue
+        ticket_id = f"{m.group(1).upper()}-{m.group(2)}"
+
+        for repo_dir in sorted(slug_dir.iterdir()):
+            if not repo_dir.is_dir():
+                continue
+            try:
+                proc = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "log",
+                        f"--since={since_date}",
+                        "--oneline",
+                        f"--author={git_author}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            except Exception:  # git not on PATH, or directory is not a repo
+                continue
+            if proc.returncode != 0 or not proc.stdout.strip():
+                continue
+            for line in proc.stdout.strip().splitlines():
+                commits_by_ticket.setdefault(ticket_id, []).append(
+                    f"[{repo_dir.name}] {line}"
+                )
+
+    return commits_by_ticket
+
+
 def filter_issues_by_time(issues: list[dict], weeks: int) -> list[dict]:
     """Filter issues that were updated in the last N weeks.
 
@@ -233,6 +416,8 @@ def prepare_issues_for_summary(
     issues: list[dict],
     weeks: int,
     work_logs: dict[str, str] | None = None,
+    github_prs: dict[str, list[dict]] | None = None,
+    worktree_commits: dict[str, list[str]] | None = None,
     user_login: str | None = None,
 ) -> dict:
     """Prepare issues data for Gemini AI processing.
@@ -242,6 +427,12 @@ def prepare_issues_for_summary(
         weeks: Number of weeks (for context).
         work_logs: Optional dict mapping ticket ID to WORK_LOG.md content.
             When provided, each matching issue gets a ``work_log`` field injected.
+        github_prs: Optional dict mapping ticket ID to a list of GitHub PR dicts
+            fetched from the GitHub search API.  Each PR dict contains ``title``,
+            ``url``, ``state``, ``merged_at``, and ``repo``.
+        worktree_commits: Optional dict mapping ticket ID to a list of recent git
+            commit one-liners (``"[repo] <hash> <subject>"`` format) from the
+            matching worktree directory.
         user_login: Login of the report owner. Used to compute ``user_role`` per
             issue so Gemini can decide whether to include, skip, or flag a handoff.
 
@@ -264,6 +455,28 @@ def prepare_issues_for_summary(
             if log_content:
                 filtered_issue["work_log"] = log_content
 
+        # Inject GitHub PR data — concrete evidence of what was authored,
+        # raised for review, and merged.  Prevents hallucination by grounding
+        # Gemini in real URLs and merge statuses rather than comment inference.
+        if github_prs:
+            ticket_id = (filtered_issue.get("id") or "").upper()
+            prs = github_prs.get(ticket_id, [])
+            if prs:
+                filtered_issue["github_prs"] = prs
+                for pr in prs:
+                    url = pr.get("url", "")
+                    if url and url not in filtered_issue.get("github_links", []):
+                        filtered_issue.setdefault("github_links", []).append(url)
+
+        # Inject recent git commits from the matching worktree — a commit-level
+        # audit trail so Gemini can describe what was implemented rather than
+        # guessing from issue titles or sparse comment threads.
+        if worktree_commits:
+            ticket_id = (filtered_issue.get("id") or "").upper()
+            commits = worktree_commits.get(ticket_id, [])
+            if commits:
+                filtered_issue["recent_commits"] = commits
+
         # Compute user_role so the prompt can apply ownership-aware filtering.
         #
         # Roles (mutually exclusive, in priority order):
@@ -283,7 +496,11 @@ def prepare_issues_for_summary(
             recent_user_comments = sum(
                 1 for c in filtered_issue.get("comments", []) if c.get("author_login") == user_login
             )
-            had_recent_activity = recent_user_comments > 0
+            has_pr_activity = bool(filtered_issue.get("github_prs"))
+            has_commit_activity = bool(filtered_issue.get("recent_commits"))
+            had_recent_activity = (
+                recent_user_comments > 0 or has_pr_activity or has_commit_activity
+            )
             ever_commented = filtered_issue.get("user_commented", False)
 
             if is_reporter and not is_assignee and not had_recent_activity:
@@ -391,6 +608,12 @@ For each issue, read the comments chronologically and extract full narrative sen
 | 🚫 *Blockers*       | Specific obstacles — name the blocking ticket, person, or technical issue.                               |
 
 Some issues include a `work_log` field. This contains timestamped technical notes written during Claude AI development sessions — they record exactly what was implemented, decisions made, and what remains. **When `work_log` is present, treat it as the most authoritative source for implementation detail.** It supplements the YouTrack description and comments; if they conflict, the work log reflects ground truth.
+
+Each issue may also contain:
+- `github_prs`: structured list of PRs authored by the user in this period (fields: `title`, `url`, `state`, `merged_at`, `repo`).  A PR with `merged_at` set is *completed* work.  An open PR is *in-progress* work.  List every PR URL explicitly under ✅ *Done* or 🔨 *Current Work* as appropriate.
+- `recent_commits`: list of git commit one-liners from the matching worktree (format: `[repo] <hash> <subject>`).  Use these to describe exactly what was implemented — they are ground truth for technical detail.
+
+When `github_prs` or `recent_commits` are present, **do not infer or guess** what was done — extract it directly from those fields.  If none of these supplementary fields are present, fall back to comment text.
 
 Rules for bullet content:
 - Write full sentences, not fragments. E.g. "Fixed the FPS rounding issue so Unreal defaults to 23.976 for the Barbie project." not "Fixed FPS".
@@ -651,6 +874,8 @@ def main(
         # Load local WORK_LOG.md files from worktrees — these contain Claude session notes
         # that capture technical detail not always reflected in the YouTrack ticket.
         work_logs = load_work_logs()
+        github_prs = fetch_github_prs_by_ticket(weeks)
+        worktree_commits = fetch_worktree_commits(weeks)
 
         for idx, user_login in enumerate(user_logins, 1):
             label = user_login or "current user"
@@ -736,6 +961,8 @@ def main(
                     filtered_issues,
                     weeks,
                     work_logs=work_logs,
+                    github_prs=github_prs,
+                    worktree_commits=worktree_commits,
                     user_login=user_login or user_info.get("login"),
                 )
 
