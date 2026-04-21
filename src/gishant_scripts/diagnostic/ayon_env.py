@@ -18,6 +18,9 @@ from gishant_scripts.diagnostic.config import (
     WINDOWS,
     linux_to_windows_path,
 )
+from gishant_scripts.diagnostic.test_server_guard import (
+    resolve_and_validate_test_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,36 @@ _SRC = _PROJECT_ROOT / "src"
 _SITE_PKGS = _PROJECT_ROOT / ".venv" / "lib" / "python3.11" / "site-packages"
 _WIN_VENV_SITE_PKGS = r"C:\Users\gisi\.venvs\gishant-scripts\Lib\site-packages"
 _WIN_SYS_SITE_PKGS = r"C:\Users\gisi\AppData\Local\Programs\Python\Python311\Lib\site-packages"
+
+
+def _dedupe_keep_order(values: list[str]) -> list[str]:
+    """Return a de-duplicated list preserving first occurrence order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def _windows_storage_candidates(config_storage_dir: str) -> list[str]:
+    """Return candidate Windows launcher storage dirs in preferred order.
+
+    We prefer launcher-local/prod locations because they contain addon and
+    dependency payloads on the Windows host used by Unreal diagnostics.
+    """
+    user = os.getenv("USERNAME", "gisi")
+    local_appdata = os.getenv("LOCALAPPDATA", rf"C:\Users\{user}\AppData\Local")
+    ynput_base = pathlib.PureWindowsPath(local_appdata) / "Ynput"
+
+    candidates = [
+        str(ynput_base / "ayon-launcher-local"),
+        str(ynput_base / "ayon-launcher-prod"),
+        config_storage_dir,
+        str(ynput_base / "AYON"),
+    ]
+    return _dedupe_keep_order(candidates)
 
 
 def _read_site_id(is_windows: bool) -> str:
@@ -205,22 +238,40 @@ def resolve_ayon_env(
     path_sep = ";" if is_windows else ":"
     config = WINDOWS if is_windows else LINUX
 
+    # Always source diagnostic credentials from ~/.rdo/.env TEST variables.
+    # Intentionally resolve for linux because this file is guaranteed to exist
+    # on the office Linux box where diagnostics are orchestrated.
+    test_env = resolve_and_validate_test_env("linux")
+    test_server_url = test_env["AYON_SERVER_URL"]
+    test_api_key = test_env["AYON_API_KEY"]
+
     # -- Collect addon PYTHONPATH entries ------------------------------------
     addon_paths = list_all_addon_paths()
     python_paths: list[str] = []
 
     if is_windows:
+        win_storage_candidates = _windows_storage_candidates(str(WINDOWS.ayon_storage_dir))
+
         # Windows has its own addon storage — use addon folder names from
         # the manifest but prefix with the Windows storage base path.
-        win_addons_base = str(Path(WINDOWS.ayon_storage_dir) / "addons")
         for _addon_name, addon_dir in sorted(addon_paths.items()):
             folder_name = addon_dir.name  # e.g. "core_1.6.7+dev.rdo.4"
-            addon_path = f"{win_addons_base}\\{folder_name}"
-            python_paths.append(addon_path)
-            # Add vendor/python subdirs (contains qargparse, scriptsmenu, etc.)
-            if _addon_name == "core":
-                python_paths.append(f"{addon_path}\\ayon_core\\vendor\\python")
+            for storage_dir in win_storage_candidates:
+                win_addons_base = str(pathlib.PureWindowsPath(storage_dir) / "addons")
+                addon_path = f"{win_addons_base}\\{folder_name}"
+                python_paths.append(addon_path)
+                # Add vendor/python subdirs (contains qargparse, scriptsmenu, etc.)
+                if _addon_name == "core":
+                    python_paths.append(f"{addon_path}\\ayon_core\\vendor\\python")
     else:
+        # Prepend the maya addon's startup dir so Maya batch executes
+        # userSetup.py before processing the diagnostic script.
+        # This mirrors what the AYON launcher does via add_implementation_envs.
+        _maya_addon = addon_paths.get("maya")
+        if _maya_addon:
+            _startup = _maya_addon / "ayon_maya" / "startup"
+            if _startup.is_dir():
+                python_paths.insert(0, str(_startup))
         for _addon_name, addon_dir in sorted(addon_paths.items()):
             python_paths.append(str(addon_dir))
             if _addon_name == "core":
@@ -234,11 +285,12 @@ def resolve_ayon_env(
     dep_packages_dir = LINUX.ayon_storage_dir / "dependency_packages"
     if dep_packages_dir.is_dir():
         if is_windows:
-            win_dep_base = str(pathlib.Path(WINDOWS.ayon_storage_dir) / "dependency_packages")
-            for dep_zip in sorted(dep_packages_dir.glob("*.zip")):
-                python_paths.extend(
-                    f"{win_dep_base}\\{dep_zip.name}\\{subdir}" for subdir in ("dependencies", "runtime")
-                )
+            for storage_dir in win_storage_candidates:
+                win_dep_base = str(pathlib.PureWindowsPath(storage_dir) / "dependency_packages")
+                for dep_zip in sorted(dep_packages_dir.glob("*.zip")):
+                    python_paths.extend(
+                        f"{win_dep_base}\\{dep_zip.name}\\{subdir}" for subdir in ("dependencies", "runtime")
+                    )
         else:
             for dep_zip in sorted(dep_packages_dir.glob("*.zip")):
                 python_paths.extend(str(dep_zip / subdir) for subdir in ("dependencies", "runtime"))
@@ -250,16 +302,15 @@ def resolve_ayon_env(
         python_paths.extend([_WIN_SYS_SITE_PKGS, win_src, win_site_pkgs, _WIN_VENV_SITE_PKGS])
     else:
         python_paths.extend([str(_SRC), str(_SITE_PKGS)])
+    python_paths = _dedupe_keep_order(python_paths)
 
     # -- Storage dir --------------------------------------------------------
     storage_dir = str(LINUX.ayon_storage_dir)
     if is_windows:
-        storage_dir = str(config.ayon_storage_dir)
+        storage_dir = _windows_storage_candidates(str(config.ayon_storage_dir))[0]
 
     # -- Load API key from RDO shared credentials ----------------------------
-    api_key = os.environ.get("AYON_TEST_API_KEY", "")
-    if not api_key:
-        api_key = _load_api_key_from_dotenv()
+    api_key = test_api_key
 
     # -- Resolve active bundle name -----------------------------------------
     bundle_name = ""
@@ -268,14 +319,76 @@ def resolve_ayon_env(
 
         _prev_url = os.environ.get("AYON_SERVER_URL")
         _prev_key = os.environ.get("AYON_API_KEY")
-        os.environ["AYON_SERVER_URL"] = config.ayon_server_url
+        os.environ["AYON_SERVER_URL"] = test_server_url
         os.environ["AYON_API_KEY"] = api_key
-        resp = _ayon_api.get("bundles")
-        if resp.data:
-            for b in resp.data.get("bundles", []):
-                if b.get("isProduction"):
-                    bundle_name = b["name"]
-                    break
+        bundles_payload = _ayon_api.get_bundles() or {}
+        production_bundle = bundles_payload.get("productionBundle")
+        staging_bundle = bundles_payload.get("stagingBundle")
+        all_bundle_names = [
+            bundle.get("name")
+            for bundle in bundles_payload.get("bundles", [])
+            if bundle.get("name")
+        ]
+
+        # Preserve explicit override if user set AYON_BUNDLE_NAME manually.
+        explicit_bundle = os.environ.get("AYON_BUNDLE_NAME")
+        if explicit_bundle:
+            bundle_name = explicit_bundle
+
+        # Pick the best bundle for diagnostics:
+        # - must have non-empty core + host settings
+        # - prefer bundles that also define rdo_kitsu.server when addon is present
+        target_addon = "maya" if not is_windows else "unreal"
+        has_kitsu_addon = "rdo_kitsu" in addon_paths
+        candidates = [
+            c
+            for c in (bundle_name, production_bundle, staging_bundle, *all_bundle_names)
+            if c
+        ]
+        deduped_candidates = list(dict.fromkeys(candidates))
+        best_candidate = ""
+        best_score = -1
+        settings_variant = os.getenv("AYON_DEFAULT_SETTINGS_VARIANT", "production")
+        for candidate in deduped_candidates:
+            response = _ayon_api.get(
+                f"settings?bundle_name={candidate}&variant={settings_variant}&project_name={project_name}"
+            )
+            if response.status_code != 200:
+                continue
+
+            addon_settings = {
+                addon.get("name"): addon.get("settings") or {}
+                for addon in response.data.get("addons", [])
+            }
+            core_settings = addon_settings.get("core") or {}
+            host_settings = addon_settings.get(target_addon) or {}
+            if not (core_settings and host_settings):
+                continue
+
+            score = 2
+            if has_kitsu_addon:
+                kitsu_settings = addon_settings.get("rdo_kitsu") or {}
+                if "server" in kitsu_settings:
+                    score += 1
+                else:
+                    score -= 1
+
+            if score > best_score:
+                best_score = score
+                best_candidate = candidate
+
+            # Good enough: explicit or production/staging candidate with max score.
+            if score >= 3 and candidate in {explicit_bundle, production_bundle, staging_bundle}:
+                best_candidate = candidate
+                break
+
+        if best_candidate:
+            bundle_name = best_candidate
+
+        # Last-resort fallback to production bundle if everything is empty.
+        if not bundle_name:
+            bundle_name = production_bundle or staging_bundle or ""
+
         # Restore original env
         if _prev_url is not None:
             os.environ["AYON_SERVER_URL"] = _prev_url
@@ -286,7 +399,7 @@ def resolve_ayon_env(
 
     # -- Build env dict -----------------------------------------------------
     env: dict[str, str] = {
-        "AYON_SERVER_URL": config.ayon_server_url,
+        "AYON_SERVER_URL": test_server_url,
         "AYON_API_KEY": api_key,
         "AYON_BUNDLE_NAME": bundle_name,
         "AYON_PROJECT_NAME": project_name,
@@ -301,6 +414,9 @@ def resolve_ayon_env(
         "PYTHONPATH": path_sep.join(python_paths),
         "AYON_LAUNCHER_STORAGE_DIR": storage_dir,
         "AYON_LAUNCHER_LOCAL_DIR": storage_dir,
+        "AYON_LAUNCHER_STORAGE_CANDIDATES": "|".join(_windows_storage_candidates(str(config.ayon_storage_dir)))
+        if is_windows
+        else storage_dir,
         # Qt offscreen mode — prevents headless crashes when AYON imports
         # qtawesome/qtpy in environments without a display (e.g. UE -NullRHI).
         "QT_QPA_PLATFORM": "offscreen",

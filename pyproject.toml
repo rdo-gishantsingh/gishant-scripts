@@ -18,6 +18,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "questionary>=2.0",
     "shotgun-api3>=3.10.0",
+    "attrs>=26.1.0",
 ]
 
 [project.optional-dependencies]

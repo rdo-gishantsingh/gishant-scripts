@@ -1,8 +1,11 @@
 """CLI entry point for running diagnostic scripts inside Maya and Unreal.
 
-Dispatcher runs on Andromeda WSL. Each subcommand SSHes into exactly one
-target box (no hops). The ``pipeline`` subcommand runs Maya and Unreal in
-parallel via a thread pool.
+Maya supports dual execution modes:
+- local Linux execution when running on the office Linux host
+- WSL/other-hop execution via SSH to the Linux host
+
+Unreal executes via SSH to the Windows host. The ``pipeline`` subcommand
+runs Maya and Unreal in parallel via a thread pool.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ if TYPE_CHECKING:
 
 app = typer.Typer(
     name="dcc-run",
-    help="Run diagnostic scripts inside Maya (Linux) or Unreal (Windows) over SSH.",
+    help="Run diagnostic scripts inside Maya (Linux local/SSH) or Unreal (Windows via SSH).",
     no_args_is_help=True,
 )
 console = Console()

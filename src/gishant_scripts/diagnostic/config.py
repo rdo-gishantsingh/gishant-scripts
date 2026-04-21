@@ -1,7 +1,10 @@
 """Central configuration for diagnostic infrastructure (Maya on Linux, Unreal on Windows).
 
-Both runners execute LOCALLY on their target OS.  Agent-deck sessions SSH
-directly into the correct machine — no cross-machine SSH hops.
+Execution model:
+- Maya diagnostics can run locally on the office Linux host or over SSH,
+  depending on runtime mode resolution.
+- Unreal diagnostics are initiated from the current machine and executed on
+  Windows over SSH.
 
 All hardcoded defaults can be overridden via environment variables.
 """
@@ -69,8 +72,8 @@ class LinuxConfig:
 class WindowsConfig:
     """Paths and settings for the Windows (Unreal) side.
 
-    No ``ssh_host`` — the Unreal runner executes locally on Windows.
-    Agent-deck sessions SSH directly into the Windows machine.
+    Unreal diagnostics always run on Windows via SSH from the invoking machine.
+    This dataclass only stores Windows-side binary/path defaults.
     """
 
     unreal_bin: str = field(

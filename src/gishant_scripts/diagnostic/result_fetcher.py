@@ -1,8 +1,9 @@
-"""Fetch a diagnostic result JSON file off a target box via SSH.
+"""Fetch a diagnostic result JSON file from the target box.
 
-The runners emit ``<issue_dir>/results/<dcc>_result.json`` on the NAS; this
-module pulls that file back to the dispatcher's local cache via
-``ssh <host> "cat <path>"`` and validates the payload is well-formed JSON.
+For Linux-targeted runs the CLI executes on the office Linux machine itself,
+so result JSON files can be read directly from the NAS path. For Windows-
+targeted runs we still fall back to ``ssh <host> "cat <path>"`` and cache
+that payload locally.
 """
 
 from __future__ import annotations
@@ -25,12 +26,23 @@ class ResultMalformedError(ResultFetchError):
     """Raised when the fetched payload is not parseable JSON."""
 
 
+def _validate_json_payload(payload: str, source: str) -> None:
+    if not payload.strip():
+        raise ResultNotFoundError(f"result file is empty: {source}")
+    try:
+        json.loads(payload)
+    except json.JSONDecodeError as exc:
+        snippet = payload[:200].replace("\n", "\\n")
+        msg = f"result file is not valid JSON ({exc}); first 200 bytes: {snippet!r}"
+        raise ResultMalformedError(msg) from exc
+
+
 def fetch_result(
     ssh_host: str,
     remote_path_linux: str,
     local_cache_dir: Path,
 ) -> Path:
-    """Fetch a remote JSON result file and cache it locally.
+    """Fetch a result JSON file and cache it locally.
 
     Args:
         ssh_host: SSH target (e.g. ``"gisi@10.1.69.24"``).
@@ -42,12 +54,18 @@ def fetch_result(
         Path to the local cache file.
 
     Raises:
-        ResultNotFoundError: If ssh fails or stdout is empty.
-        ResultMalformedError: If stdout is not valid JSON.
-
+        ResultNotFoundError: If the result file is missing or empty.
+        ResultMalformedError: If the payload is not valid JSON.
     """
     local_cache_dir.mkdir(parents=True, exist_ok=True)
     local_path = local_cache_dir / Path(remote_path_linux).name
+
+    remote_path = Path(remote_path_linux)
+    if remote_path.exists():
+        payload = remote_path.read_text(encoding="utf-8")
+        _validate_json_payload(payload, str(remote_path))
+        local_path.write_text(payload, encoding="utf-8")
+        return local_path
 
     cmd = ["ssh", "-o", "BatchMode=yes", ssh_host, f"cat {shlex.quote(remote_path_linux)}"]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
@@ -60,16 +78,6 @@ def fetch_result(
         raise ResultNotFoundError(msg)
 
     payload = proc.stdout
-    if not payload.strip():
-        msg = f"remote result file is empty: {ssh_host}:{remote_path_linux}"
-        raise ResultNotFoundError(msg)
-
-    try:
-        json.loads(payload)
-    except json.JSONDecodeError as exc:
-        snippet = payload[:200].replace("\n", "\\n")
-        msg = f"remote result file is not valid JSON ({exc}); first 200 bytes: {snippet!r}"
-        raise ResultMalformedError(msg) from exc
-
+    _validate_json_payload(payload, f"{ssh_host}:{remote_path_linux}")
     local_path.write_text(payload, encoding="utf-8")
     return local_path
