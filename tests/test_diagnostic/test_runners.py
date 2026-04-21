@@ -1,431 +1,431 @@
-"""Integration tests for the DCC diagnostic infrastructure.
+"""Unit tests for the SSH-based diagnostic runners.
 
-These tests verify end-to-end functionality: local execution of Maya/Unreal
-batch, AYON context availability, and path conversions. Both runners execute
-locally on their target OS — no cross-machine SSH.
-
-Run with:
-    cd /tech/users/gisi/dev/repos/gishant-scripts
-    .venv/bin/python -m pytest tests/test_diagnostic/ -v
+All tests here are pure Python: path mapping, bash/ps1 string assembly,
+result fetching (mocked subprocess), runners (mocked Popen), and the thin
+facade layer (mocked ssh_runner + fetch). Integration tests that actually
+SSH into the office boxes are a separate concern, marked ``integration``
+and skipped by default.
 """
 
 from __future__ import annotations
 
-import sys
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gishant_scripts.diagnostic.config import (
-    LINUX,
-    WINDOWS,
-    linux_to_windows_path,
-    windows_to_linux_path,
+from gishant_scripts.diagnostic import (
+    bash_builder,
+    path_mapper,
+    ps1_builder,
+    result_fetcher,
+    ssh_runner,
 )
-
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-AYON_PROJECT = "Barbie_Nutcracker"
-AYON_FOLDER = "/episodes/ep01/bncro_01_0072/bncro_01_0072_0030"
-
+from gishant_scripts.diagnostic.maya_runner import DiagnosticRun, run_maya
+from gishant_scripts.diagnostic.unreal_runner import run_unreal
 
 # ---------------------------------------------------------------------------
-# Path mapping (unit tests — no external dependencies)
+# path_mapper
 # ---------------------------------------------------------------------------
 
 
-class TestPathMapping:
-    """Verify bidirectional path conversion between Linux and Windows."""
+class TestPathMapper:
+    """Bidirectional Linux <-> Windows path conversions, strict."""
 
-    def test_linux_to_windows_projects(self):
-        assert linux_to_windows_path("/projects/foo") == "P:\\foo"
+    def test_linux_to_drive_tech(self):
+        assert path_mapper.linux_to_drive("/tech/users/gisi") == "Z:\\users\\gisi"
 
-    def test_linux_to_windows_tech(self):
-        assert linux_to_windows_path("/tech/bar") == "Z:\\bar"
+    def test_linux_to_drive_projects(self):
+        assert path_mapper.linux_to_drive("/projects/Barbie") == "P:\\Barbie"
 
-    def test_linux_to_windows_unc(self):
-        assert linux_to_windows_path("/tech/bar", unc=True) == "\\\\rdoshyd\\tech\\bar"
+    def test_linux_to_drive_trailing_slash(self):
+        # Trailing slash should not change the mapping.
+        assert path_mapper.linux_to_drive("/tech/users/gisi/") == "Z:\\users\\gisi"
 
-    def test_linux_to_windows_unc_projects(self):
-        assert linux_to_windows_path("/projects/foo", unc=True) == "\\\\rdoshyd\\projects\\foo"
+    def test_linux_to_drive_root_only(self):
+        assert path_mapper.linux_to_drive("/tech").startswith("Z:\\")
 
-    def test_linux_to_windows_unmapped(self):
-        assert linux_to_windows_path("/home/user/file") == "/home/user/file"
+    def test_linux_to_drive_mixed_separators(self):
+        # Backslashes in a Linux-style path should still convert cleanly.
+        assert path_mapper.linux_to_drive("/tech/users\\gisi") == "Z:\\users\\gisi"
 
-    def test_windows_to_linux_p_drive(self):
-        assert windows_to_linux_path("P:\\Barbie") == "/projects/Barbie"
+    def test_linux_to_drive_unmappable_raises(self):
+        with pytest.raises(path_mapper.PathMappingError):
+            path_mapper.linux_to_drive("/home/user")
 
-    def test_windows_to_linux_z_drive(self):
-        assert windows_to_linux_path("Z:\\users") == "/tech/users"
+    def test_linux_to_unc(self):
+        assert path_mapper.linux_to_unc("/tech/users") == "\\\\rdoshyd\\tech\\users"
 
-    def test_roundtrip_linux(self):
-        original = "/projects/Barbie_Nutcracker/episodes/ep01"
-        assert windows_to_linux_path(linux_to_windows_path(original)) == original
+    def test_linux_to_unc_projects(self):
+        assert path_mapper.linux_to_unc("/projects/foo") == "\\\\rdoshyd\\projects\\foo"
+
+    def test_linux_to_unc_unmappable_raises(self):
+        with pytest.raises(path_mapper.PathMappingError):
+            path_mapper.linux_to_unc("/home/user")
+
+    def test_drive_to_linux(self):
+        assert path_mapper.drive_to_linux("Z:\\users\\gisi") == "/tech/users/gisi"
+
+    def test_drive_to_linux_forward_slashes(self):
+        assert path_mapper.drive_to_linux("Z:/users/gisi") == "/tech/users/gisi"
+
+    def test_drive_to_linux_unmappable_raises(self):
+        with pytest.raises(path_mapper.PathMappingError):
+            path_mapper.drive_to_linux("D:\\stuff")
+
+    def test_unc_to_linux(self):
+        assert path_mapper.unc_to_linux("\\\\rdoshyd\\tech\\users") == "/tech/users"
+
+    def test_unc_to_linux_unmappable_raises(self):
+        with pytest.raises(path_mapper.PathMappingError):
+            path_mapper.unc_to_linux("\\\\other\\share\\foo")
 
 
 # ---------------------------------------------------------------------------
-# Config (unit tests)
+# bash_builder
 # ---------------------------------------------------------------------------
 
 
-class TestConfig:
-    """Verify configuration dataclasses and defaults."""
+class TestBashBuilder:
+    """Bash preamble contains the required exports and activations."""
 
-    def test_windows_config_has_no_ssh_host(self):
-        """ssh_host was removed — WindowsConfig no longer has it."""
-        assert not hasattr(WINDOWS, "ssh_host")
+    def test_contains_set_e(self):
+        out = bash_builder.build_preamble({"AYON_API_KEY": "k"})
+        assert "set -e" in out
 
-    def test_windows_config_has_diagnostic_base_unc(self):
-        assert hasattr(WINDOWS, "diagnostic_base_unc")
-        assert "rdoshyd" in WINDOWS.diagnostic_base_unc
+    def test_exports_sorted(self):
+        out = bash_builder.build_preamble({"B_VAR": "2", "A_VAR": "1"})
+        assert out.index("A_VAR") < out.index("B_VAR")
 
-    def test_get_results_dir_returns_path(self):
-        from gishant_scripts.diagnostic.config import get_results_dir
+    def test_single_quote_escaping(self):
+        # shlex.quote handles single quotes safely.
+        out = bash_builder.build_preamble({"FOO": "value with 'quote'"})
+        assert "FOO=" in out
+        # shlex.quote wraps and escapes; the raw bare string should not appear
+        # unquoted.
+        assert "value with 'quote'" not in out.replace(r"'\''", "|ESC|")
 
-        results_dir = get_results_dir("test_issue_123")
-        assert results_dir.name == "results"
-        assert "test_issue_123" in str(results_dir)
+    def test_cd_and_source(self):
+        out = bash_builder.build_preamble(
+            {"AYON_API_KEY": "k"},
+            repo_path="/tech/users/gisi/dev/repos/gishant-scripts",
+        )
+        assert "cd /tech/users/gisi/dev/repos/gishant-scripts" in out
+        assert "source /tech/users/gisi/dev/repos/gishant-scripts/.venv/bin/activate" in out
 
 
 # ---------------------------------------------------------------------------
-# AYON environment resolution
+# ps1_builder
 # ---------------------------------------------------------------------------
 
 
-class TestAyonEnvResolution:
-    """Verify AYON environment variable resolution."""
+class TestPs1Builder:
+    """PowerShell script assembly for the Windows runner."""
 
-    def test_returns_expected_keys(self):
-        from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
-
-        env = resolve_ayon_env("TestProject", "/test/path")
-        required_keys = {
-            "AYON_SERVER_URL",
-            "AYON_API_KEY",
-            "AYON_PROJECT_NAME",
-            "AYON_FOLDER_PATH",
-            "PYTHONPATH",
+    def _sample(self, env=None) -> str:
+        env = env or {
+            "AYON_SERVER_URL": "http://localhost:5000",
+            "AYON_API_KEY": "abc",
+            "AYON_PROJECT_NAME": "P",
         }
-        assert required_keys.issubset(env.keys())
-
-    def test_api_key_loaded(self):
-        from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
-
-        env = resolve_ayon_env("TestProject", "/test/path")
-        assert env["AYON_API_KEY"], "AYON_API_KEY should not be empty"
-
-    def test_windows_addon_paths_use_c_drive(self):
-        from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
-
-        env = resolve_ayon_env("TestProject", "/test/path", target="windows")
-        pythonpath = env["PYTHONPATH"]
-        assert "C:\\Users" in pythonpath
-        # Addon paths should use Windows format (Linux dep package paths are OK)
-
-
-# ---------------------------------------------------------------------------
-# Infrastructure checks (OS-aware)
-# ---------------------------------------------------------------------------
-
-
-class TestInfrastructure:
-    """Verify local infrastructure availability."""
-
-    @pytest.mark.skipif(sys.platform == "win32", reason="Maya binary is on Linux")
-    def test_config_maya_bin_exists(self):
-        assert Path(LINUX.maya_bin).exists(), f"Maya not found at {LINUX.maya_bin}"
-
-    @pytest.mark.skipif(sys.platform == "win32", reason="AYON launcher path is Linux-specific")
-    def test_config_ayon_launcher_exists(self):
-        assert Path(LINUX.ayon_launcher).exists()
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="Unreal binary is on Windows")
-    def test_config_unreal_bin_exists(self):
-        assert Path(WINDOWS.unreal_bin).exists(), f"Unreal not found at {WINDOWS.unreal_bin}"
-
-
-# ---------------------------------------------------------------------------
-# Unreal execution (unit tests with mocked subprocess)
-# ---------------------------------------------------------------------------
-
-
-class TestUnrealExecution:
-    """Verify the Unreal execution path without actually running Unreal."""
-
-    def test_run_unreal_missing_script(self, tmp_path):
-        """Error result when the script file does not exist."""
-        from gishant_scripts.diagnostic.launcher_runner import run_unreal
-
-        result = run_unreal(
-            script_path=tmp_path / "nonexistent.py",
-            project_name="TestProject",
-            folder_path="/test/folder",
-        )
-        assert result.status == "error"
-        assert "not found" in result.errors[0].lower()
-
-    def test_run_unreal_writes_ps1_wrapper(self, tmp_path):
-        """Verify a .ps1 wrapper is created with env vars and Unreal invocation."""
-        issue_dir = tmp_path / "test_issue"
-        issue_dir.mkdir()
-        script = issue_dir / "test_script.py"
-        script.write_text("print(hello)", encoding="utf-8")
-
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = ""
-        mock_proc.stderr = ""
-
-        with (
-            patch("gishant_scripts.diagnostic.launcher_runner.subprocess.run", return_value=mock_proc),
-            patch(
-                "gishant_scripts.diagnostic.launcher_runner.resolve_ayon_env",
-                return_value={
-                    "AYON_SERVER_URL": "http://test",
-                    "AYON_API_KEY": "test_key",
-                    "AYON_PROJECT_NAME": "TestProject",
-                    "AYON_FOLDER_PATH": "/test/folder",
-                    "PYTHONPATH": "",
-                },
-            ),
-        ):
-            from gishant_scripts.diagnostic.launcher_runner import run_unreal
-
-            run_unreal(
-                script_path=script,
-                project_name="TestProject",
-                folder_path="/test/folder",
-            )
-
-        # The subprocess.run call should use pwsh -File, not ssh
-        # Just verify no exception was raised — the wrapper was written and executed
-
-    def test_run_unreal_uses_pwsh_not_ssh(self, tmp_path):
-        """The command must use pwsh locally, not ssh."""
-        issue_dir = tmp_path / "test_issue"
-        issue_dir.mkdir()
-        script = issue_dir / "test_script.py"
-        script.write_text("print(hello)", encoding="utf-8")
-
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = ""
-        mock_proc.stderr = ""
-
-        with (
-            patch("gishant_scripts.diagnostic.launcher_runner.subprocess.run", return_value=mock_proc) as mock_run,
-            patch(
-                "gishant_scripts.diagnostic.launcher_runner.resolve_ayon_env",
-                return_value={
-                    "AYON_SERVER_URL": "http://test",
-                    "AYON_API_KEY": "test_key",
-                    "AYON_PROJECT_NAME": "TestProject",
-                    "AYON_FOLDER_PATH": "/test/folder",
-                    "PYTHONPATH": "",
-                },
-            ),
-        ):
-            from gishant_scripts.diagnostic.launcher_runner import run_unreal
-
-            run_unreal(
-                script_path=script,
-                project_name="TestProject",
-                folder_path="/test/folder",
-            )
-
-        # Verify the command starts with pwsh, not ssh
-        run_call = mock_run.call_args
-        cmd = run_call[0][0]
-        assert cmd[0] == "pwsh", f"Expected pwsh as first arg, got {cmd[0]}"
-        assert "ssh" not in cmd, "Command should not contain ssh"
-
-    def test_run_unreal_parses_result_json(self, tmp_path):
-        """Verify result JSON is parsed correctly when Unreal produces it."""
-        import json
-
-        issue_dir = tmp_path / "test_issue"
-        issue_dir.mkdir()
-        script = issue_dir / "test_script.py"
-        script.write_text("print(hello)", encoding="utf-8")
-
-        # Pre-create result JSON (run_unreal uses subprocess.run, not Popen)
-        results_dir = issue_dir / "results"
-        results_dir.mkdir()
-        result_data = {
-            "status": "pass",
-            "dcc": "unreal",
-            "issue": "test_issue",
-            "timestamp": "2026-01-01T00:00:00",
-            "context": {"project": "TestProject"},
-            "findings": {"unreal_version": "5.5.0"},
-            "errors": [],
-        }
-        (results_dir / "unreal_result.json").write_text(
-            json.dumps(result_data),
-            encoding="utf-8",
+        return ps1_builder.build(
+            script_drive="Z:\\script.py",
+            uproject_drive="P:\\x.uproject",
+            env=env,
+            output_log_drive="Z:\\log.txt",
         )
 
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = ""
-        mock_proc.stderr = ""
+    def test_contains_map_drives(self):
+        out = self._sample()
+        assert "map_drives.cmd" in out
 
-        with (
-            patch("gishant_scripts.diagnostic.launcher_runner.subprocess.run", return_value=mock_proc),
-            patch(
-                "gishant_scripts.diagnostic.launcher_runner.resolve_ayon_env",
-                return_value={
-                    "AYON_SERVER_URL": "http://test",
-                    "AYON_API_KEY": "test_key",
-                    "AYON_PROJECT_NAME": "TestProject",
-                    "AYON_FOLDER_PATH": "/test/folder",
-                    "PYTHONPATH": "",
-                },
-            ),
-        ):
-            from gishant_scripts.diagnostic.launcher_runner import run_unreal
+    def test_contains_env_exports(self):
+        out = self._sample()
+        assert "$env:AYON_SERVER_URL = 'http://localhost:5000'" in out
+        assert "$env:AYON_API_KEY = 'abc'" in out
+        assert "$env:AYON_PROJECT_NAME = 'P'" in out
 
-            result = run_unreal(
-                script_path=script,
-                project_name="TestProject",
-                folder_path="/test/folder",
-            )
+    def test_contains_unreal_launch_with_nullrhi(self):
+        out = self._sample()
+        assert "UnrealEditor-Cmd.exe" in out
+        assert "-NullRHI" in out
+        assert "-ExecutePythonScript='Z:\\script.py'" in out
 
-        assert result.status == "pass"
-        assert result.findings["unreal_version"] == "5.5.0"
-        assert result.dcc == "unreal"
+    def test_contains_exit_last_exit_code(self):
+        out = self._sample()
+        assert "$unrealExit = $LASTEXITCODE" in out
+        assert "exit $unrealExit" in out
 
-    def test_run_unreal_timeout_returns_error(self, tmp_path):
-        """Verify timeout produces an error result, not an exception."""
-        import subprocess as sp
+    def test_single_quote_in_value_is_doubled(self):
+        out = self._sample({"FOO": "has'quote"})
+        assert "$env:FOO = 'has''quote'" in out
 
-        issue_dir = tmp_path / "test_issue"
-        issue_dir.mkdir()
-        script = issue_dir / "test_script.py"
-        script.write_text("print(hello)", encoding="utf-8")
-
-        with (
-            patch(
-                "gishant_scripts.diagnostic.launcher_runner.subprocess.run",
-                side_effect=sp.TimeoutExpired(cmd="pwsh", timeout=5),
-            ),
-            patch(
-                "gishant_scripts.diagnostic.launcher_runner.resolve_ayon_env",
-                return_value={
-                    "AYON_SERVER_URL": "http://test",
-                    "AYON_API_KEY": "test_key",
-                    "AYON_PROJECT_NAME": "TestProject",
-                    "AYON_FOLDER_PATH": "/test/folder",
-                    "PYTHONPATH": "",
-                },
-            ),
-        ):
-            from gishant_scripts.diagnostic.launcher_runner import run_unreal
-
-            result = run_unreal(
-                script_path=script,
-                project_name="TestProject",
-                folder_path="/test/folder",
-                timeout=5,
-            )
-
-        assert result.status == "error"
-        assert "timed out" in result.errors[0].lower()
+    def test_tee_object_to_log(self):
+        out = self._sample()
+        assert "Tee-Object" in out
+        assert "'Z:\\log.txt'" in out
 
 
 # ---------------------------------------------------------------------------
-# Maya integration (Linux-only)
+# result_fetcher
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Maya runs on Linux")
-class TestMayaIntegration:
-    """End-to-end Maya batch execution with full AYON addon stack."""
+class TestResultFetcher:
+    """Result JSON pulled via ssh + cat, with validation."""
 
-    @pytest.fixture(autouse=True, scope="class")
-    def _cleanup_results(self):
-        result_file = FIXTURES_DIR / "results" / "maya_result.json"
-        result_file.unlink(missing_ok=True)
-        yield
-        result_file.unlink(missing_ok=True)
+    def test_happy_path(self, tmp_path):
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = '{"status": "pass", "dcc": "maya"}'
+        fake.stderr = ""
+        with patch("gishant_scripts.diagnostic.result_fetcher.subprocess.run", return_value=fake):
+            out = result_fetcher.fetch_result("gisi@host", "/tech/x/result.json", tmp_path)
+        assert out.read_text(encoding="utf-8") == fake.stdout
+        assert out.name == "result.json"
 
-    @pytest.fixture(scope="class")
-    def maya_result(self):
-        """Run the Maya hello world once and return the result."""
-        from gishant_scripts.diagnostic.launcher_runner import run_maya
+    def test_nonzero_exit_raises_not_found(self, tmp_path):
+        fake = MagicMock()
+        fake.returncode = 1
+        fake.stdout = ""
+        fake.stderr = "no such file"
+        with (
+            patch("gishant_scripts.diagnostic.result_fetcher.subprocess.run", return_value=fake),
+            pytest.raises(result_fetcher.ResultNotFoundError),
+        ):
+            result_fetcher.fetch_result("gisi@host", "/tech/x/result.json", tmp_path)
 
-        return run_maya(
-            script_path=str(FIXTURES_DIR / "hello_world_maya.py"),
-            project_name=AYON_PROJECT,
-            folder_path=AYON_FOLDER,
-            timeout=180,
+    def test_empty_stdout_raises_not_found(self, tmp_path):
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = ""
+        fake.stderr = ""
+        with (
+            patch("gishant_scripts.diagnostic.result_fetcher.subprocess.run", return_value=fake),
+            pytest.raises(result_fetcher.ResultNotFoundError),
+        ):
+            result_fetcher.fetch_result("gisi@host", "/tech/x/result.json", tmp_path)
+
+    def test_malformed_json_raises_malformed(self, tmp_path):
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = "not json {["
+        fake.stderr = ""
+        with (
+            patch("gishant_scripts.diagnostic.result_fetcher.subprocess.run", return_value=fake),
+            pytest.raises(result_fetcher.ResultMalformedError),
+        ):
+            result_fetcher.fetch_result("gisi@host", "/tech/x/result.json", tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# ssh_runner — regression: never invokes pwsh locally
+# ---------------------------------------------------------------------------
+
+
+class TestSshRunner:
+    """Outbound argv must be ssh; pwsh only appears as a remote argument."""
+
+    def _stub_popen(self, returncode=0):
+        fake_proc = MagicMock()
+        fake_stdin = MagicMock()
+        fake_stdout = MagicMock()
+        fake_stdout.readline = MagicMock(side_effect=[""])
+        fake_proc.stdin = fake_stdin
+        fake_proc.stdout = fake_stdout
+        fake_proc.wait = MagicMock(return_value=returncode)
+        fake_proc.__enter__ = MagicMock(return_value=fake_proc)
+        fake_proc.__exit__ = MagicMock(return_value=False)
+        return fake_proc
+
+    def test_linux_runner_invokes_ssh_bash_s(self, tmp_path):
+        fake = self._stub_popen()
+        with patch("gishant_scripts.diagnostic.ssh_runner.subprocess.Popen", return_value=fake) as popen_mock:
+            runner = ssh_runner.LinuxSshRunner()
+            rc = runner.run(
+                script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
+                env={"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"},
+                issue_dir_linux="/tech/users/gisi/dev/_diagnostic/issues/X",
+                timeout_s=30,
+                live_log_local=tmp_path / "maya.log",
+            )
+        assert rc == 0
+        argv = popen_mock.call_args[0][0]
+        assert argv[0] == "ssh"
+        assert "gisi@10.1.69.24" in argv
+        assert argv[-1] == "bash -s"
+        # Regression guard: Linux runner must NOT be local pwsh.
+        assert argv[0] != "pwsh"
+        # Payload piped via stdin, not argv.
+        payload = fake.stdin.write.call_args[0][0]
+        assert "maya" in payload
+        assert "source " in payload
+
+    def test_windows_runner_invokes_ssh_pwsh_remote_not_local_pwsh(self, tmp_path):
+        """REGRESSION: the local-pwsh bug must never return — argv[0] is ssh."""
+        fake = self._stub_popen()
+        with patch("gishant_scripts.diagnostic.ssh_runner.subprocess.Popen", return_value=fake) as popen_mock:
+            runner = ssh_runner.WindowsSshRunner()
+            rc = runner.run(
+                script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
+                uproject_drive="P:\\x.uproject",
+                env={"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"},
+                issue_dir_linux="/tech/users/gisi/dev/_diagnostic/issues/X",
+                timeout_s=30,
+                live_log_local=tmp_path / "unreal.log",
+            )
+        assert rc == 0
+        argv = popen_mock.call_args[0][0]
+        # Regression guard for the local-pwsh bug.
+        assert argv[0] == "ssh", f"argv[0] must be 'ssh', got {argv[0]!r}"
+        assert argv[0] != "pwsh"
+        assert "gisi@10.1.69.122" in argv
+        # Remote command runs pwsh in stdin-pipe mode.
+        assert argv[-1] == "pwsh -NoProfile -NonInteractive -Command -"
+        # Payload piped via stdin.
+        payload = fake.stdin.write.call_args[0][0]
+        assert "$env:AYON_SERVER_URL" in payload
+        assert "UnrealEditor-Cmd.exe" in payload
+
+
+# ---------------------------------------------------------------------------
+# maya_runner / unreal_runner facades
+# ---------------------------------------------------------------------------
+
+
+class TestMayaRunnerFacade:
+    """Verify the thin facade composes env, issue dir, and delegates correctly."""
+
+    def test_assembles_env_and_delegates(self, tmp_path):  # noqa: ARG002
+        fake_runner = MagicMock()
+        fake_runner.host = "gisi@10.1.69.24"
+        fake_runner.run = MagicMock(return_value=0)
+
+        captured_env: dict = {}
+
+        def capture_run(**kwargs):
+            captured_env.update(kwargs["env"])
+            return 0
+
+        fake_runner.run.side_effect = capture_run
+
+        def fake_fetch(host, remote_path, cache):  # noqa: ARG001
+            cache.mkdir(parents=True, exist_ok=True)
+            p = cache / Path(remote_path).name
+            p.write_text(json.dumps({"status": "pass"}))
+            return p
+
+        def fake_guard(target):  # noqa: ARG001
+            return {"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"}
+
+        run = run_maya(
+            script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
+            project_name="P",
+            folder_path="/ep01/sh010",
+            bundle_name="my_bundle",
+            workdir="/tech/work",
+            site_id="site-a",
+            runner=fake_runner,
+            fetch=fake_fetch,
+            guard=fake_guard,
         )
 
-    def test_maya_engine_runs(self, maya_result):
-        assert maya_result.findings.get("maya_version"), f"Maya version not reported: {maya_result.errors}"
+        assert isinstance(run, DiagnosticRun)
+        assert run.status == "pass"
+        assert run.dcc == "maya"
+        assert run.exit_code == 0
+        # Env composition
+        assert captured_env["AYON_SERVER_URL"] == "http://localhost:5000"
+        assert captured_env["AYON_API_KEY"] == "k"
+        assert captured_env["AYON_PROJECT_NAME"] == "P"
+        assert captured_env["AYON_FOLDER_PATH"] == "/ep01/sh010"
+        assert captured_env["AYON_BUNDLE_NAME"] == "my_bundle"
+        assert captured_env["AYON_WORKDIR"] == "/tech/work"
+        assert captured_env["AYON_SITE_ID"] == "site-a"
 
-    def test_ayon_api_connected(self, maya_result):
-        assert maya_result.findings.get("ayon_connected"), f"ayon_api not connected: {maya_result.errors}"
-        assert maya_result.findings.get("project_name") == AYON_PROJECT
+    def test_guard_exception_propagates(self):
+        from gishant_scripts.diagnostic.test_server_guard import TestServerConfigError
 
-    def test_ayon_core_imported(self, maya_result):
-        assert maya_result.findings.get("ayon_core_imported"), f"ayon_core import failed: {maya_result.errors}"
+        def bad_guard(target):  # noqa: ARG001
+            raise TestServerConfigError("prod URL detected")
 
-    def test_ayon_maya_imported(self, maya_result):
-        assert maya_result.findings.get("ayon_maya_imported"), f"ayon_maya import failed: {maya_result.errors}"
-
-    def test_ayon_host_installed(self, maya_result):
-        assert maya_result.findings.get("ayon_host_installed"), f"AYON host install failed: {maya_result.errors}"
-
-    def test_loaders_discovered(self, maya_result):
-        count = maya_result.findings.get("loader_count", 0)
-        assert count > 0, f"No loaders discovered: {maya_result.errors}"
+        with pytest.raises(TestServerConfigError):
+            run_maya(
+                script_path_linux="/tech/x/issues/Y/script.py",
+                project_name="P",
+                folder_path="/f",
+                runner=MagicMock(host="h", run=MagicMock(return_value=0)),
+                guard=bad_guard,
+            )
 
 
-# ---------------------------------------------------------------------------
-# Unreal integration (Windows-only)
-# ---------------------------------------------------------------------------
+class TestUnrealRunnerFacade:
+    """Verify uproject conversion + env composition for Unreal."""
 
+    def test_uproject_linux_to_drive(self):
+        fake_runner = MagicMock()
+        fake_runner.host = "gisi@10.1.69.122"
+        captured: dict = {}
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Unreal runs locally on Windows")
-class TestUnrealIntegration:
-    """End-to-end Unreal batch execution with full AYON addon stack."""
+        def capture_run(**kwargs):
+            captured.update(kwargs)
+            return 0
 
-    @pytest.fixture(autouse=True, scope="class")
-    def _cleanup_results(self):
-        result_file = FIXTURES_DIR / "results" / "unreal_result.json"
-        result_file.unlink(missing_ok=True)
-        yield
-        result_file.unlink(missing_ok=True)
+        fake_runner.run.side_effect = capture_run
 
-    @pytest.fixture(scope="class")
-    def unreal_result(self):
-        """Run the Unreal hello world once and return the result."""
-        from gishant_scripts.diagnostic.launcher_runner import run_unreal
+        def fake_fetch(host, remote_path, cache):  # noqa: ARG001
+            cache.mkdir(parents=True, exist_ok=True)
+            p = cache / Path(remote_path).name
+            p.write_text(json.dumps({"status": "pass"}))
+            return p
 
-        return run_unreal(
-            script_path=str(FIXTURES_DIR / "hello_world_unreal.py"),
-            project_name=AYON_PROJECT,
-            folder_path=AYON_FOLDER,
-            timeout=180,
+        def fake_guard(target):  # noqa: ARG001
+            return {"AYON_SERVER_URL": "http://10.1.69.24:5000", "AYON_API_KEY": "k"}
+
+        run = run_unreal(
+            script_path_linux="/tech/users/gisi/dev/_diagnostic/issues/X/script.py",
+            project_name="P",
+            folder_path="/f",
+            uproject_path="/projects/Barbie/Barbie.uproject",
+            bundle_name="b",
+            runner=fake_runner,
+            fetch=fake_fetch,
+            guard=fake_guard,
         )
+        assert run.status == "pass"
+        assert run.dcc == "unreal"
+        assert captured["uproject_drive"] == "P:\\Barbie\\Barbie.uproject"
+        assert captured["env"]["AYON_BUNDLE_NAME"] == "b"
 
-    def test_unreal_engine_runs(self, unreal_result):
-        assert unreal_result.findings.get("unreal_version"), f"UE version not reported: {unreal_result.errors}"
+    def test_uproject_drive_passthrough(self):
+        fake_runner = MagicMock()
+        fake_runner.host = "gisi@10.1.69.122"
+        captured: dict = {}
 
-    def test_ayon_api_connected(self, unreal_result):
-        assert unreal_result.findings.get("ayon_connected"), f"ayon_api not connected: {unreal_result.errors}"
-        assert unreal_result.findings.get("project_name") == AYON_PROJECT
+        def capture_run(**kwargs):
+            captured.update(kwargs)
+            return 0
 
-    def test_ayon_core_imported(self, unreal_result):
-        assert unreal_result.findings.get("ayon_core_imported"), f"ayon_core import failed: {unreal_result.errors}"
+        fake_runner.run.side_effect = capture_run
 
-    def test_ayon_unreal_imported(self, unreal_result):
-        assert unreal_result.findings.get("ayon_unreal_imported"), f"ayon_unreal import failed: {unreal_result.errors}"
+        def fake_fetch(host, remote_path, cache):  # noqa: ARG001
+            cache.mkdir(parents=True, exist_ok=True)
+            p = cache / Path(remote_path).name
+            p.write_text(json.dumps({"status": "fail"}))
+            return p
 
-    def test_ayon_host_installed(self, unreal_result):
-        assert unreal_result.findings.get("ayon_host_installed"), f"AYON host install failed: {unreal_result.errors}"
+        def fake_guard(target):  # noqa: ARG001
+            return {"AYON_SERVER_URL": "http://localhost:5000", "AYON_API_KEY": "k"}
 
-    def test_critical_loaders_discovered(self, unreal_result):
-        missing = unreal_result.findings.get("critical_loaders_missing", [])
-        assert not missing, f"Missing critical loaders: {missing}"
+        run = run_unreal(
+            script_path_linux="/tech/x/issues/Y/s.py",
+            project_name="P",
+            folder_path="/f",
+            uproject_path="P:\\already\\drive.uproject",
+            runner=fake_runner,
+            fetch=fake_fetch,
+            guard=fake_guard,
+        )
+        assert captured["uproject_drive"] == "P:\\already\\drive.uproject"
+        assert run.status == "fail"

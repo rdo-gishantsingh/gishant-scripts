@@ -1,195 +1,184 @@
-"""CLI entry point for running diagnostic scripts inside Maya and Unreal."""
+"""CLI entry point for running diagnostic scripts inside Maya and Unreal.
+
+Dispatcher runs on Andromeda WSL. Each subcommand SSHes into exactly one
+target box (no hops). The ``pipeline`` subcommand runs Maya and Unreal in
+parallel via a thread pool.
+"""
 
 from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 
+from gishant_scripts.diagnostic import test_server_guard
+
 if TYPE_CHECKING:
-    from gishant_scripts.diagnostic.models import DiagnosticResult
+    from gishant_scripts.diagnostic.maya_runner import DiagnosticRun
 
 app = typer.Typer(
     name="dcc-run",
-    help="Run diagnostic scripts inside Maya (Linux) or Unreal (Windows), both locally.",
+    help="Run diagnostic scripts inside Maya (Linux) or Unreal (Windows) over SSH.",
     no_args_is_help=True,
 )
 console = Console()
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-_STATUS_COLORS: dict[str, str] = {
-    "pass": "green",
-    "fail": "red",
-    "error": "yellow",
-}
-
-_STATUS_EXIT_CODES: dict[str, int] = {
-    "pass": 0,
-    "fail": 1,
-    "error": 2,
-}
+_STATUS_COLORS: dict[str, str] = {"pass": "green", "fail": "red", "error": "yellow"}
+_STATUS_EXIT_CODES: dict[str, int] = {"pass": 0, "fail": 1, "error": 2}
+GUARD_REFUSED_EXIT = 3
 
 
-def _print_result(result: DiagnosticResult) -> None:
-    """Pretty-print a DiagnosticResult as coloured JSON and exit with the right code."""
+def _print_run(run: DiagnosticRun) -> None:
+    """Pretty-print a single DiagnosticRun."""
     payload = {
-        "status": result.status,
-        "dcc": result.dcc,
-        "issue": result.issue,
-        "timestamp": result.timestamp,
-        "context": result.context,
-        "findings": result.findings,
-        "errors": result.errors,
+        "status": run.status,
+        "dcc": run.dcc,
+        "exit_code": run.exit_code,
+        "result_path": str(run.result_path) if run.result_path else None,
+        "log_path": str(run.log_path),
+        "result": run.result,
     }
-    colour = _STATUS_COLORS.get(result.status, "white")
-    console.print_json(json.dumps(payload, indent=2, default=str), highlight=True, style=colour)
-    raise SystemExit(_STATUS_EXIT_CODES.get(result.status, 2))
-
-
-# ---------------------------------------------------------------------------
-# maya
-# ---------------------------------------------------------------------------
+    colour = _STATUS_COLORS.get(run.status, "white")
+    console.rule(f"[bold {colour}]{run.dcc.upper()} — {run.status.upper()}[/]")
+    console.print_json(json.dumps(payload, indent=2, default=str))
 
 
 @app.command()
 def maya(
     project: Annotated[str, typer.Option("--project", help="AYON project name.")],
     folder: Annotated[str, typer.Option("--folder", help="AYON folder path.")],
-    script: Annotated[Path, typer.Option("--script", help="Path to the Python diagnostic script.")],
-    task: Annotated[str | None, typer.Option("--task", help="AYON task name.")] = None,
-    timeout: Annotated[int, typer.Option("--timeout", help="Process timeout in seconds.")] = 300,
+    script: Annotated[str, typer.Option("--script", help="Linux path to diagnostic script.")],
+    bundle: Annotated[str | None, typer.Option("--bundle", help="AYON bundle name.")] = None,
+    workdir: Annotated[str | None, typer.Option("--workdir", help="AYON workdir (linux).")] = None,
+    site_id: Annotated[str | None, typer.Option("--site-id", help="AYON site id.")] = None,
+    timeout: Annotated[int, typer.Option("--timeout", help="Timeout seconds.")] = 300,
 ) -> None:
-    """Run a diagnostic script inside Maya batch on the local Linux machine."""
-    from gishant_scripts.diagnostic.launcher_runner import run_maya
+    """Run a Maya diagnostic script on the Linux box."""
+    from gishant_scripts.diagnostic.maya_runner import run_maya
 
-    result = run_maya(
-        script_path=script,
-        project_name=project,
-        folder_path=folder,
-        task_name=task,
-        timeout=timeout,
-    )
-    _print_result(result)
+    try:
+        run = run_maya(
+            script_path_linux=script,
+            project_name=project,
+            folder_path=folder,
+            bundle_name=bundle,
+            site_id=site_id,
+            workdir=workdir,
+            timeout_s=timeout,
+        )
+    except test_server_guard.TestServerConfigError as exc:
+        console.print(f"[bold red]Test-server guard refused:[/] {exc}")
+        raise SystemExit(GUARD_REFUSED_EXIT) from None
 
-
-# ---------------------------------------------------------------------------
-# unreal
-# ---------------------------------------------------------------------------
+    _print_run(run)
+    raise SystemExit(_STATUS_EXIT_CODES.get(run.status, 2))
 
 
 @app.command()
 def unreal(
     project: Annotated[str, typer.Option("--project", help="AYON project name.")],
     folder: Annotated[str, typer.Option("--folder", help="AYON folder path.")],
-    script: Annotated[Path, typer.Option("--script", help="Path to the Python diagnostic script.")],
-    task: Annotated[str | None, typer.Option("--task", help="AYON task name.")] = None,
-    unreal_project: Annotated[
-        str | None, typer.Option("--unreal-project", help="Path to .uproject file (Windows path).")
-    ] = None,
-    timeout: Annotated[int, typer.Option("--timeout", help="Process timeout in seconds.")] = 600,
+    script: Annotated[str, typer.Option("--script", help="Linux path to diagnostic script.")],
+    uproject: Annotated[str, typer.Option("--uproject", help="Linux or drive-letter path to .uproject.")],
+    bundle: Annotated[str | None, typer.Option("--bundle", help="AYON bundle name.")] = None,
+    workdir: Annotated[str | None, typer.Option("--workdir", help="AYON workdir.")] = None,
+    site_id: Annotated[str | None, typer.Option("--site-id", help="AYON site id.")] = None,
+    timeout: Annotated[int, typer.Option("--timeout", help="Timeout seconds.")] = 600,
 ) -> None:
-    """Run a diagnostic script inside Unreal Engine locally on Windows."""
-    from gishant_scripts.diagnostic.launcher_runner import run_unreal
+    """Run an Unreal diagnostic script on the Windows box."""
+    from gishant_scripts.diagnostic.unreal_runner import run_unreal
 
-    result = run_unreal(
-        script_path=script,
-        project_name=project,
-        folder_path=folder,
-        task_name=task,
-        unreal_project=unreal_project,
-        timeout=timeout,
-    )
-    _print_result(result)
+    try:
+        run = run_unreal(
+            script_path_linux=script,
+            project_name=project,
+            folder_path=folder,
+            uproject_path=uproject,
+            bundle_name=bundle,
+            site_id=site_id,
+            workdir=workdir,
+            timeout_s=timeout,
+        )
+    except test_server_guard.TestServerConfigError as exc:
+        console.print(f"[bold red]Test-server guard refused:[/] {exc}")
+        raise SystemExit(GUARD_REFUSED_EXIT) from None
 
-
-# ---------------------------------------------------------------------------
-# pipeline (maya + unreal in sequence)
-# ---------------------------------------------------------------------------
+    _print_run(run)
+    raise SystemExit(_STATUS_EXIT_CODES.get(run.status, 2))
 
 
 @app.command()
 def pipeline(
     project: Annotated[str, typer.Option("--project", help="AYON project name.")],
     folder: Annotated[str, typer.Option("--folder", help="AYON folder path.")],
-    maya_script: Annotated[Path, typer.Option("--maya-script", help="Path to the Maya diagnostic script.")],
-    unreal_script: Annotated[Path, typer.Option("--unreal-script", help="Path to the Unreal diagnostic script.")],
-    task: Annotated[str | None, typer.Option("--task", help="AYON task name.")] = None,
-    unreal_project: Annotated[
-        str | None, typer.Option("--unreal-project", help="Path to .uproject file (Windows path).")
-    ] = None,
-    timeout: Annotated[int, typer.Option("--timeout", help="Per-DCC timeout in seconds.")] = 600,
+    maya_script: Annotated[str, typer.Option("--maya-script", help="Linux path to Maya script.")],
+    unreal_script: Annotated[str, typer.Option("--unreal-script", help="Linux path to Unreal script.")],
+    uproject: Annotated[str, typer.Option("--uproject", help="Linux or drive-letter .uproject path.")],
+    bundle: Annotated[str | None, typer.Option("--bundle", help="AYON bundle name.")] = None,
+    workdir: Annotated[str | None, typer.Option("--workdir", help="AYON workdir.")] = None,
+    site_id: Annotated[str | None, typer.Option("--site-id", help="AYON site id.")] = None,
+    timeout: Annotated[int, typer.Option("--timeout", help="Per-DCC timeout seconds.")] = 600,
 ) -> None:
-    """Run Maya then Unreal diagnostic scripts in sequence, reporting both results."""
-    from gishant_scripts.diagnostic.launcher_runner import run_maya, run_unreal
+    """Run Maya and Unreal diagnostics in parallel and report both results."""
+    from gishant_scripts.diagnostic.maya_runner import run_maya
+    from gishant_scripts.diagnostic.unreal_runner import run_unreal
 
-    results: list[dict] = []
-    overall_exit = 0
+    def _maya() -> DiagnosticRun:
+        return run_maya(
+            script_path_linux=maya_script,
+            project_name=project,
+            folder_path=folder,
+            bundle_name=bundle,
+            site_id=site_id,
+            workdir=workdir,
+            timeout_s=timeout,
+        )
 
-    # -- Maya ---------------------------------------------------------------
-    console.rule("[bold]Maya diagnostic[/bold]")
-    maya_result = run_maya(
-        script_path=maya_script,
-        project_name=project,
-        folder_path=folder,
-        task_name=task,
-        timeout=timeout,
-    )
+    def _unreal() -> DiagnosticRun:
+        return run_unreal(
+            script_path_linux=unreal_script,
+            project_name=project,
+            folder_path=folder,
+            uproject_path=uproject,
+            bundle_name=bundle,
+            site_id=site_id,
+            workdir=workdir,
+            timeout_s=timeout,
+        )
 
-    maya_payload = {
-        "status": maya_result.status,
-        "dcc": maya_result.dcc,
-        "issue": maya_result.issue,
-        "timestamp": maya_result.timestamp,
-        "context": maya_result.context,
-        "findings": maya_result.findings,
-        "errors": maya_result.errors,
-    }
-    colour = _STATUS_COLORS.get(maya_result.status, "white")
-    console.print_json(json.dumps(maya_payload, indent=2, default=str), highlight=True, style=colour)
-    results.append(maya_payload)
-    overall_exit = max(overall_exit, _STATUS_EXIT_CODES.get(maya_result.status, 2))
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            maya_future = pool.submit(_maya)
+            unreal_future = pool.submit(_unreal)
+            maya_run = maya_future.result()
+            unreal_run = unreal_future.result()
+    except test_server_guard.TestServerConfigError as exc:
+        console.print(f"[bold red]Test-server guard refused:[/] {exc}")
+        raise SystemExit(GUARD_REFUSED_EXIT) from None
 
-    # -- Unreal -------------------------------------------------------------
-    console.rule("[bold]Unreal diagnostic[/bold]")
-    unreal_result = run_unreal(
-        script_path=unreal_script,
-        project_name=project,
-        folder_path=folder,
-        task_name=task,
-        unreal_project=unreal_project,
-        timeout=timeout,
-    )
+    _print_run(maya_run)
+    _print_run(unreal_run)
 
-    unreal_payload = {
-        "status": unreal_result.status,
-        "dcc": unreal_result.dcc,
-        "issue": unreal_result.issue,
-        "timestamp": unreal_result.timestamp,
-        "context": unreal_result.context,
-        "findings": unreal_result.findings,
-        "errors": unreal_result.errors,
-    }
-    colour = _STATUS_COLORS.get(unreal_result.status, "white")
-    console.print_json(json.dumps(unreal_payload, indent=2, default=str), highlight=True, style=colour)
-    results.append(unreal_payload)
-    overall_exit = max(overall_exit, _STATUS_EXIT_CODES.get(unreal_result.status, 2))
-
-    # -- Summary ------------------------------------------------------------
     console.rule("[bold]Summary[/bold]")
-    for r in results:
-        tag = "[" + _STATUS_COLORS.get(r["status"], "white") + "]" + r["status"].upper() + "[/]"
-        console.print("  " + r["dcc"] + ": " + tag)
+    for run in (maya_run, unreal_run):
+        tag = "[" + _STATUS_COLORS.get(run.status, "white") + "]" + run.status.upper() + "[/]"
+        console.print("  " + run.dcc + ": " + tag)
 
-    sys.exit(overall_exit)
+    overall = max(
+        _STATUS_EXIT_CODES.get(maya_run.status, 2),
+        _STATUS_EXIT_CODES.get(unreal_run.status, 2),
+    )
+    sys.exit(overall)
 
 
 def main() -> None:
     """Entry point for the ``dcc-run`` console script."""
+    app()
+
+
+if __name__ == "__main__":
     app()
