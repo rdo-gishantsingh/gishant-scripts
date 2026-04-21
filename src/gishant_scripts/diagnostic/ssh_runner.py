@@ -127,13 +127,8 @@ class LinuxSshRunner:
             "exit $_rc\n"
         )
 
-        argv = [
-            "ssh",
-            "-o",
-            "BatchMode=yes",
-            self.host,
-            "bash -s",
-        ]
+        # CLI always runs on the Linux box — no SSH needed, run bash directly.
+        argv = ["bash", "-s"]
         return _run_with_tee(argv, remote_script, live_log_local, "[maya]", timeout_s)
 
 
