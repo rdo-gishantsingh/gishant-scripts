@@ -410,7 +410,7 @@ class TestMayaRunnerFacade:
 class TestUnrealRunnerFacade:
     """Verify uproject conversion + env composition for Unreal."""
 
-    def test_uproject_linux_to_unc(self):
+    def test_uproject_linux_to_drive(self):
         fake_runner = MagicMock()
         fake_runner.host = "gisi@10.1.69.122"
         captured: dict = {}
@@ -456,7 +456,7 @@ class TestUnrealRunnerFacade:
         )
         assert run.status == "pass"
         assert run.dcc == "unreal"
-        assert captured["uproject_drive"] == "\\\\rdoshyd\\projects\\Barbie\\Barbie.uproject"
+        assert captured["uproject_drive"] == "P:\\Barbie\\Barbie.uproject"
         assert captured["env"]["AYON_BUNDLE_NAME"] == "b"
 
     def test_uproject_drive_passthrough(self):
