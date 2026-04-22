@@ -60,13 +60,13 @@ _WIN_LAUNCHER_DIR = str(Path(WINDOWS.ayon_launcher).parent)
 
 
 def _create_mel_wrapper(script_path: Path) -> Path:
-    """Create a temporary MEL script that calls ``exec(open(...).read())``.
+    """Create a temporary MEL script that calls ``runpy.run_path()``.
 
     Using ``maya -script wrapper.mel`` avoids shell quote-escaping issues
     that break ``maya -batch -command`` on Linux.
     """
     mel_file = script_path.parent / f"_runner_{script_path.stem}.mel"
-    mel_content = f"python(\"__file__ = '{script_path}'; exec(open('{script_path}').read())\");\n"
+    mel_content = f"python(\"import runpy; runpy.run_path('{script_path}', run_name='__main__')\");\n"
     mel_file.write_text(mel_content, encoding="utf-8")
     return mel_file
 
@@ -230,7 +230,7 @@ def run_maya(
     )
 
     # Build maya -batch command using a MEL wrapper file
-    # to avoid shell quote-escaping issues with python("exec(...)").
+    # to avoid shell quote-escaping issues with the -command flag.
     mel_wrapper = _create_mel_wrapper(script_path)
     cmd = [LINUX.maya_bin, "-batch", "-script", str(mel_wrapper)]
 

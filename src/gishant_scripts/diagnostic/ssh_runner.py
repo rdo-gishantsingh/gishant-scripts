@@ -117,8 +117,7 @@ class LinuxSshRunner:
     def run(self, script_path_linux: str, env: dict[str, str], issue_dir_linux: str, timeout_s: int, live_log_local: Path, maya_bin: str = "/usr/autodesk/maya2025/bin/maya") -> int:
         preamble = bash_builder.build_preamble(env=env, repo_path=REPO_PATH_LINUX)
         mel_body = (
-            'python("__file__ = \'' + script_path_linux + "'; "
-            "exec(open('" + script_path_linux + "').read())\");\n"
+            "python(\"import runpy; runpy.run_path('" + script_path_linux + "', run_name='__main__')\");\n"
         )
         remote_script = (
             preamble + "\n"
