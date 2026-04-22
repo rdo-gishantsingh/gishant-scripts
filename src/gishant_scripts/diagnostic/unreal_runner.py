@@ -51,7 +51,7 @@ def run_unreal(
     result_path_linux = f"{issue_dir_linux}/results/unreal_result.json"
 
     if uproject_path.startswith("/"):
-        uproject_windows = path_mapper.linux_to_unc(uproject_path)
+        uproject_windows = path_mapper.linux_to_drive(uproject_path)
     else:
         uproject_windows = uproject_path
 
