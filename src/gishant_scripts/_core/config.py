@@ -222,6 +222,50 @@ class AYONConfig:
         return errors
 
 
+
+@dataclass
+class ShotgridConfig:
+    """Shotgrid API configuration."""
+
+    server_url: str | None = None
+    script_name: str | None = None
+    api_key: str | None = None
+
+    @classmethod
+    def from_env(cls) -> ShotgridConfig:
+        """Load configuration from environment variables.
+
+        Expected variables:
+            SHOTGRID_SERVER_URL: Shotgrid instance URL
+            SHOTGRID_SCRIPT: Script name for API authentication
+            SHOTGRID_API_KEY: API key for authentication
+
+        Returns:
+            ShotgridConfig instance
+
+        """
+        return cls(
+            server_url=os.getenv("SHOTGRID_SERVER_URL"),
+            script_name=os.getenv("SHOTGRID_SCRIPT"),
+            api_key=os.getenv("SHOTGRID_API_KEY"),
+        )
+
+    def validate(self) -> dict[str, str]:
+        """Validate configuration.
+
+        Returns:
+            Dict of field names to error messages (empty if valid)
+
+        """
+        errors = {}
+        if not self.server_url:
+            errors["server_url"] = "SHOTGRID_SERVER_URL not set"
+        if not self.script_name:
+            errors["script_name"] = "SHOTGRID_SCRIPT not set"
+        if not self.api_key:
+            errors["api_key"] = "SHOTGRID_API_KEY not set"
+        return errors
+
 class AppConfig:
     """Main application configuration loader."""
 
@@ -263,6 +307,7 @@ class AppConfig:
         self.google_ai = GoogleAIConfig.from_env()
         self.ayon = AYONConfig.from_env(environment=ayon_environment)
         self.bookstack = BookStackConfig.from_env()
+        self.shotgrid = ShotgridConfig.from_env()
 
         # Store output directory
         self.output_dir = Path(os.getenv("OUTPUT_DIR", "./output"))
@@ -291,6 +336,7 @@ class AppConfig:
             "google_ai": self.google_ai,
             "ayon": self.ayon,
             "bookstack": self.bookstack,
+            "shotgrid": self.shotgrid,
         }
 
         if services is None:
