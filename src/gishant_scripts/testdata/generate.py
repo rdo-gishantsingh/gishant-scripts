@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.tree import Tree
 
+from gishant_scripts.testdata.config import ProjectConfig
 from gishant_scripts.testdata.selection import SelectionScope
 
 _log = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class EpisodeGenerator:
         skip_ayon: bool = False,
         use_test_server: bool = False,
         selection_scope: SelectionScope | None = None,
+        project_config: ProjectConfig | None = None,
     ) -> None:
         self._project_name = project_name
         self._episode_name = episode_name
@@ -72,6 +74,26 @@ class EpisodeGenerator:
         self._skip_ayon = skip_ayon
         self._use_test_server = use_test_server
         self._scope = selection_scope or SelectionScope()
+        self._project_config = project_config
+
+    # ------------------------------------------------------------------
+    # Per-backend name resolution
+    # ------------------------------------------------------------------
+
+    @property
+    def _kitsu_name(self) -> str:
+        """Return the Kitsu-specific project name."""
+        return self._project_config.kitsu if self._project_config else self._project_name
+
+    @property
+    def _sg_name(self) -> str:
+        """Return the ShotGrid-specific project name."""
+        return self._project_config.shotgrid if self._project_config else self._project_name
+
+    @property
+    def _ayon_name(self) -> str:
+        """Return the AYON-specific project name."""
+        return self._project_config.ayon if self._project_config else self._project_name
 
     # ------------------------------------------------------------------
     # Credential helpers (shared pattern with cleanup)
@@ -248,10 +270,10 @@ class EpisodeGenerator:
 
         self._console.print("[bold cyan]Creating in Kitsu...[/]")
 
-        project = gazu.project.get_project_by_name(self._project_name)
+        project = gazu.project.get_project_by_name(self._kitsu_name)
         if not project:
             self._console.print(
-                f"[red]Kitsu: project '{self._project_name}' not found[/]"
+                f"[red]Kitsu: project '{self._kitsu_name}' not found[/]"
             )
             return
 
@@ -293,10 +315,10 @@ class EpisodeGenerator:
 
         self._console.print("[bold magenta]Creating in ShotGrid...[/]")
 
-        project = sg.find_one("Project", [["name", "is", self._project_name]])
+        project = sg.find_one("Project", [["name", "is", self._sg_name]])
         if not project:
             self._console.print(
-                f"[red]ShotGrid: project '{self._project_name}' not found[/]"
+                f"[red]ShotGrid: project '{self._sg_name}' not found[/]"
             )
             return
 
@@ -369,7 +391,7 @@ class EpisodeGenerator:
         # Find the Episodes root folder to use as parent.
         episodes_root = None
         for path_candidate in ("episodes", "Episodes"):
-            episodes_root = ayon_api.get_folder_by_path(self._project_name, path_candidate)
+            episodes_root = ayon_api.get_folder_by_path(self._ayon_name, path_candidate)
             if episodes_root:
                 break
 
@@ -377,7 +399,7 @@ class EpisodeGenerator:
 
         # Create episode folder.
         episode_id = ayon_api.create_folder(
-            self._project_name,
+            self._ayon_name,
             name=plan.episode_name,
             folder_type="Episode",
             parent_id=parent_id,
@@ -388,7 +410,7 @@ class EpisodeGenerator:
         seq_ids: dict[str, str] = {}
         for seq_name in plan.sequences:
             seq_id = ayon_api.create_folder(
-                self._project_name,
+                self._ayon_name,
                 name=seq_name,
                 folder_type="Sequence",
                 parent_id=episode_id,
@@ -401,7 +423,7 @@ class EpisodeGenerator:
         for seq_name, seq_id in seq_ids.items():
             for shot_name in plan.shots[seq_name]:
                 ayon_api.create_folder(
-                    self._project_name,
+                    self._ayon_name,
                     name=shot_name,
                     folder_type="Shot",
                     parent_id=seq_id,

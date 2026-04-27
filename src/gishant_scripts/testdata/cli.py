@@ -8,15 +8,13 @@ from rich.console import Console
 app = typer.Typer(name="testdata", help="Test data management -- generate and cleanup.", no_args_is_help=True)
 console = Console()
 
-# SAFETY: Only these projects are allowed. Add more as needed.
-_ALLOWED_PROJECTS = frozenset({"SGAYONTEST"})
-
-
 def _check_project(project_name: str) -> None:
-    """Abort if project is not in the safety allowlist."""
-    if project_name not in _ALLOWED_PROJECTS:
-        console.print(f"[bold red]REFUSED:[/] Project '{project_name}' is not in the safety allowlist.")
-        console.print(f"Allowed projects: {', '.join(sorted(_ALLOWED_PROJECTS))}")
+    """Abort if project is not in the config allowlist."""
+    from gishant_scripts.testdata.config import allowed_project_keys
+    allowed = allowed_project_keys()
+    if project_name not in allowed:
+        console.print(f"[bold red]REFUSED:[/] Project '{project_name}' is not in the config allowlist.")
+        console.print(f"Allowed projects: {', '.join(sorted(allowed))}")
         raise typer.Exit(code=1)
 
 
@@ -52,7 +50,10 @@ def cleanup_episode(
     _print_server_mode(test_server)
 
     from gishant_scripts.testdata.cleanup import EpisodeCleanup
+    from gishant_scripts.testdata.config import resolve_project
     from gishant_scripts.testdata.selection import SelectionScope
+
+    project_config = resolve_project(project_name)
 
     selection_scope = SelectionScope(
         sequence_patterns=sequence_patterns,
@@ -69,6 +70,7 @@ def cleanup_episode(
         skip_storage=skip_storage,
         use_test_server=test_server,
         selection_scope=selection_scope,
+        project_config=project_config,
     )
 
     plan = cleaner.plan()
@@ -114,8 +116,11 @@ def generate_episode(
     _print_server_mode(test_server)
 
     from gishant_scripts.testdata.cleanup import EpisodeCleanup
+    from gishant_scripts.testdata.config import resolve_project
     from gishant_scripts.testdata.generate import EpisodeGenerator
     from gishant_scripts.testdata.selection import SelectionScope
+
+    project_config = resolve_project(project_name)
 
     selection_scope = SelectionScope(
         sequence_patterns=sequence_patterns,
@@ -133,6 +138,7 @@ def generate_episode(
         skip_ayon=skip_ayon,
         use_test_server=test_server,
         selection_scope=selection_scope,
+        project_config=project_config,
     )
     conflict_cleaner = EpisodeCleanup(
         project_name=project_name,
@@ -144,6 +150,7 @@ def generate_episode(
         skip_storage=False,
         use_test_server=test_server,
         selection_scope=selection_scope,
+        project_config=project_config,
     )
 
     conflict_plan = conflict_cleaner.plan()
