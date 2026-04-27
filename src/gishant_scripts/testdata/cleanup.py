@@ -14,6 +14,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from gishant_scripts.testdata.selection import SelectionScope
+
 _log = logging.getLogger(__name__)
 
 # Default .env location for RDO credentials.
@@ -28,6 +30,16 @@ _DISPLAY_THRESHOLD = _DISPLAY_HEAD + _DISPLAY_TAIL
 def _is_glob(pattern: str) -> bool:
     """Return True if *pattern* contains glob metacharacters."""
     return any(c in pattern for c in "*?[")
+
+
+def _sequence_from_shot_name(shot_name: str) -> str:
+    """Infer a sequence name from the conventional full shot name."""
+    return shot_name.rsplit("_sh", 1)[0] if "_sh" in shot_name else ""
+
+
+def _entity_id(entity: dict | None) -> object:
+    """Return an entity id from a ShotGrid-style entity dictionary."""
+    return entity.get("id") if entity else None
 
 
 def _truncate_id(entity_id: str | int, max_len: int = 8) -> str:
@@ -139,6 +151,7 @@ class EpisodeCleanup:
         skip_ayon: bool = False,
         skip_storage: bool = False,
         use_test_server: bool = False,
+        selection_scope: SelectionScope | None = None,
     ) -> None:
         self._project_name = project_name
         self._pattern = episode_name
@@ -148,6 +161,7 @@ class EpisodeCleanup:
         self._skip_ayon = skip_ayon
         self._skip_storage = skip_storage
         self._use_test_server = use_test_server
+        self._scope = selection_scope or SelectionScope()
 
     # ------------------------------------------------------------------
     # Credential helpers
@@ -344,7 +358,107 @@ class EpisodeCleanup:
             if not self._skip_storage:
                 self._plan_storage(result, ep_name)
 
+        self._apply_scope(result)
         return result
+
+    def _apply_scope(self, plan: DeletionPlan) -> None:
+        """Apply sequence/shot filters to a discovered deletion plan."""
+        if self._scope.is_episode_scope:
+            return
+
+        self._filter_kitsu(plan)
+        self._filter_shotgrid(plan)
+        self._filter_ayon(plan)
+
+    def _filter_kitsu(self, plan: DeletionPlan) -> None:
+        """Filter Kitsu episode, sequence, and shot entities by scope."""
+        plan.kitsu_episodes = []
+        plan.kitsu_shots = [
+            shot
+            for shot in plan.kitsu_shots
+            if self._scope.matches_shot(_sequence_from_shot_name(shot.get("name", "")), shot.get("name", ""))
+        ]
+        if self._scope.is_shot_scope:
+            plan.kitsu_sequences = []
+            return
+
+        plan.kitsu_sequences = [
+            seq
+            for seq in plan.kitsu_sequences
+            if self._scope.matches_sequence(seq.get("name", ""))
+        ]
+
+    def _filter_shotgrid(self, plan: DeletionPlan) -> None:
+        """Filter ShotGrid scene, sequence, shot, task, and version entities."""
+        plan.shotgrid_scenes = []
+        plan.shotgrid_shots = [
+            shot
+            for shot in plan.shotgrid_shots
+            if self._scope.matches_shot(
+                (shot.get("sg_sequence") or {}).get("name", ""),
+                shot.get("code", ""),
+            )
+        ]
+        selected_shot_ids = {shot["id"] for shot in plan.shotgrid_shots}
+
+        plan.shotgrid_tasks = [
+            task
+            for task in plan.shotgrid_tasks
+            if _entity_id(task.get("entity")) in selected_shot_ids
+        ]
+        plan.shotgrid_versions = [
+            version
+            for version in plan.shotgrid_versions
+            if _entity_id(version.get("entity")) in selected_shot_ids
+        ]
+
+        if self._scope.is_shot_scope:
+            plan.shotgrid_sequences = []
+            return
+
+        plan.shotgrid_sequences = [
+            seq
+            for seq in plan.shotgrid_sequences
+            if self._scope.matches_sequence(seq.get("code", ""))
+        ]
+
+    def _filter_ayon(self, plan: DeletionPlan) -> None:
+        """Filter AYON folders while preserving selected descendants."""
+        if not plan.ayon_folders:
+            return
+
+        folders_by_id = {folder["id"]: folder for folder in plan.ayon_folders}
+        selected_parent_ids: set[object] = set()
+        for folder in plan.ayon_folders:
+            name = folder.get("name", "")
+            folder_type = folder.get("folderType") or folder.get("folder_type")
+            if self._scope.is_shot_scope:
+                if folder_type == "Shot" and self._scope.matches_shot(_sequence_from_shot_name(name), name):
+                    selected_parent_ids.add(folder["id"])
+            elif folder_type == "Sequence" and self._scope.matches_sequence(name):
+                selected_parent_ids.add(folder["id"])
+
+        plan.ayon_folders = [
+            folder
+            for folder in plan.ayon_folders
+            if folder["id"] in selected_parent_ids
+            or self._is_descendant_of_selected_folder(folder, selected_parent_ids, folders_by_id)
+        ]
+
+    @staticmethod
+    def _is_descendant_of_selected_folder(
+        folder: dict,
+        selected_parent_ids: set[object],
+        folders_by_id: dict[object, dict],
+    ) -> bool:
+        """Return True when *folder* descends from one of the selected folders."""
+        parent_id = folder.get("parentId")
+        while parent_id:
+            if parent_id in selected_parent_ids:
+                return True
+            parent = folders_by_id.get(parent_id)
+            parent_id = parent.get("parentId") if parent else None
+        return False
 
     # -- Kitsu ----------------------------------------------------------
 
@@ -361,13 +475,13 @@ class EpisodeCleanup:
             host, token = self._get_kitsu_creds()
             if not host or not token:
                 env_prefix = "RDO_KITSU_TEST_" if self._use_test_server else "RDO_KITSU_"
-                plan.errors.append("Kitsu: %sHOST or %sAPI_TOKEN not set" % (env_prefix, env_prefix))
+                plan.errors.append(f"Kitsu: {env_prefix}HOST or {env_prefix}API_TOKEN not set")
                 return
 
             gazu.set_host(host + "/api")
             gazu.set_token(token)
 
-            self._console.print("[dim]Kitsu: discovering entities for %s...[/]" % episode_name)
+            self._console.print(f"[dim]Kitsu: discovering entities for {episode_name}...[/]")
 
             project = gazu.project.get_project_by_name(self._project_name)
             if not project:
@@ -417,7 +531,7 @@ class EpisodeCleanup:
 
             sg = shotgun_api3.Shotgun(sg_url, script_name=sg_script, api_key=sg_key)
 
-            self._console.print("[dim]ShotGrid: discovering entities for %s...[/]" % episode_name)
+            self._console.print(f"[dim]ShotGrid: discovering entities for {episode_name}...[/]")
 
             project = sg.find_one("Project", [["name", "is", self._project_name]])
             if not project:
@@ -444,7 +558,7 @@ class EpisodeCleanup:
                 sg.find(
                     "Shot",
                     [["project", "is", project], ["sg_sequence", "in", sequences]],
-                    ["code"],
+                    ["code", "sg_sequence"],
                 )
                 if sequences
                 else []
@@ -452,7 +566,7 @@ class EpisodeCleanup:
             shots_via_scene = sg.find(
                 "Shot",
                 [["project", "is", project], ["sg_scene", "is", scene]],
-                ["code"],
+                ["code", "sg_sequence"],
             )
             # Merge, deduplicate by id
             seen_ids: set[int] = set()
@@ -467,14 +581,14 @@ class EpisodeCleanup:
                 tasks = sg.find(
                     "Task",
                     [["project", "is", project], ["entity", "in", shots]],
-                    ["content"],
+                    ["content", "entity"],
                 )
                 plan.shotgrid_tasks.extend(tasks)
 
                 versions = sg.find(
                     "Version",
                     [["project", "is", project], ["entity", "in", shots]],
-                    ["code"],
+                    ["code", "entity"],
                 )
                 plan.shotgrid_versions.extend(versions)
 
@@ -504,12 +618,12 @@ class EpisodeCleanup:
             server_url, api_key = self._get_ayon_creds()
             if not server_url or not api_key:
                 env_prefix = "AYON_TEST_" if self._use_test_server else "AYON_"
-                plan.errors.append("AYON: %sSERVER_URL or %sAPI_KEY not set" % (env_prefix, env_prefix))
+                plan.errors.append(f"AYON: {env_prefix}SERVER_URL or {env_prefix}API_KEY not set")
                 return
 
             self._setup_ayon_connection(server_url, api_key)
 
-            self._console.print("[dim]AYON: discovering folders for %s...[/]" % episode_name)
+            self._console.print(f"[dim]AYON: discovering folders for {episode_name}...[/]")
 
             # Try common episode path patterns.
             episode_folder = None
@@ -565,24 +679,50 @@ class EpisodeCleanup:
                 _log.info("Storage: path %s does not exist", episode_path)
                 return
 
-            self._console.print("[dim]Storage: scanning %s ...[/]" % episode_path)
+            self._console.print(f"[dim]Storage: scanning {episode_path} ...[/]")
 
-            plan.storage_paths.append(episode_path)
-            total = sum(f.stat().st_size for f in episode_path.rglob("*") if f.is_file())
+            paths = self._storage_paths_for_scope(episode_path)
+            if not paths and not self._scope.is_episode_scope:
+                plan.errors.append(f"Storage: no directories matched selected sequence/shot scope for {episode_name}")
+                return
+
+            plan.storage_paths.extend(paths)
+            total = sum(f.stat().st_size for path in paths for f in path.rglob("*") if f.is_file())
             plan.storage_total_bytes += total
 
             _log.info("Storage plan for %s: %s at %s", episode_name, _human_size(total), episode_path)
         except Exception as exc:  # filesystem errors
-            msg = "Storage: scan failed for %s -- %s" % (episode_name, exc)
+            msg = f"Storage: scan failed for {episode_name} -- {exc}"
             plan.errors.append(msg)
             _log.warning(msg)
+
+    def _storage_paths_for_scope(self, episode_path: Path) -> list[Path]:
+        """Return storage directories selected by the current scope."""
+        if self._scope.is_episode_scope:
+            return [episode_path]
+
+        paths: list[Path] = []
+        for sequence_path in sorted((p for p in episode_path.iterdir() if p.is_dir()), key=lambda p: p.name):
+            if not self._scope.matches_sequence(sequence_path.name):
+                continue
+
+            if self._scope.is_shot_scope:
+                for shot_path in sorted((p for p in sequence_path.iterdir() if p.is_dir()), key=lambda p: p.name):
+                    if self._scope.matches_shot(sequence_path.name, shot_path.name) and shot_path not in paths:
+                        paths.append(shot_path)
+                continue
+
+            if sequence_path not in paths:
+                paths.append(sequence_path)
+
+        return paths
 
     def _get_storage_root(self) -> Path:
         """Resolve the NAS project root from AYON anatomy or fall back to /projects."""
         try:
             import ayon_api
 
-            response = ayon_api.get("projects/%s/anatomy" % self._project_name)
+            response = ayon_api.get(f"projects/{self._project_name}/anatomy")
             roots = response.data.get("roots", [])
             for r in roots:
                 if r.get("name") == "work" and r.get("linux"):
@@ -700,9 +840,15 @@ class EpisodeCleanup:
         Deletions proceed in dependency-safe order within each backend.
         Errors on individual entities are logged but do not abort the run.
         """
-        if not self._skip_kitsu and plan.kitsu_episodes:
+        if not self._skip_kitsu and (plan.kitsu_episodes or plan.kitsu_sequences or plan.kitsu_shots):
             self._execute_kitsu(plan)
-        if not self._skip_shotgrid and plan.shotgrid_scenes:
+        if not self._skip_shotgrid and (
+            plan.shotgrid_scenes
+            or plan.shotgrid_sequences
+            or plan.shotgrid_shots
+            or plan.shotgrid_versions
+            or plan.shotgrid_tasks
+        ):
             self._execute_shotgrid(plan)
         if not self._skip_ayon and plan.ayon_folders:
             self._execute_ayon(plan)
@@ -781,20 +927,25 @@ class EpisodeCleanup:
 
         proj = self._project_name
 
-        # Only delete top-level episode folders with force=True.
-        # force=True cascades: AYON deletes all child folders, products,
-        # versions, representations, and tasks in a single server-side
-        # operation -- no need for per-entity teardown.
-        episode_folders = [
-            f for f in plan.ayon_folders
-            if f.get("folderType") == "Episode"
-            or f.get("parentId") is None
-            or "/episodes/" in f.get("path", "") and f.get("path", "").count("/") == 2
-        ]
-
-        # Fallback: if we can't identify episode-level folders, just delete
-        # leaf-first with force=True on each.
-        targets = episode_folders if episode_folders else reversed(plan.ayon_folders)
+        if self._scope.is_episode_scope:
+            # Only delete top-level episode folders with force=True.
+            # force=True cascades: AYON deletes all child folders, products,
+            # versions, representations, and tasks in a single server-side
+            # operation -- no need for per-entity teardown.
+            episode_folders = [
+                f for f in plan.ayon_folders
+                if f.get("folderType") == "Episode"
+                or f.get("parentId") is None
+                or "/episodes/" in f.get("path", "") and f.get("path", "").count("/") == 2
+            ]
+            targets = episode_folders if episode_folders else list(reversed(plan.ayon_folders))
+        else:
+            selected_ids = {folder["id"] for folder in plan.ayon_folders}
+            targets = [
+                folder
+                for folder in plan.ayon_folders
+                if folder.get("parentId") not in selected_ids
+            ]
 
         for folder in targets:
             fid = folder["id"]

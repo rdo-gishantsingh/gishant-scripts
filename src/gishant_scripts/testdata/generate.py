@@ -11,10 +11,24 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.tree import Tree
 
+from gishant_scripts.testdata.selection import SelectionScope
+
 _log = logging.getLogger(__name__)
 
 # Default .env location for RDO credentials.
 _RDO_ENV_PATH = Path.home() / ".rdo" / ".env"
+
+
+def _is_glob_pattern(pattern: str) -> bool:
+    """Return True when *pattern* contains shell-style glob metacharacters."""
+    return any(char in pattern for char in "*?[")
+
+
+def _sequence_from_shot_name(shot_name: str) -> str | None:
+    """Infer the sequence name from a conventional full shot name."""
+    if _is_glob_pattern(shot_name) or "_sh" not in shot_name:
+        return None
+    return shot_name.rsplit("_sh", 1)[0]
 
 
 @dataclass
@@ -46,6 +60,7 @@ class EpisodeGenerator:
         skip_shotgrid: bool = False,
         skip_ayon: bool = False,
         use_test_server: bool = False,
+        selection_scope: SelectionScope | None = None,
     ) -> None:
         self._project_name = project_name
         self._episode_name = episode_name
@@ -56,6 +71,7 @@ class EpisodeGenerator:
         self._skip_shotgrid = skip_shotgrid
         self._skip_ayon = skip_ayon
         self._use_test_server = use_test_server
+        self._scope = selection_scope or SelectionScope()
 
     # ------------------------------------------------------------------
     # Credential helpers (shared pattern with cleanup)
@@ -107,21 +123,62 @@ class EpisodeGenerator:
 
     def plan(self) -> GenerationPlan:
         """Build the naming hierarchy -- pure computation, no API calls."""
-        seq_names = [
+        generated_sequences = [
             f"{self._episode_name}_sq{(i + 1) * 10:03d}"
             for i in range(self._num_sequences)
         ]
+
+        seq_names: list[str] = []
+        for seq_name in generated_sequences + self._explicit_sequence_names():
+            if seq_name in seq_names or not self._scope.matches_sequence(seq_name):
+                continue
+            seq_names.append(seq_name)
+
         shots: dict[str, list[str]] = {}
         for seq in seq_names:
-            shots[seq] = [
+            generated_shots = [
                 f"{seq}_sh{(j + 1) * 10:04d}"
                 for j in range(self._shots_per_seq)
             ]
+            selected_shots: list[str] = []
+            for shot_name in generated_shots + self._explicit_shot_names_for_sequence(seq):
+                if shot_name in selected_shots or not self._scope.matches_shot(seq, shot_name):
+                    continue
+                selected_shots.append(shot_name)
+
+            if self._scope.is_shot_scope and not selected_shots:
+                continue
+
+            shots[seq] = selected_shots
         return GenerationPlan(
             episode_name=self._episode_name,
-            sequences=seq_names,
+            sequences=list(shots),
             shots=shots,
         )
+
+    def _explicit_sequence_names(self) -> list[str]:
+        """Return exact sequence names from selector patterns and exact shots."""
+        names: list[str] = []
+        for pattern in self._scope.sequence_patterns:
+            if _is_glob_pattern(pattern) or pattern in names:
+                continue
+            names.append(pattern)
+
+        for shot_name in self._scope.shot_patterns:
+            seq_name = _sequence_from_shot_name(shot_name)
+            if seq_name and seq_name not in names:
+                names.append(seq_name)
+        return names
+
+    def _explicit_shot_names_for_sequence(self, sequence_name: str) -> list[str]:
+        """Return exact shot selector names that belong to *sequence_name*."""
+        result: list[str] = []
+        for pattern in self._scope.shot_patterns:
+            if _is_glob_pattern(pattern):
+                continue
+            if _sequence_from_shot_name(pattern) == sequence_name:
+                result.append(pattern)
+        return result
 
     # ------------------------------------------------------------------
     # Display
