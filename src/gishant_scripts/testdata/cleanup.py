@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from gishant_scripts.testdata.config import ProjectConfig
 from gishant_scripts.testdata.selection import SelectionScope
 
 _log = logging.getLogger(__name__)
@@ -152,6 +153,7 @@ class EpisodeCleanup:
         skip_storage: bool = False,
         use_test_server: bool = False,
         selection_scope: SelectionScope | None = None,
+        project_config: ProjectConfig | None = None,
     ) -> None:
         self._project_name = project_name
         self._pattern = episode_name
@@ -162,6 +164,31 @@ class EpisodeCleanup:
         self._skip_storage = skip_storage
         self._use_test_server = use_test_server
         self._scope = selection_scope or SelectionScope()
+        self._project_config = project_config
+
+    # ------------------------------------------------------------------
+    # Per-backend name resolution
+    # ------------------------------------------------------------------
+
+    @property
+    def _kitsu_name(self) -> str:
+        """Return the Kitsu-specific project name."""
+        return self._project_config.kitsu if self._project_config else self._project_name
+
+    @property
+    def _sg_name(self) -> str:
+        """Return the ShotGrid-specific project name."""
+        return self._project_config.shotgrid if self._project_config else self._project_name
+
+    @property
+    def _ayon_name(self) -> str:
+        """Return the AYON-specific project name."""
+        return self._project_config.ayon if self._project_config else self._project_name
+
+    @property
+    def _storage_name(self) -> str:
+        """Return the NAS folder name for this project."""
+        return self._project_config.storage if self._project_config else self._project_name
 
     # ------------------------------------------------------------------
     # Credential helpers
@@ -260,7 +287,7 @@ class EpisodeCleanup:
             gazu.set_host(host + "/api")
             gazu.set_token(token)
 
-            project = gazu.project.get_project_by_name(self._project_name)
+            project = gazu.project.get_project_by_name(self._kitsu_name)
             if not project:
                 return []
 
@@ -289,7 +316,7 @@ class EpisodeCleanup:
 
             sg = shotgun_api3.Shotgun(sg_url, script_name=sg_script, api_key=sg_key)
 
-            project = sg.find_one("Project", [["name", "is", self._project_name]])
+            project = sg.find_one("Project", [["name", "is", self._sg_name]])
             if not project:
                 return []
 
@@ -318,7 +345,7 @@ class EpisodeCleanup:
 
             self._setup_ayon_connection(server_url, api_key)
 
-            folders = ayon_api.get_folders(self._project_name, folder_types=["Episode"])
+            folders = ayon_api.get_folders(self._ayon_name, folder_types=["Episode"])
             return [
                 f["name"]
                 for f in folders
@@ -483,14 +510,14 @@ class EpisodeCleanup:
 
             self._console.print(f"[dim]Kitsu: discovering entities for {episode_name}...[/]")
 
-            project = gazu.project.get_project_by_name(self._project_name)
+            project = gazu.project.get_project_by_name(self._kitsu_name)
             if not project:
-                _log.info("Kitsu: project %s not found", self._project_name)
+                _log.info("Kitsu: project %s not found", self._kitsu_name)
                 return
 
             episode = gazu.shot.get_episode_by_name(project, episode_name)
             if not episode:
-                _log.info("Kitsu: episode %s not found in project %s", episode_name, self._project_name)
+                _log.info("Kitsu: episode %s not found in project %s", episode_name, self._kitsu_name)
                 return
 
             plan.kitsu_episodes.append(episode)
@@ -533,14 +560,14 @@ class EpisodeCleanup:
 
             self._console.print(f"[dim]ShotGrid: discovering entities for {episode_name}...[/]")
 
-            project = sg.find_one("Project", [["name", "is", self._project_name]])
+            project = sg.find_one("Project", [["name", "is", self._sg_name]])
             if not project:
-                _log.info("ShotGrid: project %s not found", self._project_name)
+                _log.info("ShotGrid: project %s not found", self._sg_name)
                 return
 
             scene = sg.find_one("Scene", [["project", "is", project], ["code", "is", episode_name]])
             if not scene:
-                _log.info("ShotGrid: scene %s not found in project %s", episode_name, self._project_name)
+                _log.info("ShotGrid: scene %s not found in project %s", episode_name, self._sg_name)
                 return
 
             plan.shotgrid_scenes.append(scene)
@@ -632,17 +659,17 @@ class EpisodeCleanup:
                 f"Episodes/{episode_name}",
                 episode_name,
             ):
-                episode_folder = ayon_api.get_folder_by_path(self._project_name, path_pattern)
+                episode_folder = ayon_api.get_folder_by_path(self._ayon_name, path_pattern)
                 if episode_folder:
                     break
 
             if not episode_folder:
-                _log.info("AYON: episode folder not found for %s in %s", episode_name, self._project_name)
+                _log.info("AYON: episode folder not found for %s in %s", episode_name, self._ayon_name)
                 return
 
             # Collect episode + all descendants.
             all_folders = [episode_folder]
-            self._collect_ayon_children(ayon_api, self._project_name, episode_folder["id"], all_folders)
+            self._collect_ayon_children(ayon_api, self._ayon_name, episode_folder["id"], all_folders)
             plan.ayon_folders.extend(all_folders)
 
             _log.info("AYON plan for %s: %d folders (episode + descendants)", episode_name, len(all_folders))
@@ -674,8 +701,9 @@ class EpisodeCleanup:
         """
         try:
             root = self._get_storage_root()
-            episode_path = root / self._project_name / "episodes" / episode_name
+            episode_path = root / self._storage_name / "episodes" / episode_name
             if not episode_path.exists():
+                self._console.print(f"[yellow]Storage: path does not exist -- {episode_path}[/]")
                 _log.info("Storage: path %s does not exist", episode_path)
                 return
 
@@ -722,7 +750,7 @@ class EpisodeCleanup:
         try:
             import ayon_api
 
-            response = ayon_api.get(f"projects/{self._project_name}/anatomy")
+            response = ayon_api.get(f"projects/{self._ayon_name}/anatomy")
             roots = response.data.get("roots", [])
             for r in roots:
                 if r.get("name") == "work" and r.get("linux"):
@@ -872,7 +900,7 @@ class EpisodeCleanup:
 
         for seq in plan.kitsu_sequences:
             try:
-                gazu.shot.remove_sequence(seq)
+                gazu.shot.remove_sequence(seq, force=True)
                 _log.info("Kitsu: deleted sequence %s", seq.get("name", seq.get("id")))
             except Exception as exc:  # gazu raises varied types on delete failure
                 _log.warning("Kitsu: failed to delete sequence %s -- %s", seq.get("id"), exc)
@@ -925,7 +953,7 @@ class EpisodeCleanup:
 
         self._console.print("[bold green]Deleting from AYON...[/]")
 
-        proj = self._project_name
+        proj = self._ayon_name
 
         if self._scope.is_episode_scope:
             # Only delete top-level episode folders with force=True.
@@ -963,18 +991,10 @@ class EpisodeCleanup:
     def _execute_storage(self, plan: DeletionPlan) -> None:
         self._console.print("[bold red]Deleting NAS storage...[/]")
 
-        trash_bin = shutil.which("trash")
-
         for path in plan.storage_paths:
             try:
-                if trash_bin:
-                    import subprocess
-
-                    subprocess.run([trash_bin, str(path)], check=True)  # noqa: S603
-                    _log.info("Storage: trashed %s", path)
-                else:
-                    shutil.rmtree(path)
-                    _log.info("Storage: removed %s", path)
+                shutil.rmtree(path)
+                _log.info("Storage: removed %s", path)
             except Exception as exc:  # filesystem/subprocess errors
                 _log.warning("Storage: failed to remove %s -- %s", path, exc)
 
