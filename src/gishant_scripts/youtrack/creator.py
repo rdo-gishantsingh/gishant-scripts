@@ -25,7 +25,7 @@ class YouTrackIssueCreator:
     def get_project_info(self, project_id: str) -> dict[str, Any] | None:
         url = f"{self.base_url}/api/admin/projects/{project_id}"
         try:
-            response = requests.get(url, headers=self.headers, timeout=10)
+            response = requests.get(url, headers=self.headers, params={"fields": "id,name,shortName"}, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError:
@@ -78,7 +78,7 @@ class YouTrackIssueCreator:
             raise ValueError(f"Issue validation failed:\n{error_msg}")
 
         payload: dict[str, Any] = {
-            "project": {"$type": "Project", "shortName": project},
+            "project": {"id": (self.get_project_info(project) or {}).get("id", project)},
             "summary": summary,
         }
 

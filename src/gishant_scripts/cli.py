@@ -131,12 +131,20 @@ _register_subapp("task-workspace", _reg_task_workspace)
 _register_subapp("youtrack-summary", _reg_youtrack_summary)
 
 
+
+def _reg_shotgrid() -> None:
+    from gishant_scripts.shotgrid.cli import app as shotgrid_app
+
+    app.add_typer(shotgrid_app, name="shotgrid")
+
+
 def _reg_testdata() -> None:
     from gishant_scripts.testdata.cli import app as testdata_app
 
     app.add_typer(testdata_app, name="testdata")
 
 
+_register_subapp("shotgrid", _reg_shotgrid)
 _register_subapp("testdata", _reg_testdata)
 
 

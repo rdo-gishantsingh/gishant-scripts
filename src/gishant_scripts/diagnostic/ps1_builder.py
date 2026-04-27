@@ -64,6 +64,7 @@ def build(
                 "-NullRHI "
                 f"-ExecutePythonScript={_ps_single_quote(script_path_windows)} "
                 "-stdout -FullStdOutLogOutput -Unattended 2>&1 | "
+                "Where-Object { $_ -notmatch 'LogUdpMessaging' } | "
                 f"Tee-Object -FilePath {_ps_single_quote(output_log_path_windows)} -Append"
             ),
             "$unrealExit = $LASTEXITCODE",
