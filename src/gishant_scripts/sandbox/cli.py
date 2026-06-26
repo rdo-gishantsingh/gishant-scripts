@@ -65,10 +65,10 @@ def cleanup_cmd(
     storage is resolved only for matched AYON projects.
 
     """
-    if path and projects:
+    if path is not None and projects is not None:
         console.print("[bold red]ERROR:[/] PATH and --projects are mutually exclusive.")
         raise typer.Exit(code=1)
-    if not path and not projects:
+    if path is None and projects is None:
         console.print("[bold red]ERROR:[/] provide a PATH or --projects PATTERN.")
         raise typer.Exit(code=1)
 
