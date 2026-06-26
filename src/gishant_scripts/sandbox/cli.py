@@ -139,7 +139,7 @@ def generate_cmd(
     skip_ayon: bool = typer.Option(False, help="Skip AYON creation"),
     server: Environment = typer.Option(Environment.TEST, "--server", help="Target environment: test or production"),
 ) -> None:
-    """Create selected testdata across Kitsu, ShotGrid, and AYON.
+    """Create selected sandbox data across Kitsu, ShotGrid, and AYON.
 
     Examples:
         gishant sandbox generate ep_test --sequences 3 --shots 5

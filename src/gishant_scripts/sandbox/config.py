@@ -1,4 +1,4 @@
-"""Project name configuration for multi-backend testdata operations."""
+"""Project name configuration for multi-backend sandbox operations."""
 
 from __future__ import annotations
 
