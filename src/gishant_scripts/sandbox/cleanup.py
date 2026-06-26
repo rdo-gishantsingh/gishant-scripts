@@ -672,3 +672,244 @@ class FolderCleanup:
             except Exception as exc:  # filesystem errors
                 _log.warning("Storage: failed to remove %s -- %s", path, exc)
         self._console.print("[green]Storage cleanup done.[/]")
+
+
+@dataclass
+class ProjectRemovalPlan:
+    """Whole projects matched for removal, grouped by backend."""
+
+    kitsu_projects: list[dict] = field(default_factory=list)
+    ayon_projects: list[dict] = field(default_factory=list)
+    shotgrid_projects: list[dict] = field(default_factory=list)
+    storage_paths: list[Path] = field(default_factory=list)
+    storage_total_bytes: int = 0
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        """Return True when no projects matched on any backend."""
+        return not any(
+            (
+                self.kitsu_projects,
+                self.ayon_projects,
+                self.shotgrid_projects,
+                self.storage_paths,
+            )
+        )
+
+
+class ProjectRemoval:
+    """Glob-match and delete whole projects across all four backends.
+
+    Project names are matched independently on each backend (there is no
+    canonical-key mapping for arbitrary projects). NAS storage is resolved
+    from each matched AYON project's anatomy; projects that exist only on
+    Kitsu cannot have storage resolved and are skipped for storage with a
+    warning.
+
+    Safety is provided by dry-run-by-default plus an explicit confirmation
+    in the CLI -- there is no prefix guard.
+    """
+
+    def __init__(
+        self,
+        pattern: str,
+        console: Console,
+        *,
+        skip_kitsu: bool = False,
+        skip_shotgrid: bool = False,
+        skip_ayon: bool = False,
+        skip_storage: bool = False,
+        environment: Environment = Environment.TEST,
+    ) -> None:
+        if not pattern.strip():
+            msg = "pattern must not be empty"
+            raise ValueError(msg)
+        self._pattern = pattern.strip()
+        self._console = console
+        self._skip_kitsu = skip_kitsu
+        self._skip_shotgrid = skip_shotgrid
+        self._skip_ayon = skip_ayon
+        self._skip_storage = skip_storage
+        self._environment = environment
+        # No canonical key for arbitrary projects -> empty config.
+        self._kitsu = KitsuBackend("", environment, None)
+        self._shotgrid = ShotGridBackend("", environment, None)
+        self._ayon = AyonBackend("", environment, None)
+        self._storage = StorageBackend("", environment, None)
+
+    @staticmethod
+    def _match(names: list[str], pattern: str) -> list[str]:
+        """Return names equal to or fnmatch-matching the pattern, stable order."""
+        return [n for n in names if n == pattern or fnmatch.fnmatch(n, pattern)]
+
+    # -- Planning -------------------------------------------------------
+
+    def plan(self) -> ProjectRemovalPlan:
+        """Discover matching projects across backends (read-only)."""
+        result = ProjectRemovalPlan()
+        if not self._skip_kitsu:
+            self._plan_kitsu(result)
+        if not self._skip_ayon:
+            self._plan_ayon(result)
+        if not self._skip_shotgrid:
+            self._plan_shotgrid(result)
+        if not self._skip_storage:
+            self._plan_storage(result)
+        return result
+
+    def _plan_kitsu(self, result: ProjectRemovalPlan) -> None:
+        try:
+            gazu = self._kitsu.connect()
+        except BackendUnavailable as exc:
+            result.errors.append(str(exc))
+            return
+        try:
+            self._console.print("[dim]Kitsu: matching projects...[/]")
+            all_projects = gazu.project.all_projects()
+            matched = self._match([p.get("name", "") for p in all_projects], self._pattern)
+            result.kitsu_projects.extend(p for p in all_projects if p.get("name", "") in set(matched))
+        except Exception as exc:  # gazu raises varied types
+            result.errors.append(f"Kitsu: matching failed -- {exc}")
+
+    def _plan_ayon(self, result: ProjectRemovalPlan) -> None:
+        try:
+            ayon_api = self._ayon.connect()
+        except BackendUnavailable as exc:
+            result.errors.append(str(exc))
+            return
+        try:
+            self._console.print("[dim]AYON: matching projects...[/]")
+            all_projects = list(ayon_api.get_projects(fields=["name"]))
+            matched = set(self._match([p.get("name", "") for p in all_projects], self._pattern))
+            result.ayon_projects.extend(p for p in all_projects if p.get("name", "") in matched)
+        except Exception as exc:  # ayon_api raises varied types
+            result.errors.append(f"AYON: matching failed -- {exc}")
+
+    def _plan_shotgrid(self, result: ProjectRemovalPlan) -> None:
+        try:
+            sg = self._shotgrid.connect()
+        except BackendUnavailable as exc:
+            result.errors.append(str(exc))
+            return
+        try:
+            self._console.print("[dim]ShotGrid: matching projects...[/]")
+            all_projects = sg.find("Project", [], ["id", "name"])
+            matched = set(self._match([p.get("name", "") for p in all_projects], self._pattern))
+            result.shotgrid_projects.extend(p for p in all_projects if p.get("name", "") in matched)
+        except Exception as exc:  # shotgun_api3 raises varied types
+            result.errors.append(f"ShotGrid: matching failed -- {exc}")
+
+    def _plan_storage(self, result: ProjectRemovalPlan) -> None:
+        """Resolve NAS folders for matched AYON projects only."""
+        if not result.ayon_projects:
+            if result.kitsu_projects:
+                result.errors.append(
+                    "Storage: skipped -- no matching AYON projects to resolve NAS roots from"
+                )
+            return
+        for project in result.ayon_projects:
+            name = project.get("name", "")
+            try:
+                storage_root = self._storage.resolve_root(name)
+            except Exception as exc:  # anatomy/filesystem errors
+                result.errors.append(f"Storage: could not resolve root for {name} -- {exc}")
+                continue
+            nas_path = storage_root / name
+            if not nas_path.exists():
+                _log.info("Storage: path not found -- %s", nas_path)
+                continue
+            result.storage_paths.append(nas_path)
+            total = sum(f.stat().st_size for f in nas_path.rglob("*") if f.is_file())
+            result.storage_total_bytes += total
+
+    # -- Display --------------------------------------------------------
+
+    def display_plan(self, plan: ProjectRemovalPlan) -> None:
+        """Print a Rich summary of the projects to be removed."""
+        for err in plan.errors:
+            self._console.print(f"[yellow]WARNING: {err}[/]")
+        if plan.errors:
+            self._console.print()
+        if plan.is_empty:
+            self._console.print("[dim]No matching projects found.[/]")
+            return
+
+        table = Table(title=f"Projects matching '{self._pattern}'", show_header=True, header_style="bold red")
+        table.add_column("Backend", style="red")
+        table.add_column("Project")
+        for p in plan.kitsu_projects:
+            table.add_row("Kitsu", p.get("name", ""))
+        for p in plan.ayon_projects:
+            table.add_row("AYON", p.get("name", ""))
+        for p in plan.shotgrid_projects:
+            table.add_row("ShotGrid", p.get("name", ""))
+        for path in plan.storage_paths:
+            table.add_row("Storage", str(path))
+        self._console.print(Panel(table, border_style="red"))
+        if plan.storage_paths:
+            self._console.print(f"Storage total: [bold]{_human_size(plan.storage_total_bytes)}[/]")
+
+    # -- Execution ------------------------------------------------------
+
+    def execute(self, plan: ProjectRemovalPlan) -> None:
+        """Delete matched projects from each backend."""
+        if not self._skip_kitsu and plan.kitsu_projects:
+            self._execute_kitsu(plan)
+        if not self._skip_ayon and plan.ayon_projects:
+            self._execute_ayon(plan)
+        if not self._skip_shotgrid and plan.shotgrid_projects:
+            self._execute_shotgrid(plan)
+        if not self._skip_storage and plan.storage_paths:
+            self._execute_storage(plan)
+
+    def _execute_kitsu(self, plan: ProjectRemovalPlan) -> None:
+        gazu = self._kitsu.connect()
+        self._console.print("[bold cyan]Removing Kitsu projects...[/]")
+        closed_status = gazu.project.get_project_status_by_name("Closed")
+        for project in plan.kitsu_projects:
+            name = project.get("name", "")
+            try:
+                # remove_project(force=True) returns HTTP 400 unless status is Closed first.
+                if closed_status:
+                    project["project_status_id"] = closed_status["id"]
+                    gazu.project.update_project(project)
+                gazu.project.remove_project(project, force=True)
+                self._console.print(f"[green]OK[/] Kitsu: removed {name}")
+            except Exception as exc:  # gazu raises varied types
+                _log.warning("Kitsu: failed to remove %s -- %s", name, exc)
+                self._console.print(f"[red]FAIL[/] Kitsu: {name} -- {exc}")
+
+    def _execute_ayon(self, plan: ProjectRemovalPlan) -> None:
+        ayon_api = self._ayon.connect()
+        self._console.print("[bold green]Removing AYON projects...[/]")
+        for project in plan.ayon_projects:
+            name = project.get("name", "")
+            try:
+                ayon_api.delete_project(name)
+                self._console.print(f"[green]OK[/] AYON: removed {name}")
+            except Exception as exc:  # ayon_api raises varied types
+                _log.warning("AYON: failed to remove %s -- %s", name, exc)
+                self._console.print(f"[red]FAIL[/] AYON: {name} -- {exc}")
+
+    def _execute_shotgrid(self, plan: ProjectRemovalPlan) -> None:
+        sg = self._shotgrid.connect()
+        self._console.print("[bold magenta]Removing ShotGrid projects...[/]")
+        for project in plan.shotgrid_projects:
+            name = project.get("name", "")
+            try:
+                sg.delete("Project", project["id"])
+                self._console.print(f"[green]OK[/] ShotGrid: removed {name}")
+            except Exception as exc:  # shotgun_api3 raises varied types
+                _log.warning("ShotGrid: failed to remove %s -- %s", name, exc)
+                self._console.print(f"[red]FAIL[/] ShotGrid: {name} -- {exc}")
+
+    def _execute_storage(self, plan: ProjectRemovalPlan) -> None:
+        self._console.print("[bold red]Removing NAS storage...[/]")
+        for path in plan.storage_paths:
+            try:
+                shutil.rmtree(path)
+                self._console.print(f"[green]OK[/] Storage: removed {path}")
+            except Exception as exc:  # filesystem errors
+                _log.warning("Storage: failed to remove %s -- %s", path, exc)
+                self._console.print(f"[red]FAIL[/] Storage: {path} -- {exc}")
