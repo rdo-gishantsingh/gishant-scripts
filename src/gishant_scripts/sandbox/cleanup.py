@@ -14,7 +14,7 @@ from rich.table import Table
 
 from gishant_scripts.sandbox.backends import (
     AyonBackend,
-    BackendUnavailable,
+    BackendUnavailableError,
     Environment,
     KitsuBackend,
     ShotGridBackend,
@@ -284,7 +284,7 @@ class FolderCleanup:
         """Resolve the AYON path and collect all descendant folders."""
         try:
             ayon_api = self._ayon.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
 
@@ -309,7 +309,7 @@ class FolderCleanup:
         """Resolve Kitsu entities for each AYON folder via kitsuId or name fallback."""
         try:
             gazu = self._kitsu.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
 
@@ -409,7 +409,7 @@ class FolderCleanup:
         """Discover ShotGrid entities by (entity_type, name) — one call per type."""
         try:
             sg = self._shotgrid.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
 
@@ -761,7 +761,7 @@ class ProjectRemoval:
     def _plan_kitsu(self, result: ProjectRemovalPlan) -> None:
         try:
             gazu = self._kitsu.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
         try:
@@ -775,7 +775,7 @@ class ProjectRemoval:
     def _plan_ayon(self, result: ProjectRemovalPlan) -> None:
         try:
             ayon_api = self._ayon.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
         try:
@@ -789,7 +789,7 @@ class ProjectRemoval:
     def _plan_shotgrid(self, result: ProjectRemovalPlan) -> None:
         try:
             sg = self._shotgrid.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             result.errors.append(str(exc))
             return
         try:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gishant_scripts.sandbox.backends.base import BackendUnavailable, Environment
+from gishant_scripts.sandbox.backends.base import BackendUnavailableError, Environment
 from gishant_scripts.sandbox.backends.shotgrid import ShotGridBackend
 from gishant_scripts.sandbox.config import ProjectConfig
 
@@ -43,5 +43,5 @@ def test_connect_raises_when_creds_missing(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("SHOTGRID_SERVER_URL", raising=False)
     monkeypatch.delenv("SHOTGRID_SCRIPT", raising=False)
     monkeypatch.delenv("SHOTGRID_API_KEY", raising=False)
-    with pytest.raises(BackendUnavailable, match="SHOTGRID_"):
+    with pytest.raises(BackendUnavailableError, match="SHOTGRID_"):
         ShotGridBackend("DEMO").connect()

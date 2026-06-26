@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from gishant_scripts.sandbox.backends.ayon import AyonBackend
-from gishant_scripts.sandbox.backends.base import BackendUnavailable, Environment
+from gishant_scripts.sandbox.backends.base import BackendUnavailableError, Environment
 from gishant_scripts.sandbox.config import ProjectConfig
 
 _CFG = ProjectConfig(
@@ -47,5 +47,5 @@ def test_credentials_production_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_connect_raises_when_creds_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AYON_TEST_SERVER_URL", raising=False)
     monkeypatch.delenv("AYON_TEST_API_KEY", raising=False)
-    with pytest.raises(BackendUnavailable, match="AYON_TEST_"):
+    with pytest.raises(BackendUnavailableError, match="AYON_TEST_"):
         AyonBackend("DEMO", environment=Environment.TEST).connect()

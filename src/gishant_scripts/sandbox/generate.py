@@ -10,7 +10,7 @@ from rich.tree import Tree
 
 from gishant_scripts.sandbox.backends import (
     AyonBackend,
-    BackendUnavailable,
+    BackendUnavailableError,
     Environment,
     KitsuBackend,
     ShotGridBackend,
@@ -187,7 +187,7 @@ class EpisodeGenerator:
         """Create episode, sequences, and shots in Kitsu."""
         try:
             gazu = self._kitsu.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
 
@@ -218,7 +218,7 @@ class EpisodeGenerator:
         """Create scene, sequences, and shots in ShotGrid using batch API."""
         try:
             sg = self._shotgrid.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
 
@@ -279,7 +279,7 @@ class EpisodeGenerator:
         """
         try:
             ayon_api = self._ayon.connect()
-        except BackendUnavailable as exc:
+        except BackendUnavailableError as exc:
             self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
 

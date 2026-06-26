@@ -31,7 +31,7 @@ class _FakeAyon:
     def get_folder_by_path(self, _project: str, path: str) -> dict | None:
         return self._by_path.get(path)
 
-    def get_folders(self, _project: str, parent_ids=None):  # noqa: ANN001
+    def get_folders(self, _project: str, parent_ids=None):
         if parent_ids is None:
             return list(self._by_path.values())
         parent = set(parent_ids)

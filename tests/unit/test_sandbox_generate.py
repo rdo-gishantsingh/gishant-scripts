@@ -9,13 +9,13 @@ from gishant_scripts.sandbox.selection import SelectionScope
 
 
 def _gen(**kwargs) -> EpisodeGenerator:
-    defaults = dict(
-        project_name="DEMO",
-        episode_name="ep_test",
-        num_sequences=0,
-        shots_per_sequence=0,
-        console=Console(),
-    )
+    defaults = {
+        "project_name": "DEMO",
+        "episode_name": "ep_test",
+        "num_sequences": 0,
+        "shots_per_sequence": 0,
+        "console": Console(),
+    }
     defaults.update(kwargs)
     return EpisodeGenerator(**defaults)
 

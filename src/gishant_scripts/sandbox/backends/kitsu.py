@@ -6,7 +6,7 @@ import os
 
 from gishant_scripts.sandbox.backends.base import (
     Backend,
-    BackendUnavailable,
+    BackendUnavailableError,
     load_rdo_env,
 )
 
@@ -30,17 +30,17 @@ class KitsuBackend(Backend):
         return os.environ.get("RDO_KITSU_HOST"), os.environ.get("RDO_KITSU_API_TOKEN")
 
     def connect(self) -> object:
-        """Configure and return the ``gazu`` module. Raise BackendUnavailable on failure."""
+        """Configure and return the ``gazu`` module. Raise BackendUnavailableError on failure."""
         host, token = self.credentials()
         if not host or not token:
             prefix = "RDO_KITSU_TEST_" if self._environment.is_test else "RDO_KITSU_"
             msg = f"Kitsu: {prefix}HOST or {prefix}API_TOKEN not set"
-            raise BackendUnavailable(msg)
+            raise BackendUnavailableError(msg)
         try:
             import gazu
         except ImportError as exc:
             msg = "Kitsu: gazu not installed"
-            raise BackendUnavailable(msg) from exc
+            raise BackendUnavailableError(msg) from exc
         gazu.set_host(host + "/api")
         gazu.set_token(token)
         return gazu
