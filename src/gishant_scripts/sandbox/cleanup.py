@@ -173,7 +173,6 @@ class FolderCleanup:
         self._skip_shotgrid = skip_shotgrid
         self._skip_ayon = skip_ayon
         self._skip_storage = skip_storage
-        self._environment = environment
         self._kitsu = KitsuBackend(project_name, environment, project_config)
         self._shotgrid = ShotGridBackend(project_name, environment, project_config)
         self._ayon = AyonBackend(project_name, environment, project_config)
@@ -731,7 +730,6 @@ class ProjectRemoval:
         self._skip_shotgrid = skip_shotgrid
         self._skip_ayon = skip_ayon
         self._skip_storage = skip_storage
-        self._environment = environment
         # No canonical key for arbitrary projects -> empty config.
         self._kitsu = KitsuBackend("", environment, None)
         self._shotgrid = ShotGridBackend("", environment, None)

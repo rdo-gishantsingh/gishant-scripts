@@ -37,6 +37,8 @@ def test_cleanup_path_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
         def execute(self, _plan) -> None:
             raise AssertionError("execute must not run in dry-run")
 
+    monkeypatch.setattr("gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"}))
+    monkeypatch.setattr("gishant_scripts.sandbox.config.resolve_project", lambda *_a, **_k: None)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.FolderCleanup", FakeCleanup)
     result = runner.invoke(app, ["cleanup", "/assets/x", "-p", "SGAYONTEST"])
     assert result.exit_code == 0
@@ -74,6 +76,8 @@ def test_generate_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
         def display_plan(self, _plan) -> None: ...
         def execute(self, _plan) -> None: ...
 
+    monkeypatch.setattr("gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"}))
+    monkeypatch.setattr("gishant_scripts.sandbox.config.resolve_project", lambda *_a, **_k: None)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.EpisodeGenerator", FakeGenerator)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.FolderCleanup", FakeCleanup)
     result = runner.invoke(app, ["generate", "ep_test", "-p", "SGAYONTEST", "--sequences", "2"])

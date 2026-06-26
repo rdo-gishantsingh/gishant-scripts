@@ -69,7 +69,6 @@ class EpisodeGenerator:
         selection_scope: SelectionScope | None = None,
         project_config: ProjectConfig | None = None,
     ) -> None:
-        self._project_name = project_name
         self._episode_name = episode_name
         self._num_sequences = num_sequences
         self._shots_per_seq = shots_per_sequence
@@ -77,7 +76,6 @@ class EpisodeGenerator:
         self._skip_kitsu = skip_kitsu
         self._skip_shotgrid = skip_shotgrid
         self._skip_ayon = skip_ayon
-        self._environment = environment
         self._scope = selection_scope or SelectionScope()
         self._kitsu = KitsuBackend(project_name, environment, project_config)
         self._shotgrid = ShotGridBackend(project_name, environment, project_config)
