@@ -8,5 +8,6 @@ from gishant_scripts.sandbox.backends.base import (
     Environment,
     load_rdo_env,
 )
+from gishant_scripts.sandbox.backends.kitsu import KitsuBackend
 
-__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env"]
+__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env", "KitsuBackend"]
