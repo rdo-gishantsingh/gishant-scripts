@@ -138,14 +138,14 @@ def _reg_shotgrid() -> None:
     app.add_typer(shotgrid_app, name="shotgrid")
 
 
-def _reg_testdata() -> None:
-    from gishant_scripts.testdata.cli import app as testdata_app
+def _reg_sandbox() -> None:
+    from gishant_scripts.sandbox.cli import app as sandbox_app
 
-    app.add_typer(testdata_app, name="testdata")
+    app.add_typer(sandbox_app, name="sandbox")
 
 
 _register_subapp("shotgrid", _reg_shotgrid)
-_register_subapp("testdata", _reg_testdata)
+_register_subapp("sandbox", _reg_sandbox)
 
 
 def main() -> None:
