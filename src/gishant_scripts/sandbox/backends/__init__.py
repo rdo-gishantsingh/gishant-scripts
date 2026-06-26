@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from gishant_scripts.sandbox.backends.ayon import AyonBackend
 from gishant_scripts.sandbox.backends.base import (
     Backend,
     BackendUnavailable,
@@ -10,4 +11,4 @@ from gishant_scripts.sandbox.backends.base import (
 )
 from gishant_scripts.sandbox.backends.kitsu import KitsuBackend
 
-__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env", "KitsuBackend"]
+__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env", "AyonBackend", "KitsuBackend"]
