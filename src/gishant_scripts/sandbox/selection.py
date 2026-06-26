@@ -1,4 +1,4 @@
-"""Shared selection helpers for granular testdata operations."""
+"""Shared selection helpers for granular sandbox operations."""
 
 from __future__ import annotations
 
