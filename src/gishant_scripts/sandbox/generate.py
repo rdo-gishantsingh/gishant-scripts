@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
-from rich.console import Console
 from rich.tree import Tree
 
-from gishant_scripts.testdata.config import ProjectConfig
-from gishant_scripts.testdata.selection import SelectionScope
+from gishant_scripts.sandbox.backends import (
+    AyonBackend,
+    BackendUnavailableError,
+    Environment,
+    KitsuBackend,
+    ShotGridBackend,
+)
+from gishant_scripts.sandbox.selection import SelectionScope
+
+if TYPE_CHECKING:
+    from rich.console import Console
+
+    from gishant_scripts.sandbox.config import ProjectConfig
 
 _log = logging.getLogger(__name__)
-
-# Default .env location for RDO credentials.
-_RDO_ENV_PATH = Path.home() / ".rdo" / ".env"
 
 
 def _is_glob_pattern(pattern: str) -> bool:
@@ -60,11 +65,10 @@ class EpisodeGenerator:
         skip_kitsu: bool = False,
         skip_shotgrid: bool = False,
         skip_ayon: bool = False,
-        use_test_server: bool = False,
+        environment: Environment = Environment.TEST,
         selection_scope: SelectionScope | None = None,
         project_config: ProjectConfig | None = None,
     ) -> None:
-        self._project_name = project_name
         self._episode_name = episode_name
         self._num_sequences = num_sequences
         self._shots_per_seq = shots_per_sequence
@@ -72,72 +76,10 @@ class EpisodeGenerator:
         self._skip_kitsu = skip_kitsu
         self._skip_shotgrid = skip_shotgrid
         self._skip_ayon = skip_ayon
-        self._use_test_server = use_test_server
         self._scope = selection_scope or SelectionScope()
-        self._project_config = project_config
-
-    # ------------------------------------------------------------------
-    # Per-backend name resolution
-    # ------------------------------------------------------------------
-
-    @property
-    def _kitsu_name(self) -> str:
-        """Return the Kitsu-specific project name."""
-        return self._project_config.kitsu if self._project_config else self._project_name
-
-    @property
-    def _sg_name(self) -> str:
-        """Return the ShotGrid-specific project name."""
-        return self._project_config.shotgrid if self._project_config else self._project_name
-
-    @property
-    def _ayon_name(self) -> str:
-        """Return the AYON-specific project name."""
-        return self._project_config.ayon if self._project_config else self._project_name
-
-    # ------------------------------------------------------------------
-    # Credential helpers (shared pattern with cleanup)
-    # ------------------------------------------------------------------
-
-    def _get_kitsu_creds(self) -> tuple[str | None, str | None]:
-        """Return (host, token) for Kitsu based on server mode."""
-        load_dotenv(_RDO_ENV_PATH)
-        if self._use_test_server:
-            host = os.environ.get("RDO_KITSU_TEST_HOST")
-            token = os.environ.get("RDO_KITSU_TEST_API_TOKEN")
-        else:
-            host = os.environ.get("RDO_KITSU_HOST")
-            token = os.environ.get("RDO_KITSU_API_TOKEN")
-        return host, token
-
-    def _get_shotgrid_creds(self) -> tuple[str | None, str | None, str | None]:
-        """Return (url, script_name, api_key) for ShotGrid."""
-        load_dotenv(_RDO_ENV_PATH)
-        sg_url = os.environ.get("SHOTGRID_SERVER_URL")
-        sg_script = os.environ.get("SHOTGRID_SCRIPT")
-        sg_key = os.environ.get("SHOTGRID_API_KEY")
-        return sg_url, sg_script, sg_key
-
-    def _get_ayon_creds(self) -> tuple[str | None, str | None]:
-        """Return (server_url, api_key) for AYON based on server mode."""
-        load_dotenv(_RDO_ENV_PATH)
-        if self._use_test_server:
-            server_url = os.environ.get("AYON_TEST_SERVER_URL")
-            api_key = os.environ.get("AYON_TEST_API_KEY")
-        else:
-            server_url = os.environ.get("AYON_SERVER_URL")
-            api_key = os.environ.get("AYON_API_KEY")
-        return server_url, api_key
-
-    def _setup_ayon_connection(self, server_url: str, api_key: str) -> None:
-        """Set AYON env vars and create the connection if needed."""
-        import ayon_api
-
-        os.environ["AYON_SERVER_URL"] = server_url
-        os.environ["AYON_API_KEY"] = api_key
-
-        if not ayon_api.is_connection_created():
-            ayon_api.create_connection()
+        self._kitsu = KitsuBackend(project_name, environment, project_config)
+        self._shotgrid = ShotGridBackend(project_name, environment, project_config)
+        self._ayon = AyonBackend(project_name, environment, project_config)
 
     # ------------------------------------------------------------------
     # Planning (pure computation, no API calls)
@@ -145,10 +87,7 @@ class EpisodeGenerator:
 
     def plan(self) -> GenerationPlan:
         """Build the naming hierarchy -- pure computation, no API calls."""
-        generated_sequences = [
-            f"{self._episode_name}_sq{(i + 1) * 10:03d}"
-            for i in range(self._num_sequences)
-        ]
+        generated_sequences = [f"{self._episode_name}_sq{(i + 1) * 10:03d}" for i in range(self._num_sequences)]
 
         seq_names: list[str] = []
         for seq_name in generated_sequences + self._explicit_sequence_names():
@@ -158,10 +97,7 @@ class EpisodeGenerator:
 
         shots: dict[str, list[str]] = {}
         for seq in seq_names:
-            generated_shots = [
-                f"{seq}_sh{(j + 1) * 10:04d}"
-                for j in range(self._shots_per_seq)
-            ]
+            generated_shots = [f"{seq}_sh{(j + 1) * 10:04d}" for j in range(self._shots_per_seq)]
             selected_shots: list[str] = []
             for shot_name in generated_shots + self._explicit_shot_names_for_sequence(seq):
                 if shot_name in selected_shots or not self._scope.matches_shot(seq, shot_name):
@@ -222,17 +158,13 @@ class EpisodeGenerator:
         # Summary line.
         num_seq = len(plan.sequences)
         num_shots = plan.total_shots
-        self._console.print(
-            f"Total: [bold]1[/] episode, [bold]{num_seq}[/] sequences, [bold]{num_shots}[/] shots"
-        )
+        self._console.print(f"Total: [bold]1[/] episode, [bold]{num_seq}[/] sequences, [bold]{num_shots}[/] shots")
 
         # Target indicators.
         kitsu_mark = "[green]yes[/]" if not self._skip_kitsu else "[dim]skip[/]"
         sg_mark = "[green]yes[/]" if not self._skip_shotgrid else "[dim]skip[/]"
         ayon_mark = "[green]yes[/]" if not self._skip_ayon else "[dim]skip[/]"
-        self._console.print(
-            f"Targets: Kitsu {kitsu_mark}  ShotGrid {sg_mark}  AYON {ayon_mark}"
-        )
+        self._console.print(f"Targets: Kitsu {kitsu_mark}  ShotGrid {sg_mark}  AYON {ayon_mark}")
 
     # ------------------------------------------------------------------
     # Execution
@@ -252,29 +184,15 @@ class EpisodeGenerator:
     def _create_kitsu(self, plan: GenerationPlan) -> None:
         """Create episode, sequences, and shots in Kitsu."""
         try:
-            import gazu
-        except ImportError:
-            self._console.print("[yellow]Kitsu: gazu not installed -- skipping[/]")
+            gazu = self._kitsu.connect()
+        except BackendUnavailableError as exc:
+            self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
-
-        host, token = self._get_kitsu_creds()
-        if not host or not token:
-            env_prefix = "RDO_KITSU_TEST_" if self._use_test_server else "RDO_KITSU_"
-            self._console.print(
-                f"[yellow]Kitsu: {env_prefix}HOST or {env_prefix}API_TOKEN not set -- skipping[/]"
-            )
-            return
-
-        gazu.set_host(host + "/api")
-        gazu.set_token(token)
 
         self._console.print("[bold cyan]Creating in Kitsu...[/]")
-
-        project = gazu.project.get_project_by_name(self._kitsu_name)
+        project = gazu.project.get_project_by_name(self._kitsu.project_name)
         if not project:
-            self._console.print(
-                f"[red]Kitsu: project '{self._kitsu_name}' not found[/]"
-            )
+            self._console.print(f"[red]Kitsu: project '{self._kitsu.project_name}' not found[/]")
             return
 
         episode = gazu.shot.new_episode(project, plan.episode_name)
@@ -289,8 +207,7 @@ class EpisodeGenerator:
                 _log.info("Kitsu: created shot %s", shot_name)
 
         self._console.print(
-            f"[green]Kitsu: created 1 episode, {len(plan.sequences)} sequences, "
-            f"{plan.total_shots} shots[/]"
+            f"[green]Kitsu: created 1 episode, {len(plan.sequences)} sequences, {plan.total_shots} shots[/]"
         )
 
     # -- ShotGrid -------------------------------------------------------
@@ -298,28 +215,15 @@ class EpisodeGenerator:
     def _create_shotgrid(self, plan: GenerationPlan) -> None:
         """Create scene, sequences, and shots in ShotGrid using batch API."""
         try:
-            import shotgun_api3
-        except ImportError:
-            self._console.print("[yellow]ShotGrid: shotgun_api3 not installed -- skipping[/]")
+            sg = self._shotgrid.connect()
+        except BackendUnavailableError as exc:
+            self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
-
-        sg_url, sg_script, sg_key = self._get_shotgrid_creds()
-        if not sg_url or not sg_script or not sg_key:
-            self._console.print(
-                "[yellow]ShotGrid: SHOTGRID_SERVER_URL, SHOTGRID_SCRIPT, or "
-                "SHOTGRID_API_KEY not set -- skipping[/]"
-            )
-            return
-
-        sg = shotgun_api3.Shotgun(sg_url, script_name=sg_script, api_key=sg_key)
 
         self._console.print("[bold magenta]Creating in ShotGrid...[/]")
-
-        project = sg.find_one("Project", [["name", "is", self._sg_name]])
+        project = sg.find_one("Project", [["name", "is", self._shotgrid.project_name]])
         if not project:
-            self._console.print(
-                f"[red]ShotGrid: project '{self._sg_name}' not found[/]"
-            )
+            self._console.print(f"[red]ShotGrid: project '{self._shotgrid.project_name}' not found[/]")
             return
 
         # Create scene (episode equivalent in ShotGrid).
@@ -340,9 +244,9 @@ class EpisodeGenerator:
 
         # Batch create shots.
         shot_batch = []
-        for seq_result, seq_name in zip(seq_results, plan.sequences):
-            for shot_name in plan.shots[seq_name]:
-                shot_batch.append({
+        for seq_result, seq_name in zip(seq_results, plan.sequences, strict=False):
+            shot_batch.extend(
+                {
                     "request_type": "create",
                     "entity_type": "Shot",
                     "data": {
@@ -351,15 +255,16 @@ class EpisodeGenerator:
                         "sg_sequence": seq_result,
                         "sg_scene": scene,
                     },
-                })
+                }
+                for shot_name in plan.shots[seq_name]
+            )
 
         if shot_batch:
             sg.batch(shot_batch)
             _log.info("ShotGrid: batch-created %d shots", len(shot_batch))
 
         self._console.print(
-            f"[green]ShotGrid: created 1 scene, {len(plan.sequences)} sequences, "
-            f"{plan.total_shots} shots[/]"
+            f"[green]ShotGrid: created 1 scene, {len(plan.sequences)} sequences, {plan.total_shots} shots[/]"
         )
 
     # -- AYON -----------------------------------------------------------
@@ -371,27 +276,18 @@ class EpisodeGenerator:
         by level: episode first, then sequences, then shots.
         """
         try:
-            import ayon_api
-        except ImportError:
-            self._console.print("[yellow]AYON: ayon_api not installed -- skipping[/]")
+            ayon_api = self._ayon.connect()
+        except BackendUnavailableError as exc:
+            self._console.print(f"[yellow]{exc} -- skipping[/]")
             return
-
-        server_url, api_key = self._get_ayon_creds()
-        if not server_url or not api_key:
-            env_prefix = "AYON_TEST_" if self._use_test_server else "AYON_"
-            self._console.print(
-                f"[yellow]AYON: {env_prefix}SERVER_URL or {env_prefix}API_KEY not set -- skipping[/]"
-            )
-            return
-
-        self._setup_ayon_connection(server_url, api_key)
 
         self._console.print("[bold green]Creating in AYON...[/]")
+        proj = self._ayon.project_name
 
         # Find the Episodes root folder to use as parent.
         episodes_root = None
         for path_candidate in ("episodes", "Episodes"):
-            episodes_root = ayon_api.get_folder_by_path(self._ayon_name, path_candidate)
+            episodes_root = ayon_api.get_folder_by_path(proj, path_candidate)
             if episodes_root:
                 break
 
@@ -399,7 +295,7 @@ class EpisodeGenerator:
 
         # Create episode folder.
         episode_id = ayon_api.create_folder(
-            self._ayon_name,
+            proj,
             name=plan.episode_name,
             folder_type="Episode",
             parent_id=parent_id,
@@ -410,7 +306,7 @@ class EpisodeGenerator:
         seq_ids: dict[str, str] = {}
         for seq_name in plan.sequences:
             seq_id = ayon_api.create_folder(
-                self._ayon_name,
+                proj,
                 name=seq_name,
                 folder_type="Sequence",
                 parent_id=episode_id,
@@ -423,7 +319,7 @@ class EpisodeGenerator:
         for seq_name, seq_id in seq_ids.items():
             for shot_name in plan.shots[seq_name]:
                 ayon_api.create_folder(
-                    self._ayon_name,
+                    proj,
                     name=shot_name,
                     folder_type="Shot",
                     parent_id=seq_id,
@@ -432,7 +328,4 @@ class EpisodeGenerator:
 
         _log.info("AYON: created %d shot folders", shot_count)
 
-        self._console.print(
-            f"[green]AYON: created 1 episode, {len(plan.sequences)} sequences, "
-            f"{shot_count} shots[/]"
-        )
+        self._console.print(f"[green]AYON: created 1 episode, {len(plan.sequences)} sequences, {shot_count} shots[/]")
