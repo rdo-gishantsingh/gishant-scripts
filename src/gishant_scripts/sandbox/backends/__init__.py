@@ -10,5 +10,6 @@ from gishant_scripts.sandbox.backends.base import (
     load_rdo_env,
 )
 from gishant_scripts.sandbox.backends.kitsu import KitsuBackend
+from gishant_scripts.sandbox.backends.shotgrid import ShotGridBackend
 
-__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env", "AyonBackend", "KitsuBackend"]
+__all__ = ["Backend", "BackendUnavailable", "Environment", "load_rdo_env", "AyonBackend", "KitsuBackend", "ShotGridBackend"]
