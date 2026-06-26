@@ -6,7 +6,7 @@ import os
 
 from gishant_scripts.sandbox.backends.base import (
     Backend,
-    BackendUnavailable,
+    BackendUnavailableError,
     load_rdo_env,
 )
 
@@ -30,17 +30,17 @@ class AyonBackend(Backend):
         return os.environ.get("AYON_SERVER_URL"), os.environ.get("AYON_API_KEY")
 
     def connect(self) -> object:
-        """Configure and return the ``ayon_api`` module. Raise BackendUnavailable on failure."""
+        """Configure and return the ``ayon_api`` module. Raise BackendUnavailableError on failure."""
         server_url, api_key = self.credentials()
         if not server_url or not api_key:
             prefix = "AYON_TEST_" if self._environment.is_test else "AYON_"
             msg = f"AYON: {prefix}SERVER_URL or {prefix}API_KEY not set"
-            raise BackendUnavailable(msg)
+            raise BackendUnavailableError(msg)
         try:
             import ayon_api
         except ImportError as exc:
             msg = "AYON: ayon_api not installed"
-            raise BackendUnavailable(msg) from exc
+            raise BackendUnavailableError(msg) from exc
         os.environ["AYON_SERVER_URL"] = server_url
         os.environ["AYON_API_KEY"] = api_key
         if not ayon_api.is_connection_created():

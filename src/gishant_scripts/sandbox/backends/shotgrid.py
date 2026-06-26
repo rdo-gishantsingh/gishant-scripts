@@ -6,7 +6,7 @@ import os
 
 from gishant_scripts.sandbox.backends.base import (
     Backend,
-    BackendUnavailable,
+    BackendUnavailableError,
     load_rdo_env,
 )
 
@@ -33,14 +33,14 @@ class ShotGridBackend(Backend):
         )
 
     def connect(self) -> object:
-        """Return a ``shotgun_api3.Shotgun`` instance. Raise BackendUnavailable on failure."""
+        """Return a ``shotgun_api3.Shotgun`` instance. Raise BackendUnavailableError on failure."""
         url, script, key = self.credentials()
         if not url or not script or not key:
             msg = "ShotGrid: SHOTGRID_SERVER_URL, SHOTGRID_SCRIPT, or SHOTGRID_API_KEY not set"
-            raise BackendUnavailable(msg)
+            raise BackendUnavailableError(msg)
         try:
             import shotgun_api3
         except ImportError as exc:
             msg = "ShotGrid: shotgun_api3 not installed"
-            raise BackendUnavailable(msg) from exc
+            raise BackendUnavailableError(msg) from exc
         return shotgun_api3.Shotgun(url, script_name=script, api_key=key)

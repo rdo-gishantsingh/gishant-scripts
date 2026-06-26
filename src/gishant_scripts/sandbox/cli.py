@@ -63,6 +63,7 @@ def cleanup_cmd(
     Project mode (--projects) matches whole project names independently on each
     backend and deletes them from Kitsu, AYON, ShotGrid, and NAS storage. NAS
     storage is resolved only for matched AYON projects.
+
     """
     if path and projects:
         console.print("[bold red]ERROR:[/] PATH and --projects are mutually exclusive.")
@@ -143,6 +144,7 @@ def generate_cmd(
     Examples:
         gishant sandbox generate ep_test --sequences 3 --shots 5
         gishant sandbox generate ep_test --sequence '*sq020' --shot '*_sh0030'
+
     """
     _check_project(project_name)
     _print_server_mode(server)

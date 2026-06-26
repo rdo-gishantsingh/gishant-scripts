@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gishant_scripts.sandbox.backends.base import BackendUnavailable, Environment
+from gishant_scripts.sandbox.backends.base import BackendUnavailableError, Environment
 from gishant_scripts.sandbox.backends.kitsu import KitsuBackend
 from gishant_scripts.sandbox.config import ProjectConfig
 
@@ -48,5 +48,5 @@ def test_credentials_production_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_connect_raises_when_creds_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RDO_KITSU_TEST_HOST", raising=False)
     monkeypatch.delenv("RDO_KITSU_TEST_API_TOKEN", raising=False)
-    with pytest.raises(BackendUnavailable, match="RDO_KITSU_TEST_"):
+    with pytest.raises(BackendUnavailableError, match="RDO_KITSU_TEST_"):
         KitsuBackend("DEMO", environment=Environment.TEST).connect()

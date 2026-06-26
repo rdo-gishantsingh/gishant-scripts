@@ -8,7 +8,7 @@ operation logic (discovery, create, delete) to themselves.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 _RDO_ENV_PATH = Path.home() / ".rdo" / ".env"
 
 
-class Environment(str, Enum):
+class Environment(StrEnum):
     """Target server environment selected by the ``--server`` flag."""
 
     TEST = "test"
@@ -32,7 +32,7 @@ class Environment(str, Enum):
         return self is Environment.TEST
 
 
-class BackendUnavailable(Exception):
+class BackendUnavailableError(Exception):
     """Raised when a backend cannot be used (library missing or creds unset)."""
 
 

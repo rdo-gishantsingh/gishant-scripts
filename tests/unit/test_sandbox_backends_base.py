@@ -6,7 +6,7 @@ import pytest
 
 from gishant_scripts.sandbox.backends.base import (
     Backend,
-    BackendUnavailable,
+    BackendUnavailableError,
     Environment,
 )
 
@@ -31,5 +31,5 @@ def test_backend_defaults_to_test_env() -> None:
 
 
 def test_backend_unavailable_is_exception() -> None:
-    with pytest.raises(BackendUnavailable):
-        raise BackendUnavailable("nope")
+    with pytest.raises(BackendUnavailableError):
+        raise BackendUnavailableError("nope")

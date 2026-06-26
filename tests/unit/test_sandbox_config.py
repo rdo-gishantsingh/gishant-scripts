@@ -9,7 +9,6 @@ import pytest
 
 from gishant_scripts.sandbox.config import (
     allowed_project_keys,
-    load_projects,
     resolve_project,
 )
 

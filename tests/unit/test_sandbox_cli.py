@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
+
 from typer.testing import CliRunner
+
+if TYPE_CHECKING:
+    import pytest
 
 from gishant_scripts.sandbox.cleanup import FolderDeletionPlan, ProjectRemovalPlan
 from gishant_scripts.sandbox.cli import app
