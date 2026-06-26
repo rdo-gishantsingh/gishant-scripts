@@ -866,7 +866,11 @@ class ProjectRemoval:
     def _execute_kitsu(self, plan: ProjectRemovalPlan) -> None:
         gazu = self._kitsu.connect()
         self._console.print("[bold cyan]Removing Kitsu projects...[/]")
-        closed_status = gazu.project.get_project_status_by_name("Closed")
+        try:
+            closed_status = gazu.project.get_project_status_by_name("Closed")
+        except Exception as exc:  # gazu raises varied types; degrade gracefully
+            _log.warning("Kitsu: could not fetch 'Closed' status -- %s", exc)
+            closed_status = None
         for project in plan.kitsu_projects:
             name = project.get("name", "")
             try:
