@@ -33,11 +33,14 @@ def test_cleanup_path_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, *a, **k) -> None: ...
         def plan(self) -> FolderDeletionPlan:
             return FolderDeletionPlan(ayon_folders=[{"id": "1", "name": "x", "path": "/assets/x"}])
+
         def display_plan(self, _plan) -> None: ...
         def execute(self, _plan) -> None:
             raise AssertionError("execute must not run in dry-run")
 
-    monkeypatch.setattr("gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"}))
+    monkeypatch.setattr(
+        "gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"})
+    )
     monkeypatch.setattr("gishant_scripts.sandbox.config.resolve_project", lambda *_a, **_k: None)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.FolderCleanup", FakeCleanup)
     result = runner.invoke(app, ["cleanup", "/assets/x", "-p", "SGAYONTEST"])
@@ -50,6 +53,7 @@ def test_cleanup_projects_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, *a, **k) -> None: ...
         def plan(self) -> ProjectRemovalPlan:
             return ProjectRemovalPlan(kitsu_projects=[{"name": "_test_a"}])
+
         def display_plan(self, _plan) -> None: ...
         def execute(self, _plan) -> None:
             raise AssertionError("execute must not run in dry-run")
@@ -60,11 +64,52 @@ def test_cleanup_projects_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "DRY RUN" in result.output
 
 
+def test_cleanup_rejects_bad_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"})
+    )
+    result = runner.invoke(app, ["cleanup", "/assets/x", "-p", "SGAYONTEST", "--created-after", "yesterday"])
+    assert result.exit_code != 0
+    assert "invalid date" in result.output.lower()
+
+
+def test_cleanup_date_filter_rejected_in_projects_mode() -> None:
+    result = runner.invoke(app, ["cleanup", "--projects", "_test*", "--created-after", "2026-07-09"])
+    assert result.exit_code != 0
+    assert "path mode only" in result.output.lower()
+
+
+def test_cleanup_passes_date_window_to_cleaner(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeCleanup:
+        def __init__(self, *_a, **k) -> None:
+            captured.update(k)
+
+        def plan(self) -> FolderDeletionPlan:
+            return FolderDeletionPlan(ayon_folders=[{"id": "1", "name": "x", "path": "/assets/x"}])
+
+        def display_plan(self, _plan) -> None: ...
+        def execute(self, _plan) -> None: ...
+
+    monkeypatch.setattr(
+        "gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"})
+    )
+    monkeypatch.setattr("gishant_scripts.sandbox.config.resolve_project", lambda *_a, **_k: None)
+    monkeypatch.setattr("gishant_scripts.sandbox.cli.FolderCleanup", FakeCleanup)
+    result = runner.invoke(app, ["cleanup", "/assets/x", "-p", "SGAYONTEST", "--created-after", "2026-07-09"])
+    assert result.exit_code == 0
+    window = captured["date_window"]
+    assert window is not None
+    assert window.active  # type: ignore[attr-defined]
+
+
 def test_generate_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGenerator:
         def __init__(self, *a, **k) -> None: ...
         def plan(self) -> GenerationPlan:
             return GenerationPlan(episode_name="ep_test", sequences=[], shots={})
+
         def display_plan(self, _plan) -> None: ...
         def execute(self, _plan) -> None:
             raise AssertionError("execute must not run in dry-run")
@@ -73,10 +118,13 @@ def test_generate_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, *a, **k) -> None: ...
         def plan(self) -> FolderDeletionPlan:
             return FolderDeletionPlan()
+
         def display_plan(self, _plan) -> None: ...
         def execute(self, _plan) -> None: ...
 
-    monkeypatch.setattr("gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"}))
+    monkeypatch.setattr(
+        "gishant_scripts.sandbox.config.allowed_project_keys", lambda *_a, **_k: frozenset({"SGAYONTEST"})
+    )
     monkeypatch.setattr("gishant_scripts.sandbox.config.resolve_project", lambda *_a, **_k: None)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.EpisodeGenerator", FakeGenerator)
     monkeypatch.setattr("gishant_scripts.sandbox.cli.FolderCleanup", FakeCleanup)

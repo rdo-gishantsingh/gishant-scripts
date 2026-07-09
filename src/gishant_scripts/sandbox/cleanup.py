@@ -23,6 +23,8 @@ from gishant_scripts.sandbox.backends import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rich.console import Console
 
     from gishant_scripts.sandbox.config import ProjectConfig
@@ -44,6 +46,104 @@ _SG_TYPE_MAP: dict[str, str] = {
 _SRC_MATCHED = "matched"  # directly matched the path glob
 _SRC_DESCENDANT = "descendant"  # child folder swept in under a match
 _SRC_ATTACHED = "attached"  # task/version hanging off a matched/descendant entity
+
+# Date-window status of a single entity, relative to an active filter.
+_DATE_IN = "in"  # created within the window -> eligible for deletion
+_DATE_OUT = "out"  # created outside the window -> preserved
+_DATE_NODATE = "nodate"  # no datestamp -> preserved (never delete what we can't date)
+
+# AYON folder fields we fetch explicitly so ``createdAt`` is always present
+# (the ayon_api default folder field set omits it). Superset of the keys the
+# planner and cross-backend resolution rely on.
+_AYON_FOLDER_FIELDS = {
+    "id",
+    "name",
+    "label",
+    "folderType",
+    "path",
+    "parentId",
+    "active",
+    "status",
+    "tags",
+    "data",
+    "createdAt",
+}
+
+
+@dataclass(frozen=True)
+class DateWindow:
+    """Inclusive ``created_at`` window (UTC) for date-filtered cleanup.
+
+    ``after``/``before`` are tz-aware UTC datetimes. Comparisons throughout the
+    tool are done in UTC, matching how :func:`_assess_risk` treats timestamps.
+    """
+
+    after: datetime | None = None
+    before: datetime | None = None
+
+    @property
+    def active(self) -> bool:
+        """True when at least one bound is set."""
+        return self.after is not None or self.before is not None
+
+    def status(self, value: object) -> str:
+        """Classify a ``created_at`` value as in / out of window / undateable."""
+        dt = _coerce_created_at(value)
+        if dt is None:
+            return _DATE_NODATE
+        dt = dt.astimezone(UTC)
+        if self.after is not None and dt < self.after:
+            return _DATE_OUT
+        if self.before is not None and dt > self.before:
+            return _DATE_OUT
+        return _DATE_IN
+
+    def describe(self) -> str:
+        """Human-readable window, e.g. ``2026-07-09 .. (open)``."""
+        lo = self.after.date().isoformat() if self.after else "(open)"
+        hi = self.before.date().isoformat() if self.before else "(open)"
+        return f"{lo} .. {hi} (UTC)"
+
+
+def _parse_date_bound(value: str, *, end_of_day: bool) -> datetime:
+    """Parse ``YYYY-MM-DD`` or a full ISO datetime into a UTC-aware datetime.
+
+    A bare date is anchored at UTC start-of-day, or end-of-day when it is the
+    inclusive upper bound. Naive datetimes are assumed UTC. Raises ValueError
+    on unparseable input.
+    """
+    text = value.strip()
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError as exc:
+        msg = f"invalid date '{value}' -- use YYYY-MM-DD or an ISO 8601 datetime"
+        raise ValueError(msg) from exc
+    dt = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+    if end_of_day and len(text) == 10:  # bare 'YYYY-MM-DD' upper bound
+        dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return dt
+
+
+def parse_date_window(after: str | None, before: str | None) -> DateWindow:
+    """Build a :class:`DateWindow` from optional CLI date strings."""
+    return DateWindow(
+        after=_parse_date_bound(after, end_of_day=False) if after else None,
+        before=_parse_date_bound(before, end_of_day=True) if before else None,
+    )
+
+
+def _filter_files_by_mtime(root: Path, window: DateWindow) -> tuple[list[Path], int]:
+    """Return in-window files (by mtime) beneath ``root`` and their total size."""
+    files: list[Path] = []
+    total = 0
+    for f in root.rglob("*"):
+        if not f.is_file():
+            continue
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC)
+        if window.status(mtime) == _DATE_IN:
+            files.append(f)
+            total += f.stat().st_size
+    return files, total
 
 
 def _coerce_created_at(value: object) -> datetime | None:
@@ -158,6 +258,17 @@ class FolderDeletionPlan:
     # NAS storage — populated only for plan roots whose AYON path is under /episodes/
     storage_paths: list[Path] = field(default_factory=list)
     storage_total_bytes: int = 0
+    # NAS files pruned individually when a date filter is active (never whole dirs)
+    storage_files: list[Path] = field(default_factory=list)
+    storage_files_total_bytes: int = 0
+
+    # Date-filter bookkeeping (populated only when a --created-after/before is set).
+    # AYON is folder-cascade-only, so we can only force-delete a folder whose whole
+    # subtree is in-window; this holds the ids that are safe to delete.
+    ayon_deletable_ids: set[str] = field(default_factory=set)
+    # Leaf entities preserved by the filter: (backend, kind, name, created, reason)
+    date_excluded: list[tuple[str, str, str, str, str]] = field(default_factory=list)
+    date_kept: int = 0
 
     errors: list[str] = field(default_factory=list)
 
@@ -175,6 +286,7 @@ class FolderDeletionPlan:
                 self.shotgrid_tasks,
                 self.shotgrid_versions,
                 self.storage_paths,
+                self.storage_files,
             )
         )
 
@@ -311,6 +423,7 @@ class FolderCleanup:
         skip_storage: bool = False,
         environment: Environment = Environment.TEST,
         project_config: ProjectConfig | None = None,
+        date_window: DateWindow | None = None,
     ) -> None:
         normalized = path.strip("/")
         if not normalized:
@@ -319,6 +432,7 @@ class FolderCleanup:
         self._path = "/" + normalized
         self._project_name = project_name
         self._environment = environment
+        self._window = date_window or DateWindow()
         self._console = console
         self._skip_kitsu = skip_kitsu
         self._skip_shotgrid = skip_shotgrid
@@ -345,21 +459,25 @@ class FolderCleanup:
 
         if first_glob == len(segments):
             # Fully exact path — single server call
-            folder = ayon_api_mod.get_folder_by_path(self._ayon.project_name, "/".join(segments))
+            folder = ayon_api_mod.get_folder_by_path(
+                self._ayon.project_name, "/".join(segments), fields=_AYON_FOLDER_FIELDS
+            )
             return [folder] if folder else []
 
         if first_glob > 0:
             # Resolve the exact prefix, then fan out at the first glob
             prefix = "/".join(segments[:first_glob])
-            anchor = ayon_api_mod.get_folder_by_path(self._ayon.project_name, prefix)
+            anchor = ayon_api_mod.get_folder_by_path(self._ayon.project_name, prefix, fields=_AYON_FOLDER_FIELDS)
             if not anchor:
                 return []
-            children = list(ayon_api_mod.get_folders(self._ayon.project_name, parent_ids=[anchor["id"]]))
+            children = list(
+                ayon_api_mod.get_folders(self._ayon.project_name, parent_ids=[anchor["id"]], fields=_AYON_FOLDER_FIELDS)
+            )
             candidates = [c for c in children if fnmatch.fnmatch(c.get("name", ""), segments[first_glob])]
             remaining = segments[first_glob + 1 :]
         else:
             # Path starts with a glob — must enumerate all root-level folders
-            all_folders = list(ayon_api_mod.get_folders(self._ayon.project_name))
+            all_folders = list(ayon_api_mod.get_folders(self._ayon.project_name, fields=_AYON_FOLDER_FIELDS))
             candidates = [
                 f for f in all_folders if f.get("parentId") is None and fnmatch.fnmatch(f.get("name", ""), segments[0])
             ]
@@ -370,7 +488,11 @@ class FolderCleanup:
                 return []
             next_candidates: list[dict] = []
             for parent in candidates:
-                children = list(ayon_api_mod.get_folders(self._ayon.project_name, parent_ids=[parent["id"]]))
+                children = list(
+                    ayon_api_mod.get_folders(
+                        self._ayon.project_name, parent_ids=[parent["id"]], fields=_AYON_FOLDER_FIELDS
+                    )
+                )
                 if _is_glob(seg):
                     next_candidates.extend(c for c in children if fnmatch.fnmatch(c.get("name", ""), seg))
                 else:
@@ -392,7 +514,9 @@ class FolderCleanup:
         while queue:
             next_level: list[dict] = []
             for parent in queue:
-                for child in ayon_api_mod.get_folders(project_name, parent_ids=[parent["id"]]):
+                for child in ayon_api_mod.get_folders(
+                    project_name, parent_ids=[parent["id"]], fields=_AYON_FOLDER_FIELDS
+                ):
                     if child["id"] not in seen:
                         seen.add(child["id"])
                         result.append(child)
@@ -426,7 +550,85 @@ class FolderCleanup:
         if not self._skip_storage:
             self._plan_storage(result)
 
+        self._apply_date_filter(result)
         return result
+
+    # -- Date filter (Option A: leaf-level scalpel) --------------------
+
+    def _apply_date_filter(self, result: FolderDeletionPlan) -> None:
+        """Restrict the plan to in-window entities (leaf-level pruning).
+
+        No-op unless a window is active. When active:
+
+        * ShotGrid/Kitsu leaf entities are kept only if their own ``created_at``
+          is in-window; out-of-window and undateable ones are preserved.
+        * AYON is folder-cascade-only, so a folder is deletable only when its
+          entire subtree is in-window (:meth:`_ayon_deletable_ids`); otherwise
+          the folder is preserved -- we never force-delete an out-of-window
+          folder to reach an in-window entity inside it.
+        * NAS files were already filtered by mtime in :meth:`_plan_storage`.
+        """
+        if not self._window.active:
+            # No filter: every discovered folder is deletable, as before.
+            result.ayon_deletable_ids = {f["id"] for f in result.ayon_folders}
+            return
+
+        result.shotgrid_entities = self._partition(
+            result, result.shotgrid_entities, "ShotGrid", lambda e: e.get("type", "Entity"), "code"
+        )
+        result.shotgrid_versions = self._partition(result, result.shotgrid_versions, "ShotGrid", "Version", "code")
+        result.shotgrid_tasks = self._partition(result, result.shotgrid_tasks, "ShotGrid", "Task", "content")
+        result.kitsu_episodes = self._partition(result, result.kitsu_episodes, "Kitsu", "Episode", "name")
+        result.kitsu_sequences = self._partition(result, result.kitsu_sequences, "Kitsu", "Sequence", "name")
+        result.kitsu_shots = self._partition(result, result.kitsu_shots, "Kitsu", "Shot", "name")
+        result.kitsu_assets = self._partition(result, result.kitsu_assets, "Kitsu", "Asset", "name")
+
+        result.ayon_deletable_ids = self._ayon_deletable_ids(result.ayon_folders)
+
+    def _partition(
+        self,
+        result: FolderDeletionPlan,
+        items: list[dict],
+        backend: str,
+        kind: str | Callable[[dict], str],
+        name_key: str,
+    ) -> list[dict]:
+        """Return the in-window subset of ``items``; record the rest as excluded."""
+        kept: list[dict] = []
+        for item in items:
+            status = self._window.status(item.get("created_at"))
+            if status == _DATE_IN:
+                kept.append(item)
+                result.date_kept += 1
+                continue
+            reason = "out of window" if status == _DATE_OUT else "no date"
+            label = kind(item) if callable(kind) else kind
+            result.date_excluded.append(
+                (backend, label, str(item.get(name_key, "")), _fmt_date(item.get("created_at")), reason)
+            )
+        return kept
+
+    def _ayon_deletable_ids(self, folders: list[dict]) -> set[str]:
+        """Ids of folders whose entire subtree is in-window (safe to cascade-delete)."""
+        by_id = {f["id"]: f for f in folders}
+        children: dict[str, list[str]] = {}
+        for f in folders:
+            pid = f.get("parentId")
+            if pid in by_id:
+                children.setdefault(pid, []).append(f["id"])
+
+        memo: dict[str, bool] = {}
+
+        def subtree_in_window(fid: str) -> bool:
+            if fid in memo:
+                return memo[fid]
+            in_window = self._window.status(by_id[fid].get("createdAt")) == _DATE_IN
+            if in_window:
+                in_window = all(subtree_in_window(cid) for cid in children.get(fid, []))
+            memo[fid] = in_window
+            return in_window
+
+        return {fid for fid in by_id if subtree_in_window(fid)}
 
     # -- AYON -----------------------------------------------------------
 
@@ -635,10 +837,18 @@ class FolderCleanup:
             if not nas_path.exists():
                 _log.info("Storage: path not found -- %s", nas_path)
                 continue
-            result.storage_paths.append(nas_path)
-            total = sum(f.stat().st_size for f in nas_path.rglob("*") if f.is_file())
-            result.storage_total_bytes += total
-            _log.info("Storage: found %s (%s)", nas_path, _human_size(total))
+            if self._window.active:
+                # Leaf-level pruning: only in-window files, never the parent dir
+                # (which may predate the window or hold out-of-window files).
+                files, total = _filter_files_by_mtime(nas_path, self._window)
+                result.storage_files.extend(files)
+                result.storage_files_total_bytes += total
+                _log.info("Storage: %d in-window file(s) under %s (%s)", len(files), nas_path, _human_size(total))
+            else:
+                result.storage_paths.append(nas_path)
+                total = sum(f.stat().st_size for f in nas_path.rglob("*") if f.is_file())
+                result.storage_total_bytes += total
+                _log.info("Storage: found %s (%s)", nas_path, _human_size(total))
 
     # ------------------------------------------------------------------
     # Display
@@ -651,9 +861,11 @@ class FolderCleanup:
                 self._console.print(f"[yellow]WARNING: {err}[/]")
             self._console.print()
 
-        if plan.is_empty:
+        if plan.is_empty and not plan.date_excluded:
             self._console.print("[dim]Nothing found to delete.[/]")
             return
+
+        active = self._window.active
 
         # Provenance/age guardrails shown before the raw entity tables.
         self._display_target_banner(plan)
@@ -665,16 +877,23 @@ class FolderCleanup:
             table.add_column("Type", style="green")
             table.add_column("Path")
             table.add_column("Source", style="dim")
+            if active:
+                table.add_column("Created", style="dim")
+                table.add_column("Filter", style="dim")
             table.add_column("ID", style="dim")
-            rows: list[tuple[str, ...]] = [
-                (
+
+            def _ayon_row(f: dict) -> tuple[str, ...]:
+                base = (
                     f.get("folderType") or "Folder",
                     f.get("path", f.get("name", "")),
                     _entity_source(f, plan.ayon_matched_ids),
-                    _truncate_id(f.get("id", "")),
                 )
-                for f in plan.ayon_folders
-            ]
+                if active:
+                    verdict = "delete" if f["id"] in plan.ayon_deletable_ids else "preserve"
+                    base = (*base, _fmt_date(f.get("createdAt")), verdict)
+                return (*base, _truncate_id(f.get("id", "")))
+
+            rows: list[tuple[str, ...]] = [_ayon_row(f) for f in plan.ayon_folders]
             _add_rows_with_truncation(table, rows, "Total AYON folders")
             self._console.print(Panel(table, border_style="green"))
 
@@ -757,14 +976,54 @@ class FolderCleanup:
             self._console.print(Panel(table, border_style="magenta"))
 
         # Storage
-        if plan.storage_paths:
+        if plan.storage_paths or plan.storage_files:
             table = Table(title="NAS Storage", show_header=True, header_style="bold red")
             table.add_column("Path", style="red")
             table.add_column("Size", justify="right")
             for p in plan.storage_paths:
                 table.add_row(str(p), "")
-            table.add_row("[bold]Total[/]", _human_size(plan.storage_total_bytes))
+            for f in plan.storage_files:
+                table.add_row(str(f), "")
+            total_bytes = plan.storage_total_bytes + plan.storage_files_total_bytes
+            label = "Total (in-window files)" if plan.storage_files else "Total"
+            table.add_row(f"[bold]{label}[/]", _human_size(total_bytes))
             self._console.print(Panel(table, border_style="red"))
+
+        # Date-filter accounting shown after the entity tables.
+        if active:
+            self._display_date_filter_summary(plan)
+
+    def _display_date_filter_summary(self, plan: FolderDeletionPlan) -> None:
+        """Print the kept/excluded counts, the preserved rows, and the AYON constraint."""
+        excluded = plan.date_excluded
+        self._console.print(
+            f"[bold]Date filter:[/] {plan.date_kept} entity(ies) kept, {len(excluded)} excluded (preserved)."
+        )
+        if excluded:
+            table = Table(
+                title="Preserved by date filter (outside window / undateable)",
+                show_header=True,
+                header_style="bold yellow",
+            )
+            table.add_column("Backend", style="dim")
+            table.add_column("Type")
+            table.add_column("Name")
+            table.add_column("Created", style="dim")
+            table.add_column("Reason", style="dim")
+            rows: list[tuple[str, ...]] = list(excluded)
+            _add_rows_with_truncation(table, rows, "Total preserved")
+            self._console.print(Panel(table, border_style="yellow"))
+
+        # Surface the AYON folder-only constraint whenever leaves are pruned but
+        # AYON must keep a parent folder it cannot prune at version level.
+        preserved_folders = [f for f in plan.ayon_folders if f["id"] not in plan.ayon_deletable_ids]
+        pruned_leaves = plan.shotgrid_versions or plan.shotgrid_tasks or plan.shotgrid_entities or plan.storage_files
+        if preserved_folders and pruned_leaves:
+            self._console.print(
+                "[yellow]Note:[/] AYON deletion is folder-cascade-only. In-window leaf entities inside the "
+                f"{len(preserved_folders)} preserved folder(s) are pruned on ShotGrid/Kitsu/NAS but remain as "
+                "AYON products/versions (AYON has no version-level delete here)."
+            )
 
     def _display_target_banner(self, plan: FolderDeletionPlan) -> None:
         """Print the resolved delete target: project, server, glob, and roots."""
@@ -774,6 +1033,8 @@ class FolderCleanup:
             f"[bold]Server:[/]  {self._environment.value}",
             f"[bold]Target:[/]  {self._path}",
         ]
+        if self._window.active:
+            lines.append(f"[bold yellow]Date filter:[/] created_at within {self._window.describe()}")
         if roots:
             lines.append("[bold]Resolved:[/]")
             lines.extend(
@@ -828,7 +1089,7 @@ class FolderCleanup:
             self._execute_shotgrid(plan)
         if not self._skip_ayon and plan.ayon_folders:
             self._execute_ayon(plan)
-        if not self._skip_storage and plan.storage_paths:
+        if not self._skip_storage and (plan.storage_paths or plan.storage_files):
             self._execute_storage(plan)
 
     def _execute_kitsu(self, plan: FolderDeletionPlan) -> None:
@@ -898,8 +1159,11 @@ class FolderCleanup:
         proj = self._ayon.project_name
         # Only delete root folders — force=True cascades all children server-side,
         # so per-child deletes are unnecessary and would cause 404s for already-deleted items.
-        folder_ids = {f["id"] for f in plan.ayon_folders}
-        roots = [f for f in plan.ayon_folders if f.get("parentId") not in folder_ids]
+        # Under a date filter, ayon_deletable_ids holds only folders whose whole
+        # subtree is in-window; out-of-window folders are never deleted, and the
+        # top-most deletable folders cascade-delete their (in-window) descendants.
+        deletable = plan.ayon_deletable_ids
+        roots = [f for f in plan.ayon_folders if f["id"] in deletable and f.get("parentId") not in deletable]
 
         for folder in roots:
             fid = folder["id"]
@@ -914,12 +1178,20 @@ class FolderCleanup:
 
     def _execute_storage(self, plan: FolderDeletionPlan) -> None:
         self._console.print("[bold red]Deleting NAS storage...[/]")
+        # No filter: remove whole resolved directories.
         for path in plan.storage_paths:
             try:
                 shutil.rmtree(path)
                 _log.info("Storage: removed %s", path)
             except Exception as exc:  # filesystem errors
                 _log.warning("Storage: failed to remove %s -- %s", path, exc)
+        # Filter active: prune only in-window files, never their parent dirs.
+        for file_path in plan.storage_files:
+            try:
+                file_path.unlink()
+                _log.info("Storage: removed file %s", file_path)
+            except Exception as exc:  # filesystem errors
+                _log.warning("Storage: failed to remove file %s -- %s", file_path, exc)
         self._console.print("[green]Storage cleanup done.[/]")
 
 
