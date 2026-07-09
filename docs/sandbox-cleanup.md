@@ -137,15 +137,18 @@ widen a delete to reach an in-window one** — the filter only ever prunes, neve
   on its own. In-window leaf entities that live inside a preserved folder are still pruned on
   ShotGrid/Kitsu/NAS, but AYON has no version-level delete, so those entities remain as AYON
   products/versions inside the kept folder. The run prints a note whenever this happens.
-- **NAS storage** is pruned at the **file level by filesystem mtime**: only files whose mtime is in
-  the window are deleted, and a parent directory is never removed under a filter.
+- **NAS storage** is pruned by **published version**, not by mtime. For each AYON version under the
+  target folder(s) whose `createdAt` is in the window, the tool resolves that version's
+  representation to its publish directory (`.../publish/<type>/<product>/vNNN`) and targets only
+  that directory. Out-of-window versions' media is preserved. A version with no representation, or
+  whose path cannot be resolved to a real NAS directory, is **skipped and reported** — the tool
+  never deletes NAS it cannot positively map, and never falls back to an mtime scan. Without a date
+  filter, the whole resolved NAS folder is removed (unchanged).
 
-> **NAS mtime caveat.** NAS files are filtered by their filesystem **mtime**, which is independent
-> of the ShotGrid `created_at` used for the tracked entities. A file that was copied, re-rendered,
-> or otherwise touched after publish will have a newer mtime than its ShotGrid version's creation
-> date, so a date window can select NAS media that does **not** line up one-to-one with the ShotGrid
-> entities it keeps or preserves. In particular a narrow `--created-after` window can over-delete
-> media relative to ShotGrid. Review the NAS Storage table in the dry run before using `--execute`.
+The dry run shows which NAS version directories are targeted
+(`NAS Storage (in-window version dirs)`) and prints
+`NAS: N in-window version dir(s) targeted, M out-of-window version(s) preserved`, plus any skipped
+versions.
 
 ## Project allowlist
 

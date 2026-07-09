@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import re
 import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -132,18 +133,33 @@ def parse_date_window(after: str | None, before: str | None) -> DateWindow:
     )
 
 
-def _filter_files_by_mtime(root: Path, window: DateWindow) -> tuple[list[Path], int]:
-    """Return in-window files (by mtime) beneath ``root`` and their total size."""
-    files: list[Path] = []
-    total = 0
-    for f in root.rglob("*"):
-        if not f.is_file():
+_ROOT_TOKEN = re.compile(r"\{root\[(\w+)\]\}")
+_VERSION_DIR = re.compile(r"^(.*/v\d+)(?:/|$)")
+
+
+def _resolve_root_tokens(path: str, roots: dict[str, str]) -> str:
+    """Substitute AYON ``{root[name]}`` publish-template tokens with linux paths."""
+    return _ROOT_TOKEN.sub(lambda m: roots.get(m.group(1), m.group(0)), path)
+
+
+def _version_publish_dir(reps: list[dict], roots: dict[str, str]) -> Path | None:
+    """Resolve a version's publish ``.../vNNN`` NAS directory from its representations.
+
+    Uses the representation's already-resolved ``attrib.path`` when present, else
+    resolves ``files[].path`` via the anatomy roots. Returns ``None`` when no
+    representation yields a path containing a ``vNNN`` version segment.
+    """
+    for rep in reps:
+        path = (rep.get("attrib") or {}).get("path")
+        if not path:
+            files = rep.get("files") or []
+            path = files[0].get("path") if files else None
+        if not path:
             continue
-        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC)
-        if window.status(mtime) == _DATE_IN:
-            files.append(f)
-            total += f.stat().st_size
-    return files, total
+        match = _VERSION_DIR.match(_resolve_root_tokens(path, roots))
+        if match:
+            return Path(match.group(1))
+    return None
 
 
 def _coerce_created_at(value: object) -> datetime | None:
@@ -304,9 +320,12 @@ class FolderDeletionPlan:
     # NAS storage — populated only for plan roots whose AYON path is under /episodes/
     storage_paths: list[Path] = field(default_factory=list)
     storage_total_bytes: int = 0
-    # NAS files pruned individually when a date filter is active (never whole dirs)
-    storage_files: list[Path] = field(default_factory=list)
-    storage_files_total_bytes: int = 0
+    # Date-filter NAS pruning: publish dirs (.../vNNN) of the in-window deleted
+    # versions, mapped via AYON representations (never whole folders, never mtime).
+    storage_version_dirs: list[Path] = field(default_factory=list)
+    storage_version_bytes: int = 0
+    storage_versions_preserved: int = 0  # out-of-window versions whose media is kept
+    storage_versions_skipped: list[tuple[str, str]] = field(default_factory=list)  # (label, reason)
 
     # Date-filter bookkeeping (populated only when a --created-after/before is set).
     # AYON is folder-cascade-only, so we can only force-delete a folder whose whole
@@ -332,7 +351,7 @@ class FolderDeletionPlan:
                 self.shotgrid_tasks,
                 self.shotgrid_versions,
                 self.storage_paths,
-                self.storage_files,
+                self.storage_version_dirs,
             )
         )
 
@@ -926,7 +945,16 @@ class FolderCleanup:
     # -- NAS storage ----------------------------------------------------
 
     def _plan_storage(self, result: FolderDeletionPlan) -> None:
-        """Discover NAS paths for plan roots whose AYON path is under /episodes/."""
+        """Discover NAS paths to delete.
+
+        With a date filter active, NAS deletion is scoped to the publish dirs of
+        the in-window deleted versions (via AYON representations). Without a
+        filter, the whole resolved NAS folder is removed (unchanged behaviour).
+        """
+        if self._window.active:
+            self._plan_storage_versions(result)
+            return
+
         folder_ids = {f["id"] for f in result.ayon_folders}
         roots = [f for f in result.ayon_folders if f.get("parentId") not in folder_ids]
         episode_roots = [f for f in roots if f.get("path", "").startswith("/episodes/")]
@@ -941,18 +969,82 @@ class FolderCleanup:
             if not nas_path.exists():
                 _log.info("Storage: path not found -- %s", nas_path)
                 continue
-            if self._window.active:
-                # Leaf-level pruning: only in-window files, never the parent dir
-                # (which may predate the window or hold out-of-window files).
-                files, total = _filter_files_by_mtime(nas_path, self._window)
-                result.storage_files.extend(files)
-                result.storage_files_total_bytes += total
-                _log.info("Storage: %d in-window file(s) under %s (%s)", len(files), nas_path, _human_size(total))
-            else:
-                result.storage_paths.append(nas_path)
-                total = sum(f.stat().st_size for f in nas_path.rglob("*") if f.is_file())
-                result.storage_total_bytes += total
-                _log.info("Storage: found %s (%s)", nas_path, _human_size(total))
+            result.storage_paths.append(nas_path)
+            total = sum(f.stat().st_size for f in nas_path.rglob("*") if f.is_file())
+            result.storage_total_bytes += total
+            _log.info("Storage: found %s (%s)", nas_path, _human_size(total))
+
+    @staticmethod
+    def _ayon_roots(api: object, project_name: str) -> dict[str, str]:
+        """Return AYON anatomy root name -> linux path (for resolving publish templates)."""
+        try:
+            response = api.get(f"projects/{project_name}/anatomy")
+            return {r["name"]: r.get("linux", "") for r in response.data.get("roots", [])}
+        except Exception:  # anatomy unavailable / unexpected shape
+            _log.debug("Storage: could not read AYON anatomy roots for %s", project_name)
+            return {}
+
+    def _plan_storage_versions(self, result: FolderDeletionPlan) -> None:
+        """Scope NAS deletion to in-window versions' publish dirs via AYON representations.
+
+        For each AYON version under the target folders whose ``createdAt`` is in
+        the window, resolve its representation publish path to the NAS ``vNNN``
+        directory and target only that. Out-of-window versions' media is preserved.
+        Versions with no representation, or whose path cannot be resolved to a real
+        NAS directory, are skipped and reported -- we never delete NAS we cannot
+        positively map, and never fall back to the mtime scan.
+        """
+        try:
+            api = self._ayon.connect()
+        except BackendUnavailableError as exc:
+            result.errors.append(str(exc))
+            return
+
+        proj = self._ayon.project_name
+        folder_ids = [f["id"] for f in result.ayon_folders if f.get("path", "").startswith("/episodes/")]
+        if not folder_ids:
+            return
+
+        try:
+            roots = self._ayon_roots(api, proj)
+            products = list(api.get_products(proj, folder_ids=folder_ids))
+            if not products:
+                return
+            versions = list(
+                api.get_versions(proj, product_ids=[p["id"] for p in products], fields={"id", "version", "createdAt"})
+            )
+            in_window: list[dict] = []
+            for version in versions:
+                if self._window.status(version.get("createdAt")) == _DATE_IN:
+                    in_window.append(version)
+                else:
+                    result.storage_versions_preserved += 1
+            if not in_window:
+                return
+            reps_by_version: dict[str, list[dict]] = {}
+            for rep in api.get_representations(proj, version_ids=[v["id"] for v in in_window]):
+                reps_by_version.setdefault(rep.get("versionId"), []).append(rep)
+        except Exception as exc:  # ayon_api raises varied types
+            msg = f"Storage: AYON version/representation lookup failed -- {exc}"
+            result.errors.append(msg)
+            _log.warning(msg)
+            return
+
+        seen: set[str] = set()
+        for version in in_window:
+            label = f"version {version.get('version')}"
+            vdir = _version_publish_dir(reps_by_version.get(version["id"], []), roots)
+            if vdir is None:
+                result.storage_versions_skipped.append((label, "no representation / unresolvable path"))
+                continue
+            if not vdir.exists():
+                result.storage_versions_skipped.append((str(vdir), "NAS path not found"))
+                continue
+            if str(vdir) in seen:
+                continue
+            seen.add(str(vdir))
+            result.storage_version_dirs.append(vdir)
+            result.storage_version_bytes += sum(f.stat().st_size for f in vdir.rglob("*") if f.is_file())
 
     # ------------------------------------------------------------------
     # Display
@@ -1081,22 +1173,43 @@ class FolderCleanup:
             self._console.print(Panel(table, border_style="magenta"))
 
         # Storage
-        if plan.storage_paths or plan.storage_files:
-            table = Table(title="NAS Storage", show_header=True, header_style="bold red")
+        if plan.storage_paths or plan.storage_version_dirs:
+            title = "NAS Storage (in-window version dirs)" if plan.storage_version_dirs else "NAS Storage"
+            table = Table(title=title, show_header=True, header_style="bold red")
             table.add_column("Path", style="red")
             table.add_column("Size", justify="right")
             for p in plan.storage_paths:
                 table.add_row(str(p), "")
-            for f in plan.storage_files:
-                table.add_row(str(f), "")
-            total_bytes = plan.storage_total_bytes + plan.storage_files_total_bytes
-            label = "Total (in-window files)" if plan.storage_files else "Total"
-            table.add_row(f"[bold]{label}[/]", _human_size(total_bytes))
+            for vdir in plan.storage_version_dirs:
+                table.add_row(str(vdir), "")
+            total_bytes = plan.storage_total_bytes + plan.storage_version_bytes
+            table.add_row("[bold]Total[/]", _human_size(total_bytes))
             self._console.print(Panel(table, border_style="red"))
 
         # Date-filter accounting shown after the entity tables.
         if active:
             self._display_date_filter_summary(plan)
+            self._display_storage_version_summary(plan)
+
+    def _display_storage_version_summary(self, plan: FolderDeletionPlan) -> None:
+        """Report NAS version-pruning: preserved (out-of-window) and skipped versions."""
+        if plan.storage_version_dirs:
+            self._console.print(
+                f"[bold]NAS:[/] {len(plan.storage_version_dirs)} in-window version dir(s) targeted, "
+                f"{plan.storage_versions_preserved} out-of-window version(s) preserved."
+            )
+        elif plan.storage_versions_preserved:
+            self._console.print(
+                f"[dim]NAS: no in-window versions to prune; "
+                f"{plan.storage_versions_preserved} out-of-window version(s) preserved.[/]"
+            )
+        if plan.storage_versions_skipped:
+            self._console.print(
+                f"[yellow]NAS: {len(plan.storage_versions_skipped)} version(s) skipped "
+                "(no representation / unresolvable NAS path):[/]"
+            )
+            for label, reason in plan.storage_versions_skipped:
+                self._console.print(f"  [dim]- {label}: {reason}[/]")
 
     def _display_date_filter_summary(self, plan: FolderDeletionPlan) -> None:
         """Print the kept/excluded counts, the preserved rows, and the AYON constraint."""
@@ -1122,7 +1235,9 @@ class FolderCleanup:
         # Surface the AYON folder-only constraint whenever leaves are pruned but
         # AYON must keep a parent folder it cannot prune at version level.
         preserved_folders = [f for f in plan.ayon_folders if f["id"] not in plan.ayon_deletable_ids]
-        pruned_leaves = plan.shotgrid_versions or plan.shotgrid_tasks or plan.shotgrid_entities or plan.storage_files
+        pruned_leaves = (
+            plan.shotgrid_versions or plan.shotgrid_tasks or plan.shotgrid_entities or plan.storage_version_dirs
+        )
         if preserved_folders and pruned_leaves:
             self._console.print(
                 "[yellow]Note:[/] AYON deletion is folder-cascade-only. In-window leaf entities inside the "
@@ -1215,7 +1330,7 @@ class FolderCleanup:
             self._execute_shotgrid(plan)
         if not self._skip_ayon and plan.ayon_folders:
             self._execute_ayon(plan)
-        if not self._skip_storage and (plan.storage_paths or plan.storage_files):
+        if not self._skip_storage and (plan.storage_paths or plan.storage_version_dirs):
             self._execute_storage(plan)
 
     def _execute_kitsu(self, plan: FolderDeletionPlan) -> None:
@@ -1304,20 +1419,14 @@ class FolderCleanup:
 
     def _execute_storage(self, plan: FolderDeletionPlan) -> None:
         self._console.print("[bold red]Deleting NAS storage...[/]")
-        # No filter: remove whole resolved directories.
-        for path in plan.storage_paths:
+        # No filter: remove whole resolved folders. Filter active: remove only the
+        # in-window versions' publish dirs (.../vNNN). Both are directory removals.
+        for path in (*plan.storage_paths, *plan.storage_version_dirs):
             try:
                 shutil.rmtree(path)
                 _log.info("Storage: removed %s", path)
             except Exception as exc:  # filesystem errors
                 _log.warning("Storage: failed to remove %s -- %s", path, exc)
-        # Filter active: prune only in-window files, never their parent dirs.
-        for file_path in plan.storage_files:
-            try:
-                file_path.unlink()
-                _log.info("Storage: removed file %s", file_path)
-            except Exception as exc:  # filesystem errors
-                _log.warning("Storage: failed to remove file %s -- %s", file_path, exc)
         self._console.print("[green]Storage cleanup done.[/]")
 
 

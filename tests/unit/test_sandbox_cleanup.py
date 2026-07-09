@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
@@ -18,12 +17,13 @@ from gishant_scripts.sandbox.cleanup import (
     _coerce_created_at,
     _entity_episode,
     _entity_source,
-    _filter_files_by_mtime,
     _folder_index,
     _parse_date_bound,
+    _resolve_root_tokens,
     _risk_banner_text,
     _sg_entity_fields,
     _target_episodes,
+    _version_publish_dir,
     parse_date_window,
 )
 
@@ -508,24 +508,142 @@ def test_created_after_prunes_to_only_the_fresh_version() -> None:
 
 
 # --------------------------------------------------------------------------
-# NAS mtime filtering
+# #5 — NAS pruning keyed to in-window versions' representation paths
 # --------------------------------------------------------------------------
 
 
-def test_filter_files_by_mtime_keeps_only_in_window(tmp_path: Path) -> None:
-    old_file = tmp_path / "old.exr"
-    new_file = tmp_path / "new.exr"
-    old_file.write_bytes(b"old")
-    new_file.write_bytes(b"new-data")
-    old_ts = datetime(2024, 11, 21, tzinfo=UTC).timestamp()
-    new_ts = datetime(2026, 7, 9, 8, 0, tzinfo=UTC).timestamp()
-    os.utime(old_file, (old_ts, old_ts))
-    os.utime(new_file, (new_ts, new_ts))
+def test_resolve_root_tokens_substitutes_anatomy_roots() -> None:
+    roots = {"work": "/projects", "renders": "/mnt/renders"}
+    assert _resolve_root_tokens("{root[work]}/SGAYONTEST/x.mp4", roots) == "/projects/SGAYONTEST/x.mp4"
+    # An unknown token is left intact rather than guessed.
+    assert _resolve_root_tokens("{root[unknown]}/x", roots) == "{root[unknown]}/x"
 
-    window = DateWindow(after=datetime(2026, 7, 9, tzinfo=UTC))
-    files, total = _filter_files_by_mtime(tmp_path, window)
-    assert files == [new_file]
-    assert total == len(b"new-data")
+
+def test_version_publish_dir_from_attrib_path() -> None:
+    reps = [{"attrib": {"path": "/projects/P/episodes/ep/sq/sh/publish/render/comp/v003/sh_comp_v003.exr"}}]
+    assert _version_publish_dir(reps, {}) == Path("/projects/P/episodes/ep/sq/sh/publish/render/comp/v003")
+
+
+def test_version_publish_dir_resolves_template_files() -> None:
+    reps = [{"files": [{"path": "{root[work]}/P/episodes/ep/publish/model/main/v001/x.abc"}]}]
+    assert _version_publish_dir(reps, {"work": "/projects"}) == Path("/projects/P/episodes/ep/publish/model/main/v001")
+
+
+def test_version_publish_dir_unmappable_returns_none() -> None:
+    assert _version_publish_dir([], {}) is None  # no representations
+    assert _version_publish_dir([{"attrib": {"path": "/projects/P/no/version/segment.exr"}}], {}) is None
+
+
+class _FakeAyonApi:
+    """Stand-in for the ayon_api module for version-based NAS planning."""
+
+    def __init__(self, roots: dict, products: list[dict], versions: list[dict], reps: list[dict]) -> None:
+        self._roots = roots
+        self._products = products
+        self._versions = versions
+        self._reps = reps
+
+    def get(self, _endpoint: str) -> object:
+        return type("Resp", (), {"data": {"roots": [{"name": k, "linux": v} for k, v in self._roots.items()]}})()
+
+    def get_products(self, _project: str, folder_ids=None):  # noqa: ARG002
+        return list(self._products)
+
+    def get_versions(self, _project: str, product_ids=None, fields=None):  # noqa: ARG002
+        return list(self._versions)
+
+    def get_representations(self, _project: str, version_ids=None):
+        wanted = set(version_ids or [])
+        return [r for r in self._reps if r.get("versionId") in wanted]
+
+
+class _FakeAyonBackend:
+    project_name = "P"
+
+    def __init__(self, api: _FakeAyonApi) -> None:
+        self._api = api
+
+    def connect(self) -> _FakeAyonApi:
+        return self._api
+
+
+def _nas_version_plan(tmp_path: Path, window: DateWindow) -> FolderDeletionPlan:
+    """Build a plan on a real on-disk publish tree and run version-based NAS planning."""
+    base = tmp_path / "P" / "episodes" / "ep01" / "sq010" / "sh0010" / "publish" / "render" / "comp"
+    in_dir = base / "v002"
+    out_dir = base / "v001"
+    for d in (in_dir, out_dir):
+        d.mkdir(parents=True)
+        (d / "frame.exr").write_bytes(b"x" * 10)
+    api = _FakeAyonApi(
+        roots={"work": str(tmp_path)},
+        products=[{"id": "prod1"}],
+        versions=[
+            {"id": "vA", "version": 2, "createdAt": "2026-07-09T08:00:00+00:00"},  # in-window
+            {"id": "vB", "version": 1, "createdAt": "2024-11-21T00:00:00+00:00"},  # out-of-window
+        ],
+        reps=[
+            {"versionId": "vA", "attrib": {"path": str(in_dir / "sh0010_comp_v002.exr")}},
+            {"versionId": "vB", "attrib": {"path": str(out_dir / "sh0010_comp_v001.exr")}},
+        ],
+    )
+    cleaner = FolderCleanup("HITRO", "/episodes/ep01/sq010/sh0010", Console(), date_window=window)
+    cleaner._ayon = _FakeAyonBackend(api)  # type: ignore[assignment]
+    result = FolderDeletionPlan(
+        ayon_folders=[{"id": "sh", "path": "/episodes/ep01/sq010/sh0010", "folderType": "Shot", "name": "sh0010"}]
+    )
+    cleaner._plan_storage(result)
+    return result
+
+
+def test_nas_prune_targets_only_in_window_version_dir(tmp_path: Path) -> None:
+    window = parse_date_window("2026-07-09", None)
+    plan = _nas_version_plan(tmp_path, window)
+
+    targeted = [p.name for p in plan.storage_version_dirs]
+    assert targeted == ["v002"]  # only the in-window version dir
+    assert plan.storage_versions_preserved == 1  # the out-of-window v001 is preserved
+    assert plan.storage_versions_skipped == []
+    assert plan.storage_paths == []  # never the whole folder under a filter
+    # out-of-window media is untouched on disk
+    assert (tmp_path / "P/episodes/ep01/sq010/sh0010/publish/render/comp/v001/frame.exr").exists()
+
+
+def test_nas_prune_no_filter_deletes_whole_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cleaner = FolderCleanup("HITRO", "/episodes/ep01", Console())  # no date window
+    # NAS path is <root>/<storage project name>/<ayon rel>; project name is "HITRO".
+    nas = tmp_path / cleaner._storage.project_name / "episodes" / "ep01"
+    (nas / "sq010").mkdir(parents=True)
+    (nas / "sq010" / "f.exr").write_bytes(b"y" * 5)
+    monkeypatch.setattr(cleaner._storage, "resolve_root", lambda _p: tmp_path)
+    result = FolderDeletionPlan(
+        ayon_folders=[{"id": "ep", "parentId": None, "path": "/episodes/ep01", "folderType": "Episode", "name": "ep01"}]
+    )
+    cleaner._plan_storage(result)
+
+    assert result.storage_paths == [nas]  # whole folder targeted
+    assert result.storage_version_dirs == []
+
+
+def test_nas_prune_skips_and_reports_unmappable_version(tmp_path: Path) -> None:
+    api = _FakeAyonApi(
+        roots={"work": str(tmp_path)},
+        products=[{"id": "prod1"}],
+        versions=[{"id": "vA", "version": 5, "createdAt": "2026-07-09T08:00:00+00:00"}],
+        reps=[{"versionId": "vA", "attrib": {}, "files": []}],  # no path -> unmappable
+    )
+    cleaner = FolderCleanup(
+        "HITRO", "/episodes/ep01/sq010/sh0010", Console(), date_window=parse_date_window("2026-07-09", None)
+    )
+    cleaner._ayon = _FakeAyonBackend(api)  # type: ignore[assignment]
+    result = FolderDeletionPlan(
+        ayon_folders=[{"id": "sh", "path": "/episodes/ep01/sq010/sh0010", "folderType": "Shot", "name": "sh0010"}]
+    )
+    cleaner._plan_storage(result)
+
+    assert result.storage_version_dirs == []
+    assert len(result.storage_versions_skipped) == 1
+    assert result.storage_versions_skipped[0][0] == "version 5"
 
 
 # --------------------------------------------------------------------------
