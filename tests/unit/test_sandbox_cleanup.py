@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from io import StringIO
+from pathlib import Path
 
 import pytest
 from rich.console import Console
 
 from gishant_scripts.sandbox.cleanup import (
+    DateWindow,
     FolderCleanup,
     FolderDeletionPlan,
     _assess_risk,
     _coerce_created_at,
     _entity_source,
+    _filter_files_by_mtime,
     _folder_index,
+    _parse_date_bound,
     _risk_banner_text,
+    parse_date_window,
 )
 
 
@@ -39,10 +45,10 @@ class _FakeAyon:
     def __init__(self, folders: dict[str, dict]) -> None:
         self._by_path = folders
 
-    def get_folder_by_path(self, _project: str, path: str) -> dict | None:
+    def get_folder_by_path(self, _project: str, path: str, fields=None) -> dict | None:  # noqa: ARG002
         return self._by_path.get(path)
 
-    def get_folders(self, _project: str, parent_ids=None):
+    def get_folders(self, _project: str, parent_ids=None, fields=None):  # noqa: ARG002
         if parent_ids is None:
             return list(self._by_path.values())
         parent = set(parent_ids)
@@ -318,3 +324,255 @@ def test_display_plan_marks_fresh_target_safe() -> None:
     out = _render(plan)
     assert "DELETE RISK" not in out
     assert "sandbox-fresh" in out
+
+
+# --------------------------------------------------------------------------
+# Date-window parsing
+# --------------------------------------------------------------------------
+
+
+def test_parse_date_bound_bare_date_is_start_of_day_utc() -> None:
+    assert _parse_date_bound("2026-07-09", end_of_day=False) == datetime(2026, 7, 9, 0, 0, tzinfo=UTC)
+
+
+def test_parse_date_bound_bare_date_end_of_day() -> None:
+    assert _parse_date_bound("2026-07-09", end_of_day=True) == datetime(2026, 7, 9, 23, 59, 59, 999999, tzinfo=UTC)
+
+
+def test_parse_date_bound_full_iso_datetime() -> None:
+    # A full datetime is used verbatim (end_of_day only pads bare dates).
+    assert _parse_date_bound("2026-07-09T08:30:00+00:00", end_of_day=True) == datetime(2026, 7, 9, 8, 30, tzinfo=UTC)
+
+
+def test_parse_date_bound_rejects_garbage() -> None:
+    with pytest.raises(ValueError, match="invalid date"):
+        _parse_date_bound("not-a-date", end_of_day=False)
+
+
+def test_parse_date_window_builds_inclusive_bounds() -> None:
+    window = parse_date_window("2026-07-01", "2026-07-09")
+    assert window.after == datetime(2026, 7, 1, 0, 0, tzinfo=UTC)
+    assert window.before == datetime(2026, 7, 9, 23, 59, 59, 999999, tzinfo=UTC)
+    assert window.active
+
+
+def test_empty_window_is_inactive() -> None:
+    assert not parse_date_window(None, None).active
+
+
+def test_window_status_classifies_in_out_nodate() -> None:
+    window = DateWindow(after=datetime(2026, 7, 9, tzinfo=UTC))
+    assert window.status(datetime(2026, 7, 9, 8, 0, tzinfo=UTC)) == "in"
+    assert window.status(datetime(2024, 11, 21, tzinfo=UTC)) == "out"
+    assert window.status(None) == "nodate"
+
+
+# --------------------------------------------------------------------------
+# AYON deletable-subtree logic (folder-cascade-only safety)
+# --------------------------------------------------------------------------
+
+
+def _cleaner(window: DateWindow) -> FolderCleanup:
+    return FolderCleanup("HITRO", "/episodes/hitro104/hitro106_0010", Console(), date_window=window)
+
+
+def test_ayon_deletable_ids_whole_subtree_in_window() -> None:
+    window = DateWindow(after=datetime(2026, 7, 1, tzinfo=UTC))
+    folders = [
+        {"id": "p", "parentId": None, "createdAt": "2026-07-05T00:00:00+00:00"},
+        {"id": "c", "parentId": "p", "createdAt": "2026-07-06T00:00:00+00:00"},
+    ]
+    assert _cleaner(window)._ayon_deletable_ids(folders) == {"p", "c"}
+
+
+def test_ayon_deletable_ids_out_of_window_descendant_blocks_parent() -> None:
+    window = DateWindow(after=datetime(2026, 7, 1, tzinfo=UTC))
+    folders = [
+        {"id": "p", "parentId": None, "createdAt": "2026-07-05T00:00:00+00:00"},
+        {"id": "c", "parentId": "p", "createdAt": "2024-01-01T00:00:00+00:00"},  # old descendant
+    ]
+    # Parent's cascade would take the old child, so neither is deletable.
+    assert _cleaner(window)._ayon_deletable_ids(folders) == set()
+
+
+def test_ayon_deletable_ids_fresh_subtree_under_old_parent() -> None:
+    window = DateWindow(after=datetime(2026, 7, 1, tzinfo=UTC))
+    folders = [
+        {"id": "p", "parentId": None, "createdAt": "2024-01-01T00:00:00+00:00"},  # old parent -> preserved
+        {"id": "c", "parentId": "p", "createdAt": "2026-07-06T00:00:00+00:00"},  # fresh, fully in-window
+    ]
+    # The fresh child is independently deletable; the old parent is preserved.
+    assert _cleaner(window)._ayon_deletable_ids(folders) == {"c"}
+
+
+# --------------------------------------------------------------------------
+# CRITICAL SAFETY INVARIANT (this morning's near-miss)
+# --------------------------------------------------------------------------
+
+
+def test_created_after_prunes_to_only_the_fresh_version() -> None:
+    """--created-after 2026-07-09 must keep ONLY the fresh version, preserve all
+    folders and every 2024->2026-06 entity, and exclude undateable entities.
+    """
+    fresh = {
+        "type": "Version",
+        "id": 2489715,
+        "code": "hitro106_0010_0050_v001",
+        "entity": {"type": "Shot", "name": "hitro106_0010_0050"},
+        "created_at": datetime(2026, 7, 9, 8, 15, tzinfo=UTC),
+        "created_by": {"name": "sandbox-service"},
+    }
+    old_version = {
+        "type": "Version",
+        "id": 1000,
+        "code": "hitro106_0010_0050_comp_v007",
+        "entity": {"type": "Shot", "name": "hitro106_0010_0050"},
+        "created_at": datetime(2025, 6, 1, tzinfo=UTC),
+        "created_by": {"name": "Mei L."},
+    }
+    undateable = {
+        "type": "Version",
+        "id": 1001,
+        "code": "hitro106_0010_0050_v_nodate",
+        "entity": {"type": "Shot", "name": "hitro106_0010_0050"},
+        "created_at": None,
+        "created_by": {"name": "Unknown"},
+    }
+    plan = FolderDeletionPlan(
+        ayon_folders=[
+            {
+                "id": "seq",
+                "parentId": None,
+                "name": "hitro106_0010",
+                "folderType": "Sequence",
+                "path": "/episodes/hitro104/hitro106_0010",
+                "createdAt": "2024-11-21T00:00:00+00:00",
+            },
+            {
+                "id": "shot",
+                "parentId": "seq",
+                "name": "hitro106_0010_0050",
+                "folderType": "Shot",
+                "path": "/episodes/hitro104/hitro106_0010/hitro106_0010_0050",
+                "createdAt": "2024-12-01T00:00:00+00:00",
+            },
+        ],
+        ayon_matched_ids={"seq"},
+        shotgrid_entities=[
+            {
+                "type": "Sequence",
+                "id": 10,
+                "code": "hitro106_0010",
+                "created_at": datetime(2024, 11, 21, tzinfo=UTC),
+                "created_by": {"name": "Priya R."},
+            },
+            {
+                "type": "Shot",
+                "id": 11,
+                "code": "hitro106_0010_0050",
+                "created_at": datetime(2024, 12, 1, tzinfo=UTC),
+                "created_by": {"name": "Sam T."},
+            },
+        ],
+        shotgrid_versions=[fresh, old_version, undateable],
+        shotgrid_tasks=[
+            {
+                "content": "comp",
+                "id": 300,
+                "entity": {"type": "Shot", "name": "hitro106_0010_0050"},
+                "created_at": datetime(2025, 2, 2, tzinfo=UTC),
+                "created_by": {"name": "Jonas K."},
+            },
+        ],
+        kitsu_shots=[{"id": "k1", "name": "hitro106_0010_0050", "created_at": "2024-12-01T00:00:00"}],
+    )
+
+    _cleaner(parse_date_window("2026-07-09", None))._apply_date_filter(plan)
+
+    # Only the fresh version survives on ShotGrid.
+    assert [v["id"] for v in plan.shotgrid_versions] == [2489715]
+    assert plan.shotgrid_entities == []
+    assert plan.shotgrid_tasks == []
+    assert plan.kitsu_shots == []
+    # NO AYON folder is deletable -> the Sequence/Shot folders are preserved.
+    assert plan.ayon_deletable_ids == set()
+    assert len(plan.ayon_folders) == 2
+    # Undateable version is excluded (never delete what we cannot date).
+    excluded_names = {name: reason for (_b, _k, name, _c, reason) in plan.date_excluded}
+    assert excluded_names["hitro106_0010_0050_v_nodate"] == "no date"
+    assert excluded_names["hitro106_0010_0050_comp_v007"] == "out of window"
+    assert plan.date_kept == 1
+
+
+# --------------------------------------------------------------------------
+# NAS mtime filtering
+# --------------------------------------------------------------------------
+
+
+def test_filter_files_by_mtime_keeps_only_in_window(tmp_path: Path) -> None:
+    old_file = tmp_path / "old.exr"
+    new_file = tmp_path / "new.exr"
+    old_file.write_bytes(b"old")
+    new_file.write_bytes(b"new-data")
+    old_ts = datetime(2024, 11, 21, tzinfo=UTC).timestamp()
+    new_ts = datetime(2026, 7, 9, 8, 0, tzinfo=UTC).timestamp()
+    os.utime(old_file, (old_ts, old_ts))
+    os.utime(new_file, (new_ts, new_ts))
+
+    window = DateWindow(after=datetime(2026, 7, 9, tzinfo=UTC))
+    files, total = _filter_files_by_mtime(tmp_path, window)
+    assert files == [new_file]
+    assert total == len(b"new-data")
+
+
+# --------------------------------------------------------------------------
+# display_plan with a date filter active
+# --------------------------------------------------------------------------
+
+
+def test_display_plan_shows_date_filter_and_folder_only_note() -> None:
+    plan = FolderDeletionPlan(
+        ayon_folders=[
+            {
+                "id": "seq",
+                "parentId": None,
+                "name": "hitro106_0010",
+                "folderType": "Sequence",
+                "path": "/episodes/hitro104/hitro106_0010",
+                "createdAt": "2024-11-21T00:00:00+00:00",
+            },
+        ],
+        ayon_matched_ids={"seq"},
+        shotgrid_versions=[
+            {
+                "type": "Version",
+                "id": 2489715,
+                "code": "hitro106_0010_0050_v001",
+                "entity": {"type": "Shot", "name": "hitro106_0010"},
+                "created_at": datetime(2026, 7, 9, 8, 0, tzinfo=UTC),
+                "created_by": {"name": "sandbox-service"},
+            },
+        ],
+        shotgrid_entities=[
+            {
+                "type": "Sequence",
+                "id": 10,
+                "code": "hitro106_0010",
+                "created_at": datetime(2024, 11, 21, tzinfo=UTC),
+                "created_by": {"name": "Priya R."},
+            },
+        ],
+    )
+    cleaner = _cleaner(parse_date_window("2026-07-09", None))
+    cleaner._apply_date_filter(plan)
+    console = Console(file=StringIO(), width=200, force_terminal=False)
+    cleaner._console = console
+    cleaner.display_plan(plan)
+    out = console.file.getvalue()  # type: ignore[union-attr]
+
+    assert "Date filter:" in out
+    assert "2026-07-09" in out  # window shown in target banner
+    assert "preserve" in out  # AYON folder marked preserved
+    assert "Preserved by date filter" in out  # excluded panel
+    assert "folder-cascade-only" in out  # AYON constraint surfaced
+    assert "1 entity(ies) kept, 1 excluded" in out

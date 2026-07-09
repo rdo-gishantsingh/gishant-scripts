@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from gishant_scripts.sandbox.backends import Environment
-from gishant_scripts.sandbox.cleanup import FolderCleanup, ProjectRemoval
+from gishant_scripts.sandbox.cleanup import FolderCleanup, ProjectRemoval, parse_date_window
 from gishant_scripts.sandbox.generate import EpisodeGenerator
 from gishant_scripts.sandbox.selection import SelectionScope
 
@@ -51,18 +51,36 @@ def cleanup_cmd(
     skip_ayon: bool = typer.Option(False, help="Skip AYON"),
     skip_storage: bool = typer.Option(False, help="Skip NAS storage"),
     server: Environment = typer.Option(Environment.TEST, "--server", help="Target environment: test or production"),
+    created_after: str | None = typer.Option(
+        None,
+        "--created-after",
+        help="Only delete entities created on/after this date (YYYY-MM-DD or ISO datetime, UTC). PATH mode only.",
+    ),
+    created_before: str | None = typer.Option(
+        None,
+        "--created-before",
+        help="Only delete entities created on/before this date (YYYY-MM-DD or ISO datetime, UTC). PATH mode only.",
+    ),
 ) -> None:
     """Delete an AYON path (PATH mode) or whole projects (--projects mode) across backends.
 
     Examples:
         gishant sandbox cleanup /assets/vehicles -p SGAYONTEST
         gishant sandbox cleanup '/assets/*/car*' --execute
+        gishant sandbox cleanup '/episodes/hitro104/hitro106*' --created-after 2026-07-09
         gishant sandbox cleanup --projects '_test*' --execute
         gishant sandbox cleanup --projects '_test*' --server production --execute
 
     Project mode (--projects) matches whole project names independently on each
     backend and deletes them from Kitsu, AYON, ShotGrid, and NAS storage. NAS
     storage is resolved only for matched AYON projects.
+
+    With --created-after/--created-before (PATH mode), the plan is pruned to
+    entities whose created_at (NAS: mtime) falls in the inclusive UTC window.
+    Out-of-window and undateable entities are preserved. AYON deletion is
+    folder-cascade-only, so a folder is deleted only when its whole subtree is
+    in-window; otherwise it is kept and only in-window leaves are pruned on
+    ShotGrid/Kitsu/NAS.
 
     """
     if path is not None and projects is not None:
@@ -71,6 +89,15 @@ def cleanup_cmd(
     if path is None and projects is None:
         console.print("[bold red]ERROR:[/] provide a PATH or --projects PATTERN.")
         raise typer.Exit(code=1)
+    if projects is not None and (created_after or created_before):
+        console.print("[bold red]ERROR:[/] --created-after/--created-before apply to PATH mode only.")
+        raise typer.Exit(code=1)
+
+    try:
+        date_window = parse_date_window(created_after, created_before)
+    except ValueError as exc:
+        console.print(f"[bold red]ERROR:[/] {exc}")
+        raise typer.Exit(code=1) from exc
 
     _print_server_mode(server)
 
@@ -111,6 +138,7 @@ def cleanup_cmd(
         skip_storage=skip_storage,
         environment=server,
         project_config=project_config,
+        date_window=date_window,
     )
     plan = cleaner.plan()
     cleaner.display_plan(plan)
@@ -184,9 +212,7 @@ def generate_cmd(
         console.print("\n[bold yellow]Existing matching items found.[/]")
         conflict_cleaner.display_plan(conflict_plan)
         if not replace_existing:
-            console.print(
-                "\n[bold yellow]Generation stopped. Pass --replace-existing to delete these items first.[/]"
-            )
+            console.print("\n[bold yellow]Generation stopped. Pass --replace-existing to delete these items first.[/]")
             return
 
     plan = generator.plan()
