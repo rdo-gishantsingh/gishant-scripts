@@ -101,6 +101,20 @@ The AYON, Kitsu, and ShotGrid tables list what will be deleted. Beyond the type/
   `descendant` (a child folder swept in under a match), or `attached` (a task/version hanging off a
   matched or descendant entity).
 
+### Path-anchored ShotGrid matching
+
+ShotGrid entities are first matched by `code` project-wide, which on its own could grab a same-named
+sequence or shot that lives under a **different episode**. To close that hole, each matched entity
+is then verified against the target path's episode (the segment after `/episodes/`):
+
+- An entity whose own episode link (`sg_episode` for a sequence; `sg_scene`, or its sequence's
+  `sg_episode`, for a shot) resolves to a **different** episode is **dropped** from the plan and
+  reported: `Dropped N ShotGrid entity(ies) -- episode mismatch, not in delete plan:`.
+- An entity whose episode link is **unpopulated** (cannot be resolved) is **kept** — AYON already
+  resolved it under the target path — but reported as `episode-unverified` so nothing is silently
+  kept or dropped.
+- For non-episode targets (e.g. `/assets/...`) the check is skipped.
+
 ### Preserved by date filter table
 
 Only shown when a date filter is active. A dim yellow panel lists every entity that was **excluded

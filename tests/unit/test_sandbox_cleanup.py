@@ -16,11 +16,14 @@ from gishant_scripts.sandbox.cleanup import (
     FolderDeletionPlan,
     _assess_risk,
     _coerce_created_at,
+    _entity_episode,
     _entity_source,
     _filter_files_by_mtime,
     _folder_index,
     _parse_date_bound,
     _risk_banner_text,
+    _sg_entity_fields,
+    _target_episodes,
     parse_date_window,
 )
 
@@ -576,3 +579,149 @@ def test_display_plan_shows_date_filter_and_folder_only_note() -> None:
     assert "Preserved by date filter" in out  # excluded panel
     assert "folder-cascade-only" in out  # AYON constraint surfaced
     assert "1 entity(ies) kept, 1 excluded" in out
+
+
+# --------------------------------------------------------------------------
+# #4 — path-anchored ShotGrid matching (episode verification)
+# --------------------------------------------------------------------------
+
+
+def test_sg_entity_fields_include_episode_links() -> None:
+    assert "sg_episode" in _sg_entity_fields("Sequence")
+    assert "sg_sequence" in _sg_entity_fields("Shot")
+    assert "sg_scene" in _sg_entity_fields("Shot")
+    assert "sg_episode" not in _sg_entity_fields("Scene")
+
+
+def test_target_episodes_from_paths() -> None:
+    folders = [
+        {"path": "/episodes/hitro104/hitro106_0010"},
+        {"path": "/episodes/hitro104/hitro106_0010/sh010"},
+        {"path": "/assets/vehicles/car"},  # non-episode, ignored
+    ]
+    assert _target_episodes(folders) == {"hitro104"}
+
+
+def test_entity_episode_resolution() -> None:
+    assert _entity_episode({"type": "Scene", "code": "hitro104"}, {}) == "hitro104"
+    assert _entity_episode({"type": "Sequence", "sg_episode": {"name": "hitro104"}}, {}) == "hitro104"
+    assert _entity_episode({"type": "Sequence", "sg_episode": None}, {}) is None
+    # Shot with a direct Scene (episode) link
+    assert _entity_episode({"type": "Shot", "sg_scene": {"name": "hitro104"}}, {}) == "hitro104"
+    # Shot resolved via its sequence -> that sequence's episode
+    assert _entity_episode({"type": "Shot", "sg_sequence": {"id": 99}}, {99: "hitro104"}) == "hitro104"
+    # Shot with no usable link -> unknown
+    assert _entity_episode({"type": "Shot", "sg_sequence": None, "sg_scene": None}, {}) is None
+
+
+class _EpisodeFakeSg:
+    """Configurable ShotGrid stand-in for episode-anchoring tests."""
+
+    def __init__(self, entities_by_type: dict[str, list[dict]], sequences_by_id: dict[int, dict] | None = None) -> None:
+        self._by_type = entities_by_type
+        self._seqs = sequences_by_id or {}
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def find_one(self, entity_type: str, _filters: list) -> dict:
+        assert entity_type == "Project"
+        return {"type": "Project", "id": 1, "name": "DEMO_SG"}
+
+    def find(self, entity_type: str, filters: list, fields: list[str]) -> list[dict]:
+        self.calls.append((entity_type, fields))
+        # The Shot->episode resolution query filters by ["id", "in", [...]].
+        for f in filters:
+            if f[0] == "id" and f[1] == "in":
+                return [self._seqs[i] for i in f[2] if i in self._seqs]
+        return list(self._by_type.get(entity_type, []))
+
+
+def _anchor_plan(path: str, ayon_folders: list[dict], fake: _EpisodeFakeSg) -> FolderDeletionPlan:
+    cleaner = FolderCleanup("HITRO", path, Console())
+    cleaner._shotgrid = _FakeShotgridBackend(fake)  # type: ignore[assignment]
+    result = FolderDeletionPlan(ayon_folders=ayon_folders)
+    cleaner._plan_shotgrid(result)
+    return result
+
+
+def test_sg_matching_drops_entity_in_different_episode() -> None:
+    folders = [
+        {"folderType": "Sequence", "name": "hitro106_0010", "path": "/episodes/hitro104/hitro106_0010", "id": "seq"}
+    ]
+    fake = _EpisodeFakeSg(
+        {
+            "Sequence": [
+                {"type": "Sequence", "id": 1, "code": "hitro106_0010", "sg_episode": {"name": "hitro104"}},
+                {"type": "Sequence", "id": 2, "code": "hitro106_0010", "sg_episode": {"name": "hitro999"}},  # collision
+            ]
+        }
+    )
+    plan = _anchor_plan("/episodes/hitro104/hitro106_0010", folders, fake)
+
+    assert [e["id"] for e in plan.shotgrid_entities] == [1]  # only the hitro104 one kept
+    assert len(plan.shotgrid_dropped) == 1
+    dtype, dcode, detail = plan.shotgrid_dropped[0]
+    assert (dtype, dcode) == ("Sequence", "hitro106_0010")
+    assert "hitro999" in detail
+    # The episode-anchor field was requested.
+    assert any(t == "Sequence" and "sg_episode" in fields for t, fields in fake.calls)
+
+
+def test_sg_matching_keeps_entity_in_target_episode() -> None:
+    folders = [{"folderType": "Shot", "name": "sh010", "path": "/episodes/hitro104/sq01/sh010", "id": "shot"}]
+    fake = _EpisodeFakeSg({"Shot": [{"type": "Shot", "id": 5, "code": "sh010", "sg_scene": {"name": "hitro104"}}]})
+    plan = _anchor_plan("/episodes/hitro104/sq01/sh010", folders, fake)
+
+    assert [e["id"] for e in plan.shotgrid_entities] == [5]
+    assert plan.shotgrid_dropped == []
+
+
+def test_sg_matching_drops_shot_via_sequence_episode() -> None:
+    folders = [{"folderType": "Shot", "name": "sh020", "path": "/episodes/hitro104/sq01/sh020", "id": "shot"}]
+    fake = _EpisodeFakeSg(
+        {
+            "Shot": [
+                {"type": "Shot", "id": 6, "code": "sh020", "sg_scene": None, "sg_sequence": {"id": 99, "name": "sq01"}}
+            ]
+        },
+        sequences_by_id={99: {"id": 99, "sg_episode": {"name": "hitro999"}}},  # wrong episode
+    )
+    plan = _anchor_plan("/episodes/hitro104/sq01/sh020", folders, fake)
+
+    assert plan.shotgrid_entities == []
+    assert len(plan.shotgrid_dropped) == 1
+    assert "hitro999" in plan.shotgrid_dropped[0][2]
+
+
+def test_sg_matching_keeps_unverified_when_link_unpopulated() -> None:
+    folders = [{"folderType": "Shot", "name": "sh030", "path": "/episodes/hitro104/sq01/sh030", "id": "shot"}]
+    fake = _EpisodeFakeSg({"Shot": [{"type": "Shot", "id": 7, "code": "sh030", "sg_scene": None, "sg_sequence": None}]})
+    plan = _anchor_plan("/episodes/hitro104/sq01/sh030", folders, fake)
+
+    assert [e["id"] for e in plan.shotgrid_entities] == [7]  # kept
+    assert plan.shotgrid_dropped == []
+    assert ("Shot", "sh030") in plan.shotgrid_unverified
+
+
+def test_sg_matching_skips_check_for_non_episode_path() -> None:
+    folders = [{"folderType": "Asset", "name": "car", "path": "/assets/vehicles/car", "id": "a"}]
+    fake = _EpisodeFakeSg({"Asset": [{"type": "Asset", "id": 8, "code": "car"}]})
+    plan = _anchor_plan("/assets/vehicles/car", folders, fake)
+
+    assert [e["id"] for e in plan.shotgrid_entities] == [8]
+    assert plan.shotgrid_dropped == []
+    assert plan.shotgrid_unverified == []
+
+
+def test_display_reports_dropped_episode_mismatch() -> None:
+    plan = FolderDeletionPlan(
+        ayon_folders=[
+            {"id": "seq", "folderType": "Sequence", "name": "hitro106_0010", "path": "/episodes/hitro104/hitro106_0010"}
+        ],
+        ayon_matched_ids={"seq"},
+        shotgrid_entities=[{"type": "Sequence", "id": 1, "code": "hitro106_0010"}],
+        shotgrid_dropped=[("Sequence", "hitro106_0010", "episode hitro999 not in ['hitro104']")],
+    )
+    out = _render(plan)
+    assert "Dropped 1 ShotGrid entity(ies)" in out
+    assert "episode mismatch" in out
+    assert "hitro999" in out

@@ -186,6 +186,47 @@ def _fmt_date(value: object) -> str:
     return dt.date().isoformat() if dt else ""
 
 
+def _sg_entity_fields(sg_type: str) -> list[str]:
+    """Fields to fetch for a ShotGrid entity type, incl. the episode-anchor links."""
+    fields = ["id", "code", "created_at", "created_by"]
+    if sg_type == "Sequence":
+        fields.append("sg_episode")
+    elif sg_type == "Shot":
+        fields.extend(("sg_sequence", "sg_scene"))
+    return fields
+
+
+def _target_episodes(folders: list[dict]) -> set[str]:
+    """Episode name(s) the AYON path resolves under (the segment after ``/episodes/``)."""
+    episodes: set[str] = set()
+    for f in folders:
+        parts = f.get("path", "").split("/")
+        if len(parts) >= 3 and parts[1] == "episodes":  # ['', 'episodes', '<ep>', ...]
+            episodes.add(parts[2])
+    return episodes
+
+
+def _entity_episode(entity: dict, seq_episode: dict[int, str | None]) -> str | None:
+    """Resolve the episode name of a matched SG entity, or ``None`` when unknown.
+
+    ``seq_episode`` maps a Sequence id to its ``sg_episode`` name, used to resolve a
+    Shot's episode when the Shot has no direct Scene (episode) link.
+    """
+    etype = entity.get("type")
+    if etype == "Scene":  # a Scene *is* the episode
+        return entity.get("code")
+    if etype == "Sequence":
+        ep = entity.get("sg_episode")
+        return ep.get("name") if ep else None
+    if etype == "Shot":
+        scene = entity.get("sg_scene")  # Shot's own episode link (Scene == Episode)
+        if scene:
+            return scene.get("name")
+        seq = entity.get("sg_sequence")
+        return seq_episode.get(seq.get("id")) if seq else None
+    return None
+
+
 def _is_glob(pattern: str) -> bool:
     """Return True if pattern contains glob metacharacters."""
     return any(c in pattern for c in "*?[")
@@ -254,6 +295,11 @@ class FolderDeletionPlan:
     shotgrid_entities: list[dict] = field(default_factory=list)
     shotgrid_tasks: list[dict] = field(default_factory=list)
     shotgrid_versions: list[dict] = field(default_factory=list)
+    # Path-anchoring: SG entities excluded because their episode != the target
+    # episode(s) -- (type, code, detail). And entities kept but whose episode link
+    # could not be resolved -- (type, code).
+    shotgrid_dropped: list[tuple[str, str, str]] = field(default_factory=list)
+    shotgrid_unverified: list[tuple[str, str]] = field(default_factory=list)
 
     # NAS storage — populated only for plan roots whose AYON path is under /episodes/
     storage_paths: list[Path] = field(default_factory=list)
@@ -786,30 +832,37 @@ class FolderCleanup:
                 entities = sg.find(
                     sg_type,
                     [["project", "is", project], ["code", "in", names]],
-                    ["id", "code", "created_at", "created_by"],
+                    _sg_entity_fields(sg_type),
                 )
                 all_entities.extend(entities)
-                result.shotgrid_entities.extend(entities)
 
-            if all_entities:
+            # Path-anchored verification: a project-wide code match can grab a
+            # same-named entity under a DIFFERENT episode. Keep only entities that
+            # belong to the target path's episode(s); drop + report the rest, and
+            # fetch dependants for the kept set only.
+            kept = self._verify_shotgrid_episodes(sg, project, all_entities, result)
+            result.shotgrid_entities.extend(kept)
+
+            if kept:
                 result.shotgrid_tasks.extend(
                     sg.find(
                         "Task",
-                        [["project", "is", project], ["entity", "in", all_entities]],
+                        [["project", "is", project], ["entity", "in", kept]],
                         ["id", "content", "entity", "created_at", "created_by"],
                     )
                 )
                 result.shotgrid_versions.extend(
                     sg.find(
                         "Version",
-                        [["project", "is", project], ["entity", "in", all_entities]],
+                        [["project", "is", project], ["entity", "in", kept]],
                         ["id", "code", "entity", "created_at", "created_by"],
                     )
                 )
 
             _log.info(
-                "ShotGrid: %d entities, %d tasks, %d versions",
+                "ShotGrid: %d entities kept, %d dropped (episode mismatch), %d tasks, %d versions",
                 len(result.shotgrid_entities),
+                len(result.shotgrid_dropped),
                 len(result.shotgrid_tasks),
                 len(result.shotgrid_versions),
             )
@@ -818,6 +871,57 @@ class FolderCleanup:
             msg = f"ShotGrid: discovery failed -- {exc}"
             result.errors.append(msg)
             _log.warning(msg)
+
+    def _verify_shotgrid_episodes(
+        self,
+        sg: object,
+        project: dict,
+        entities: list[dict],
+        result: FolderDeletionPlan,
+    ) -> list[dict]:
+        """Keep only SG entities under the target episode(s); drop + report mismatches.
+
+        The project-wide ``["code", "in", names]`` match can return a same-named
+        sequence/shot living under a different episode. We anchor to the episode(s)
+        the AYON path resolved under and verify each entity's own episode link.
+        Entities whose episode cannot be determined (unpopulated link) are kept --
+        AYON already resolved them under the target path -- but reported as
+        unverified so nothing is silently kept or dropped.
+        """
+        targets = _target_episodes(result.ayon_folders)
+        if not targets:
+            return entities  # not an episode-scoped path (e.g. /assets/...)
+
+        # Resolve Shot -> episode via referenced sequences (one batched read) for
+        # shots that lack a direct Scene link.
+        seq_ids = {
+            e["sg_sequence"]["id"]
+            for e in entities
+            if e.get("type") == "Shot" and e.get("sg_sequence") and not e.get("sg_scene")
+        }
+        seq_episode: dict[int, str | None] = {}
+        if seq_ids:
+            for seq in sg.find(
+                "Sequence",
+                [["project", "is", project], ["id", "in", list(seq_ids)]],
+                ["id", "sg_episode"],
+            ):
+                ep = seq.get("sg_episode")
+                seq_episode[seq["id"]] = ep.get("name") if ep else None
+
+        kept: list[dict] = []
+        for entity in entities:
+            episode = _entity_episode(entity, seq_episode)
+            etype = entity.get("type", "Entity")
+            code = entity.get("code", "")
+            if episode is None:
+                kept.append(entity)
+                result.shotgrid_unverified.append((etype, code))
+            elif episode in targets:
+                kept.append(entity)
+            else:
+                result.shotgrid_dropped.append((etype, code, f"episode {episode} not in {sorted(targets)}"))
+        return kept
 
     # -- NAS storage ----------------------------------------------------
 
@@ -861,7 +965,7 @@ class FolderCleanup:
                 self._console.print(f"[yellow]WARNING: {err}[/]")
             self._console.print()
 
-        if plan.is_empty and not plan.date_excluded:
+        if plan.is_empty and not plan.date_excluded and not plan.shotgrid_dropped:
             self._console.print("[dim]Nothing found to delete.[/]")
             return
 
@@ -870,6 +974,7 @@ class FolderCleanup:
         # Provenance/age guardrails shown before the raw entity tables.
         self._display_target_banner(plan)
         self._display_risk_banner(plan)
+        self._display_episode_anchoring(plan)
 
         # AYON — source of truth shown first
         if plan.ayon_folders:
@@ -1069,6 +1174,27 @@ class FolderCleanup:
             self._console.print(
                 f"[dim]Target looks sandbox-fresh: {assessment.total} entity(ies), "
                 f"all created today, {len(assessment.authors)} author(s).[/]"
+            )
+
+    def _display_episode_anchoring(self, plan: FolderDeletionPlan) -> None:
+        """Report ShotGrid entities dropped (episode mismatch) or kept-but-unverified.
+
+        Path-anchoring closes a name-collision hole: a project-wide code match can
+        return a same-named entity under a different episode. Dropped entities are
+        excluded from the plan; unverified ones are kept but flagged so nothing is
+        silently kept or dropped.
+        """
+        if plan.shotgrid_dropped:
+            self._console.print(
+                f"[bold yellow]Dropped {len(plan.shotgrid_dropped)} ShotGrid entity(ies) "
+                "-- episode mismatch, not in delete plan:[/]"
+            )
+            for etype, code, detail in plan.shotgrid_dropped:
+                self._console.print(f"  [dim]- {etype} {code}: {detail}[/]")
+        if plan.shotgrid_unverified:
+            self._console.print(
+                f"[dim]{len(plan.shotgrid_unverified)} ShotGrid entity(ies) episode-unverified "
+                "(kept; AYON-resolved, SG episode link unpopulated).[/]"
             )
 
     # ------------------------------------------------------------------
