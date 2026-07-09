@@ -6,6 +6,7 @@ import fnmatch
 import logging
 import shutil
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,51 @@ _SG_TYPE_MAP: dict[str, str] = {
     "Shot": "Shot",
     "Asset": "Asset",
 }
+
+# Row provenance: how an item entered the deletion plan.
+_SRC_MATCHED = "matched"  # directly matched the path glob
+_SRC_DESCENDANT = "descendant"  # child folder swept in under a match
+_SRC_ATTACHED = "attached"  # task/version hanging off a matched/descendant entity
+
+
+def _coerce_created_at(value: object) -> datetime | None:
+    """Best-effort parse of a backend ``created_at`` into a tz-aware datetime.
+
+    ShotGrid returns ``datetime`` objects; gazu/AYON return ISO strings.
+    Naive datetimes are assumed UTC.  Unparseable values yield ``None``.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def _author_name(value: object) -> str:
+    """Extract a display name from a backend ``created_by`` value.
+
+    ShotGrid returns ``{"type": ..., "name": ...}``; gazu may return a plain
+    name string or a ``first_name``/``last_name`` pair.  Returns ``""`` when
+    no author information is available.
+    """
+    if isinstance(value, dict):
+        name = value.get("name") or value.get("full_name")
+        if name:
+            return str(name)
+        first = value.get("first_name", "")
+        last = value.get("last_name", "")
+        return f"{first} {last}".strip()
+    return str(value) if value else ""
+
+
+def _fmt_date(value: object) -> str:
+    """Render a backend ``created_at`` value as ``YYYY-MM-DD`` (or ``""``)."""
+    dt = _coerce_created_at(value)
+    return dt.date().isoformat() if dt else ""
 
 
 def _is_glob(pattern: str) -> bool:
@@ -95,6 +141,8 @@ class FolderDeletionPlan:
 
     # AYON — matched roots + all descendants (the authoritative list)
     ayon_folders: list[dict] = field(default_factory=list)
+    # IDs of folders that directly matched the path glob (vs swept-in descendants)
+    ayon_matched_ids: set[str] = field(default_factory=set)
 
     # Kitsu — grouped by entity type for dependency-safe deletion ordering
     kitsu_episodes: list[dict] = field(default_factory=list)
@@ -129,6 +177,107 @@ class FolderDeletionPlan:
                 self.storage_paths,
             )
         )
+
+
+@dataclass
+class RiskAssessment:
+    """Provenance summary of a plan, used to flag non-fresh delete targets.
+
+    Computed purely from the ``created_at``/``created_by`` fields already
+    fetched during planning, so it stays a read-only, side-effect-free view.
+    """
+
+    total: int = 0
+    created_today: int = 0
+    created_earlier: int = 0
+    oldest: datetime | None = None
+    authors: list[str] = field(default_factory=list)
+
+    @property
+    def is_risky(self) -> bool:
+        """True when the target does not look like fresh sandbox data.
+
+        Heuristic: any tracked entity predates today (i.e. was created earlier
+        than the current day) OR more than one distinct author is present.
+        Fresh sandbox data is created moments ago by a single service account,
+        so either signal means real production work may be in scope.
+        """
+        return self.created_earlier > 0 or len(self.authors) > 1
+
+
+def _assess_risk(records: list[dict], now: datetime) -> RiskAssessment:
+    """Summarise provenance of ``records`` (dicts with created_at/created_by).
+
+    ``now`` is passed in (rather than read from the clock) so the assessment
+    is deterministic and unit-testable.
+    """
+    today = now.astimezone(UTC).date()
+    total = 0
+    created_today = 0
+    created_earlier = 0
+    oldest: datetime | None = None
+    authors: list[str] = []
+
+    for rec in records:
+        created = _coerce_created_at(rec.get("created_at"))
+        author = _author_name(rec.get("created_by"))
+        if author and author not in authors:
+            authors.append(author)
+        if created is None:
+            continue
+        total += 1
+        if created.astimezone(UTC).date() < today:
+            created_earlier += 1
+        else:
+            created_today += 1
+        if oldest is None or created < oldest:
+            oldest = created
+
+    return RiskAssessment(
+        total=total,
+        created_today=created_today,
+        created_earlier=created_earlier,
+        oldest=oldest,
+        authors=sorted(authors),
+    )
+
+
+def _folder_index(folders: list[dict], type_map: dict[str, str] | None = None) -> dict[tuple[str, str], dict]:
+    """Map ``(entity_type, name)`` to the owning AYON folder dict.
+
+    ``type_map`` translates AYON folderType to a backend entity type (e.g.
+    ``_SG_TYPE_MAP`` for ShotGrid); when ``None`` the folderType is used as-is.
+    Lets the display resolve a full AYON path and provenance for entities that
+    only carry ``(type, name)``.
+    """
+    index: dict[tuple[str, str], dict] = {}
+    for folder in folders:
+        name = folder.get("name", "")
+        if not name:
+            continue
+        ftype = folder.get("folderType", "")
+        etype = type_map.get(ftype, ftype) if type_map else ftype
+        index.setdefault((etype, name), folder)
+    return index
+
+
+def _entity_source(folder: dict | None, matched_ids: set[str]) -> str:
+    """Classify an entity as directly matched vs a swept-in descendant."""
+    if folder is not None and folder.get("id") in matched_ids:
+        return _SRC_MATCHED
+    return _SRC_DESCENDANT
+
+
+def _risk_banner_text(assessment: RiskAssessment) -> str:
+    """Render the pre-flight RISK panel body from a risk assessment."""
+    oldest = assessment.oldest.date().isoformat() if assessment.oldest else "unknown"
+    authors = assessment.authors
+    author_str = ", ".join(authors) if authors else "unknown"
+    return (
+        f"[bold]{assessment.created_earlier}/{assessment.total} entities predate today[/] "
+        f"(oldest {oldest}; {len(authors)} author(s): {author_str}).\n"
+        "This is [bold]not fresh sandbox data[/] -- confirm before --execute."
+    )
 
 
 class FolderCleanup:
@@ -168,6 +317,8 @@ class FolderCleanup:
             msg = "path must not be empty or '/'"
             raise ValueError(msg)
         self._path = "/" + normalized
+        self._project_name = project_name
+        self._environment = environment
         self._console = console
         self._skip_kitsu = skip_kitsu
         self._skip_shotgrid = skip_shotgrid
@@ -294,6 +445,7 @@ class FolderCleanup:
                 self._console.print(f"[yellow]AYON: no folders matched {self._path}[/]")
                 return
             self._console.print(f"[dim]AYON: {len(matched)} match(es), collecting descendants...[/]")
+            result.ayon_matched_ids.update(f["id"] for f in matched)
             all_folders = self._collect_descendants(ayon_api, self._ayon.project_name, matched)
             result.ayon_folders.extend(all_folders)
             _log.info("AYON: %d folder(s) total (matched + descendants)", len(all_folders))
@@ -432,7 +584,7 @@ class FolderCleanup:
                 entities = sg.find(
                     sg_type,
                     [["project", "is", project], ["code", "in", names]],
-                    ["id", "code"],
+                    ["id", "code", "created_at", "created_by"],
                 )
                 all_entities.extend(entities)
                 result.shotgrid_entities.extend(entities)
@@ -442,14 +594,14 @@ class FolderCleanup:
                     sg.find(
                         "Task",
                         [["project", "is", project], ["entity", "in", all_entities]],
-                        ["id", "content", "entity"],
+                        ["id", "content", "entity", "created_at", "created_by"],
                     )
                 )
                 result.shotgrid_versions.extend(
                     sg.find(
                         "Version",
                         [["project", "is", project], ["entity", "in", all_entities]],
-                        ["id", "code", "entity"],
+                        ["id", "code", "entity", "created_at", "created_by"],
                     )
                 )
 
@@ -503,16 +655,22 @@ class FolderCleanup:
             self._console.print("[dim]Nothing found to delete.[/]")
             return
 
+        # Provenance/age guardrails shown before the raw entity tables.
+        self._display_target_banner(plan)
+        self._display_risk_banner(plan)
+
         # AYON — source of truth shown first
         if plan.ayon_folders:
             table = Table(title="AYON Folders", show_header=True, header_style="bold green")
             table.add_column("Type", style="green")
             table.add_column("Path")
+            table.add_column("Source", style="dim")
             table.add_column("ID", style="dim")
-            rows: list[tuple[str, str, str]] = [
+            rows: list[tuple[str, ...]] = [
                 (
                     f.get("folderType") or "Folder",
                     f.get("path", f.get("name", "")),
+                    _entity_source(f, plan.ayon_matched_ids),
                     _truncate_id(f.get("id", "")),
                 )
                 for f in plan.ayon_folders
@@ -523,30 +681,78 @@ class FolderCleanup:
         # Kitsu
         kitsu_any = plan.kitsu_episodes or plan.kitsu_sequences or plan.kitsu_shots or plan.kitsu_assets
         if kitsu_any:
+            kitsu_index = _folder_index(plan.ayon_folders)
+
+            def _kitsu_row(ktype: str, entity: dict) -> tuple[str, ...]:
+                folder = kitsu_index.get((ktype, entity.get("name", "")))
+                path = folder.get("path", "") if folder else ""
+                return (
+                    ktype,
+                    entity.get("name", ""),
+                    path,
+                    _fmt_date(entity.get("created_at")),
+                    _author_name(entity.get("created_by")),
+                    _entity_source(folder, plan.ayon_matched_ids),
+                    _truncate_id(entity.get("id", "")),
+                )
+
             table = Table(title="Kitsu", show_header=True, header_style="bold cyan")
             table.add_column("Type", style="cyan")
             table.add_column("Name")
+            table.add_column("Path")
+            table.add_column("Created", style="dim")
+            table.add_column("By", style="dim")
+            table.add_column("Source", style="dim")
             table.add_column("ID", style="dim")
-            rows = [("Episode", e.get("name", ""), _truncate_id(e.get("id", ""))) for e in plan.kitsu_episodes]
-            rows.extend(("Sequence", s.get("name", ""), _truncate_id(s.get("id", ""))) for s in plan.kitsu_sequences)
-            rows.extend(("Shot", s.get("name", ""), _truncate_id(s.get("id", ""))) for s in plan.kitsu_shots)
-            rows.extend(("Asset", a.get("name", ""), _truncate_id(a.get("id", ""))) for a in plan.kitsu_assets)
+            rows = [_kitsu_row("Episode", e) for e in plan.kitsu_episodes]
+            rows.extend(_kitsu_row("Sequence", s) for s in plan.kitsu_sequences)
+            rows.extend(_kitsu_row("Shot", s) for s in plan.kitsu_shots)
+            rows.extend(_kitsu_row("Asset", a) for a in plan.kitsu_assets)
             _add_rows_with_truncation(table, rows, "Total Kitsu entities")
             self._console.print(Panel(table, border_style="cyan"))
 
         # ShotGrid
         sg_any = plan.shotgrid_entities or plan.shotgrid_tasks or plan.shotgrid_versions
         if sg_any:
+            sg_index = _folder_index(plan.ayon_folders, _SG_TYPE_MAP)
+
+            def _sg_entity_row(entity: dict) -> tuple[str, ...]:
+                etype = entity.get("type", "Entity")
+                folder = sg_index.get((etype, entity.get("code", "")))
+                return (
+                    etype,
+                    entity.get("code", ""),
+                    folder.get("path", "") if folder else "",
+                    _fmt_date(entity.get("created_at")),
+                    _author_name(entity.get("created_by")),
+                    _entity_source(folder, plan.ayon_matched_ids),
+                    _truncate_id(entity.get("id", "")),
+                )
+
+            def _sg_attached_row(kind: str, name: str, item: dict) -> tuple[str, ...]:
+                link = item.get("entity") or {}
+                folder = sg_index.get((link.get("type", ""), link.get("name", "")))
+                return (
+                    kind,
+                    name,
+                    folder.get("path", "") if folder else "",
+                    _fmt_date(item.get("created_at")),
+                    _author_name(item.get("created_by")),
+                    _SRC_ATTACHED,
+                    _truncate_id(item.get("id", "")),
+                )
+
             table = Table(title="ShotGrid", show_header=True, header_style="bold magenta")
             table.add_column("Type", style="magenta")
             table.add_column("Name")
+            table.add_column("Path")
+            table.add_column("Created", style="dim")
+            table.add_column("By", style="dim")
+            table.add_column("Source", style="dim")
             table.add_column("ID", style="dim")
-            rows = [
-                (e.get("type", "Entity"), e.get("code", ""), _truncate_id(e.get("id", "")))
-                for e in plan.shotgrid_entities
-            ]
-            rows.extend(("Version", v.get("code", ""), _truncate_id(v.get("id", ""))) for v in plan.shotgrid_versions)
-            rows.extend(("Task", t.get("content", ""), _truncate_id(t.get("id", ""))) for t in plan.shotgrid_tasks)
+            rows = [_sg_entity_row(e) for e in plan.shotgrid_entities]
+            rows.extend(_sg_attached_row("Version", v.get("code", ""), v) for v in plan.shotgrid_versions)
+            rows.extend(_sg_attached_row("Task", t.get("content", ""), t) for t in plan.shotgrid_tasks)
             _add_rows_with_truncation(table, rows, "Total ShotGrid entities")
             self._console.print(Panel(table, border_style="magenta"))
 
@@ -559,6 +765,50 @@ class FolderCleanup:
                 table.add_row(str(p), "")
             table.add_row("[bold]Total[/]", _human_size(plan.storage_total_bytes))
             self._console.print(Panel(table, border_style="red"))
+
+    def _display_target_banner(self, plan: FolderDeletionPlan) -> None:
+        """Print the resolved delete target: project, server, glob, and roots."""
+        roots = [f for f in plan.ayon_folders if f.get("id") in plan.ayon_matched_ids]
+        lines = [
+            f"[bold]Project:[/] {self._project_name}",
+            f"[bold]Server:[/]  {self._environment.value}",
+            f"[bold]Target:[/]  {self._path}",
+        ]
+        if roots:
+            lines.append("[bold]Resolved:[/]")
+            lines.extend(
+                f"  - {f.get('path', f.get('name', ''))} ([bold]{f.get('folderType') or 'Folder'}[/])" for f in roots
+            )
+        descendants = len(plan.ayon_folders) - len(roots)
+        if descendants:
+            lines.append(f"[dim]+ {descendants} descendant folder(s) swept in (see AYON table).[/]")
+        self._console.print(Panel("\n".join(lines), title="Cleanup target", border_style="yellow"))
+
+    def _display_risk_banner(self, plan: FolderDeletionPlan) -> None:
+        """Print a pre-flight provenance/age warning derived from the plan.
+
+        Only ShotGrid carries per-entity ``created_at``/``created_by``, so the
+        assessment is computed from its entities, tasks, and versions. A bold
+        red panel is shown when the target does not look sandbox-fresh; a quiet
+        confirmation line is shown when it does.
+        """
+        records = [*plan.shotgrid_entities, *plan.shotgrid_tasks, *plan.shotgrid_versions]
+        if not records:
+            return
+        assessment = _assess_risk(records, datetime.now(UTC))
+        if assessment.is_risky:
+            self._console.print(
+                Panel(
+                    _risk_banner_text(assessment),
+                    title="[bold red]:warning:  DELETE RISK[/]",
+                    border_style="bold red",
+                )
+            )
+        elif assessment.total:
+            self._console.print(
+                f"[dim]Target looks sandbox-fresh: {assessment.total} entity(ies), "
+                f"all created today, {len(assessment.authors)} author(s).[/]"
+            )
 
     # ------------------------------------------------------------------
     # Execution
@@ -802,9 +1052,7 @@ class ProjectRemoval:
         """Resolve NAS folders for matched AYON projects only."""
         if not result.ayon_projects:
             if result.kitsu_projects:
-                result.errors.append(
-                    "Storage: skipped -- no matching AYON projects to resolve NAS roots from"
-                )
+                result.errors.append("Storage: skipped -- no matching AYON projects to resolve NAS roots from")
             return
         for project in result.ayon_projects:
             name = project.get("name", "")
