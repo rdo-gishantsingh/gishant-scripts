@@ -1,0 +1,19 @@
+# Local overlay: upgrade the zou image to the current source (1.0.57) WITHOUT apt.
+#
+# The office web filter 403s every .deb, so the base Dockerfile's `apt-get install`
+# step cannot run here. This layers on top of the existing zou-local image, which
+# already carries the apt-installed system deps (gcc, libpq-dev, ffmpeg, xmlsec1, git)
+# from the 2025-12-20 build, and only re-runs the pip install -- PyPI is reachable.
+#
+# Build (context = the zou repo):
+#   docker build -f zou/Dockerfile.local -t zou-local:1.0.57 ~/dev/repos/zou
+#
+# Rollback to the December 0.20.51 image:
+#   docker tag zou-local:0.20.51-dec-backup zou-local:latest
+FROM zou-local:0.20.51-dec-backup
+
+WORKDIR /app
+COPY . .
+
+# Installs the current source and its pinned deps (flask-cors==6.0.2 et al).
+RUN pip install --no-cache-dir .

@@ -8,10 +8,13 @@
 # Must run as root (to read the Kitsu hourly backup directory).
 #
 # Cron (12:30 AM daily):
-#   30 0 * * * /home/gisi/dev/repos/gishant-scripts/scripts/sync-and-restore-databases.sh >> /home/gisi/dev/backups/sync-restore.log 2>&1
+#   30 0 * * * /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/scripts/sync-and-restore-databases.sh >> /home/gisi/dev/backups/sync-restore.log 2>&1
 # Install: sudo crontab -e
 
 set -e
+
+# Directory of this script (used to locate sibling helper scripts).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ################################################################################
 # Configuration
@@ -26,8 +29,8 @@ AYON_SOURCE_DIR="/tech/backups/database/ayon/1.12.0/hourly"
 KITSU_SOURCE_DIR="/tech/backups/database/kitsu/0.20.51/hourly"
 
 # Docker Compose directories (script changes into these to run docker compose)
-AYON_COMPOSE_DIR="/home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/ayon/ayon-server"
-KITSU_COMPOSE_DIR="/home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/kitsu/kitsu-server"
+AYON_COMPOSE_DIR="$SCRIPT_DIR/../ayon-server"
+KITSU_COMPOSE_DIR="$SCRIPT_DIR/../kitsu-server"
 
 # Ayon database credentials
 AYON_DB_SERVICE="db"
@@ -111,6 +114,22 @@ error()   { echo -e "  ${ICON_ERROR}  ${RED}$*${NC}"; }
 
 # Filter for transaction_timeout (PostgreSQL 17+ param unsupported by older versions)
 FILTER_PG="sed '/SET transaction_timeout = 0;/d'"
+
+# psql_restore <db_service> <db_user> <db_name>
+# Streams SQL from stdin into psql inside the db container.
+# psql echoes a tag per statement (CREATE TABLE / COPY n / ALTER TABLE) on stdout, which
+# drowns out the pv byte-bar, so stdout is discarded. stderr stays attached so real errors
+# still surface, and PGOPTIONS suppresses NOTICE-level chatter.
+psql_restore() {
+    local db_service="$1"
+    local db_user="$2"
+    local db_name="$3"
+
+    docker compose exec -T \
+        -e PGOPTIONS="--client-min-messages=warning" \
+        "$db_service" \
+        psql -U "$db_user" -d "$db_name" -q > /dev/null
+}
 
 format_size() {
     local size=$1
@@ -263,7 +282,9 @@ restore_database() {
         # Count total items in the dump for progress tracking
         local total_items
         total_items=$(docker compose exec -T "$db_service" \
-            pg_restore -l /tmp/restore.dump 2>/dev/null | grep -c "^[0-9]")
+            pg_restore -l /tmp/restore.dump 2>/dev/null \
+            | sed -n 's/^;[[:space:]]*TOC Entries:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)
+        total_items=${total_items:-0}
 
         if [[ $INTERACTIVE -eq 1 ]] && [[ "$total_items" -gt 0 ]]; then
             log "$label: Restoring $total_items items with pg_restore..."
@@ -281,15 +302,16 @@ restore_database() {
                 /tmp/restore.dump 2>&1 >/dev/null \
             | awk -v total="$total_items" '
                 BEGIN { count = 0; bar_width = 30 }
-                {
+                /processing item|finished item/ {
                     count++
+                    shown = (count > total) ? total : count
                     pct = (count > total) ? 100 : int(count * 100 / total)
                     filled = int(pct * bar_width / 100)
                     empty = bar_width - filled
                     bar = ""
                     for (i = 0; i < filled; i++) bar = bar "#"
                     for (i = 0; i < empty;  i++) bar = bar "-"
-                    printf "\r  Restoring: %d/%d items [%s] %d%%", count, total, bar, pct
+                    printf "\r  Restoring: %d/%d items [%s] %d%%", shown, total, bar, pct
                 }
                 END { printf "\n" }
             ' || true
@@ -311,33 +333,50 @@ restore_database() {
     elif [[ "$backup_file" == *.gz ]]; then
         log "$label: Detected gzip SQL format – streaming restore..."
         if [[ "$USE_PV" == true ]]; then
-            pv "$backup_file" | gunzip | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            pv "$backup_file" | gunzip | eval "$FILTER_PG" | psql_restore "$db_service" "$db_user" "$db_name"
         else
-            gunzip -c "$backup_file" | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            gunzip -c "$backup_file" | eval "$FILTER_PG" | psql_restore "$db_service" "$db_user" "$db_name"
         fi
 
     else
         log "$label: Detected plain SQL format..."
         if [[ "$USE_PV" == true ]]; then
-            pv "$backup_file" | eval "$FILTER_PG" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            pv "$backup_file" | eval "$FILTER_PG" | psql_restore "$db_service" "$db_user" "$db_name"
         else
-            eval "$FILTER_PG" < "$backup_file" | docker compose exec -T "$db_service" psql -U "$db_user" -d "$db_name" -q
+            eval "$FILTER_PG" < "$backup_file" | psql_restore "$db_service" "$db_user" "$db_name"
         fi
     fi
 
     success "$label: Database restore completed"
 
     # ── Schema upgrade (Kitsu / zou only) ───────────────────────────────────
+    # NOTE: cgwire's `zou upgrade-db` cannot migrate a pre-squash 0.20.51 dump to 1.0.57
+    # (revision a1b2c3d4e5f6 is both legacy head and new-tree base -> "multiple heads").
+    # zou-upgrade-1057.sh does the direct two-phase migration instead. It snapshots first
+    # and bails loudly, so a broken migration can never be silently swallowed.
     if [[ -n "$schema_upgrade_service" ]]; then
-        log "$label: Running schema upgrade ($schema_upgrade_service upgrade-db)..."
-        docker compose run --rm "$schema_upgrade_service" zou upgrade-db || true
+        log "$label: Running schema upgrade (zou-upgrade-1057.sh)..."
+        local upgrade_rc=0
+        popd > /dev/null
+        DB_NAME="$db_name" DB_USER="$db_user" DB_SERVICE="$schema_upgrade_service" \
+            "$SCRIPT_DIR/zou-upgrade-1057.sh" || upgrade_rc=$?
+        pushd "$compose_dir" > /dev/null
+        if [[ $upgrade_rc -ne 0 ]]; then
+            error "$label: Schema upgrade FAILED (exit $upgrade_rc)."
+            error "$label: The database is RESTORED but NOT MIGRATED - do not use this stack."
+            popd > /dev/null
+            return 1
+        fi
         success "$label: Schema upgrade completed"
     fi
 
     # ── Start application services ────────────────────────────────────────────
+    # `up -d` (not `start`) so app containers are (re)created to match the CURRENT
+    # compose file. `start` reuses an existing container with its baked-in config, which
+    # breaks after the compose file moves or a bind-mount path changes.
     log "$label: Starting application services ($app_services)..."
     # shellcheck disable=SC2086
-    docker compose start $app_services
+    docker compose up -d --no-deps $app_services
 
     popd > /dev/null
 

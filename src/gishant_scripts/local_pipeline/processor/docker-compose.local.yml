@@ -1,0 +1,37 @@
+# Local-only override for the rdo_kitsu processor stack.
+#
+# Pairs with the base compose file in the add-on repo:
+#   ~/dev/repos/rdo-ayon-kitsu/services/processor/docker-compose.yml
+#
+# Points the processor at the LOCAL AYON (:5000). The Kitsu URL is read from AYON
+# addon settings (localize sets it to the :8090 nginx gateway), not from here.
+# No prod URLs or keys live here: AYON_API_KEY is injected from .env.local, which
+# up-local-stack.sh generates from ayon-server/.env and which is gitignored.
+#
+# Never invoke this file on its own -- use up-local-stack.sh, or see README.md.
+
+services:
+  kafka:
+    restart: unless-stopped
+
+  kafka-ui:
+    restart: unless-stopped
+
+  consumer:
+    restart: unless-stopped
+    environment:
+      # The machine IP, not host.docker.internal: it resolves identically from every
+      # container regardless of extra_hosts, and matches the URL Gishant tests against.
+      AYON_SERVER_URL: ${AYON_SERVER_URL:-http://10.1.69.24:5000}
+      AYON_API_KEY: ${AYON_API_KEY:?AYON_API_KEY missing - run up-local-stack.sh to generate .env.local}
+      AYON_ADDON_NAME: ${AYON_ADDON_NAME:-rdo_kitsu}
+      AYON_ADDON_VERSION: ${AYON_ADDON_VERSION:-0.3.3}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-30}
+
+  listener:
+    restart: unless-stopped
+    environment:
+      AYON_SERVER_URL: ${AYON_SERVER_URL:-http://10.1.69.24:5000}
+      AYON_API_KEY: ${AYON_API_KEY:?AYON_API_KEY missing - run up-local-stack.sh to generate .env.local}
+      AYON_ADDON_NAME: ${AYON_ADDON_NAME:-rdo_kitsu}
+      AYON_ADDON_VERSION: ${AYON_ADDON_VERSION:-0.3.3}

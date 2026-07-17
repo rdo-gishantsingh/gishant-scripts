@@ -23,8 +23,8 @@ services:
 
   zou:
     build:
-      context: ../../../../../zou
-      dockerfile: ../gishant-scripts/src/gishant_scripts/kitsu/kitsu-server/zou/Dockerfile
+      context: /home/gisi/dev/repos/zou
+      dockerfile: /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/kitsu-server/zou/Dockerfile
     image: zou-local:latest
     container_name: zou
     ports:
@@ -46,7 +46,7 @@ services:
       - db
       - redis
     volumes:
-      - ../../../../../zou:/app
+      - /home/gisi/dev/repos/zou:/app
       - zou-previews:/opt/zou/previews
       - zou-tmp:/opt/zou/tmp
     restart: always
@@ -75,7 +75,7 @@ services:
       - redis
       - zou
     volumes:
-      - ../../../../../zou:/app
+      - /home/gisi/dev/repos/zou:/app
       - zou-previews:/opt/zou/previews
       - zou-tmp:/opt/zou/tmp
     restart: always
@@ -83,8 +83,8 @@ services:
 
   kitsu:
     build:
-      context: ../../../../../kitsu
-      dockerfile: ../gishant-scripts/src/gishant_scripts/kitsu/kitsu-server/kitsu/Dockerfile
+      context: /home/gisi/dev/repos/kitsu
+      dockerfile: /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/kitsu-server/kitsu/Dockerfile
     image: kitsu-local:latest
     container_name: kitsu
     ports:
@@ -96,7 +96,7 @@ services:
       - zou
       - zou-events
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/kitsu-server/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: always
 
 volumes:

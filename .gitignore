@@ -44,6 +44,7 @@ uv.lock
 
 # Environment variables
 .env
+.env.local
 
 # Test coverage
 .coverage
@@ -98,3 +99,6 @@ work_summary_*.md
 # Legacy
 poetry.lock
 .nfs*
+
+# Personal scratch
+scratch/

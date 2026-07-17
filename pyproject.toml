@@ -120,6 +120,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "D", "ANN", "PLR2004", "SLF001"]
 "scripts/**/*.py" = ["D", "ANN", "T201", "INP001"]
+# Operational scripts for the local pipeline get the same lenient rules as scripts/.
+"src/gishant_scripts/local_pipeline/scripts/**/*.py" = ["D", "ANN", "T201", "INP001", "PTH"]
 
 [tool.ruff.format]
 # Use double quotes for strings
