@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
 
-from gishant_scripts.diagnostic import bash_builder, path_mapper, ps1_builder
+from diagnostic import bash_builder, path_mapper, ps1_builder
 
 LINUX_HOST = "gisi@10.1.69.24"
 WINDOWS_HOST = "gisi@10.1.69.122"

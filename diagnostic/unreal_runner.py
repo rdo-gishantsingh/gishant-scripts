@@ -13,8 +13,8 @@ import json
 from pathlib import Path
 from typing import Callable, Literal
 
-from gishant_scripts.diagnostic import ayon_env, path_mapper, result_fetcher, ssh_runner, test_server_guard
-from gishant_scripts.diagnostic.maya_runner import DIAGNOSTIC_BASE_LINUX, DiagnosticRun
+from diagnostic import ayon_env, path_mapper, result_fetcher, ssh_runner, test_server_guard
+from diagnostic.maya_runner import DIAGNOSTIC_BASE_LINUX, DiagnosticRun
 
 
 def _ensure_unreal_ssh_runner(runner: object) -> None:

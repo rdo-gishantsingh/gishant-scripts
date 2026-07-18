@@ -18,10 +18,10 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
-from gishant_scripts.diagnostic import test_server_guard
+from diagnostic import test_server_guard
 
 if TYPE_CHECKING:
-    from gishant_scripts.diagnostic.maya_runner import DiagnosticRun
+    from diagnostic.maya_runner import DiagnosticRun
 
 app = typer.Typer(
     name="dcc-run",
@@ -61,7 +61,7 @@ def maya(
     timeout: Annotated[int, typer.Option("--timeout", help="Timeout seconds.")] = 300,
 ) -> None:
     """Run a Maya diagnostic script on the Linux box."""
-    from gishant_scripts.diagnostic.maya_runner import run_maya
+    from diagnostic.maya_runner import run_maya
 
     try:
         run = run_maya(
@@ -93,7 +93,7 @@ def unreal(
     timeout: Annotated[int, typer.Option("--timeout", help="Timeout seconds.")] = 600,
 ) -> None:
     """Run an Unreal diagnostic script on the Windows box."""
-    from gishant_scripts.diagnostic.unreal_runner import run_unreal
+    from diagnostic.unreal_runner import run_unreal
 
     try:
         run = run_unreal(
@@ -127,8 +127,8 @@ def pipeline(
     timeout: Annotated[int, typer.Option("--timeout", help="Per-DCC timeout seconds.")] = 600,
 ) -> None:
     """Run Maya and Unreal diagnostics in parallel and report both results."""
-    from gishant_scripts.diagnostic.maya_runner import run_maya
-    from gishant_scripts.diagnostic.unreal_runner import run_unreal
+    from diagnostic.maya_runner import run_maya
+    from diagnostic.unreal_runner import run_unreal
 
     def _maya() -> DiagnosticRun:
         return run_maya(

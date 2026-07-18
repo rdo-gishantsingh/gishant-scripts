@@ -13,12 +13,12 @@ import pathlib
 import sys
 from pathlib import Path
 
-from gishant_scripts.diagnostic.config import (
+from diagnostic.config import (
     LINUX,
     WINDOWS,
     linux_to_windows_path,
 )
-from gishant_scripts.diagnostic.test_server_guard import (
+from diagnostic.test_server_guard import (
     resolve_and_validate_test_env,
 )
 

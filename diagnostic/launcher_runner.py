@@ -42,9 +42,9 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from gishant_scripts.diagnostic.ayon_env import resolve_ayon_env
-from gishant_scripts.diagnostic.config import LINUX, WINDOWS, linux_to_windows_path
-from gishant_scripts.diagnostic.models import DiagnosticResult
+from diagnostic.ayon_env import resolve_ayon_env
+from diagnostic.config import LINUX, WINDOWS, linux_to_windows_path
+from diagnostic.models import DiagnosticResult
 
 logger = logging.getLogger(__name__)
 

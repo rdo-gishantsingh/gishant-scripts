@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal
 
-from gishant_scripts.diagnostic import ayon_env, result_fetcher, ssh_runner, test_server_guard
+from diagnostic import ayon_env, result_fetcher, ssh_runner, test_server_guard
 
 DIAGNOSTIC_BASE_LINUX = "/tech/users/gisi/dev/_diagnostic"
 

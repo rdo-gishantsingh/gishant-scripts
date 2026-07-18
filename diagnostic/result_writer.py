@@ -2,7 +2,7 @@
 
 Usage from inside a DCC script::
 
-    from gishant_scripts.diagnostic.result_writer import write_result
+    from diagnostic.result_writer import write_result
 
     write_result(
         script_path=__file__,

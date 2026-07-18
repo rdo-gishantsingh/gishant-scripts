@@ -1,0 +1,13 @@
+[project]
+name = "diagnostic"
+version = "0.1.0"
+description = "AYON/DCC launcher diagnostic runner"
+requires-python = ">=3.11"
+dependencies = ["typer>=0.9.0", "rich>=13.0.0"]
+
+[project.scripts]
+dcc-run = "diagnostic.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
