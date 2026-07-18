@@ -22,7 +22,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIPELINE="$(cd "$HERE/.." && pwd)"                  # local_pipeline/
-GS_ROOT="$(cd "$PIPELINE/../../.." && pwd)"         # gishant-scripts repo root
+GS_ROOT="$(cd "$PIPELINE/.." && pwd)"         # gishant-scripts repo root
 REPOS_DIR="$(cd "$GS_ROOT/.." && pwd)"              # ~/dev/repos (for the external rdo-ayon-kitsu)
 
 RESTORE_SCRIPT="$HERE/sync-and-restore-databases.sh"
