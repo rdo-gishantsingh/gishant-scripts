@@ -7,9 +7,9 @@ mints a fresh bot token for it.
 
 It is the step between restoring the databases and starting the processor:
 
-    1. sudo scripts/sync-and-restore-databases.sh
-    2. python scripts/localize_kitsu_addon.py --apply                  <-- this script
-    3. src/gishant_scripts/ayon-kitsu-processor/up-local-stack.sh
+    1. sudo local_pipeline/scripts/restore-local-stack.sh   (runs the whole flow)
+       (this script is step 3 of that flow: localize_kitsu_addon.py --apply)
+       processor comes up via local_pipeline/processor/up-local-stack.sh
 
 Defaults to a dry run: pass --apply to write. Refuses to touch anything that does not
 look local.
