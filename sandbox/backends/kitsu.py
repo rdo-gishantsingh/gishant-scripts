@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from gishant_scripts.sandbox.backends.base import (
+from sandbox.backends.base import (
     Backend,
     BackendUnavailableError,
     load_rdo_env,

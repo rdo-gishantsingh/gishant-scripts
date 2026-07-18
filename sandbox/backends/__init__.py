@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from gishant_scripts.sandbox.backends.ayon import AyonBackend
-from gishant_scripts.sandbox.backends.base import (
+from sandbox.backends.ayon import AyonBackend
+from sandbox.backends.base import (
     Backend,
     BackendUnavailableError,
     Environment,
     load_rdo_env,
 )
-from gishant_scripts.sandbox.backends.kitsu import KitsuBackend
-from gishant_scripts.sandbox.backends.shotgrid import ShotGridBackend
-from gishant_scripts.sandbox.backends.storage import StorageBackend
+from sandbox.backends.kitsu import KitsuBackend
+from sandbox.backends.shotgrid import ShotGridBackend
+from sandbox.backends.storage import StorageBackend
 
 __all__ = ["AyonBackend", "Backend", "BackendUnavailableError", "Environment", "KitsuBackend", "ShotGridBackend", "StorageBackend", "load_rdo_env"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from gishant_scripts.sandbox.backends.base import Backend
+from sandbox.backends.base import Backend
 
 _log = logging.getLogger(__name__)
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from gishant_scripts.sandbox.backends import Environment
-from gishant_scripts.sandbox.cleanup import FolderCleanup, ProjectRemoval, parse_date_window
-from gishant_scripts.sandbox.generate import EpisodeGenerator
-from gishant_scripts.sandbox.selection import SelectionScope
+from sandbox.backends import Environment
+from sandbox.cleanup import FolderCleanup, ProjectRemoval, parse_date_window
+from sandbox.generate import EpisodeGenerator
+from sandbox.selection import SelectionScope
 
 app = typer.Typer(name="sandbox", help="Sandbox test data -- generate and cleanup.", no_args_is_help=True)
 console = Console()
@@ -16,7 +16,7 @@ console = Console()
 
 def _check_project(project_name: str) -> None:
     """Abort if project is not in the config allowlist."""
-    from gishant_scripts.sandbox.config import allowed_project_keys
+    from sandbox.config import allowed_project_keys
 
     allowed = allowed_project_keys()
     if project_name not in allowed:
@@ -125,7 +125,7 @@ def cleanup_cmd(
 
     # PATH mode
     _check_project(project_name)
-    from gishant_scripts.sandbox.config import resolve_project
+    from sandbox.config import resolve_project
 
     project_config = resolve_project(project_name)
     cleaner = FolderCleanup(
@@ -177,7 +177,7 @@ def generate_cmd(
     _check_project(project_name)
     _print_server_mode(server)
 
-    from gishant_scripts.sandbox.config import resolve_project
+    from sandbox.config import resolve_project
 
     project_config = resolve_project(project_name)
     selection_scope = SelectionScope(sequence_patterns=sequence_patterns, shot_patterns=shot_patterns)
@@ -227,3 +227,7 @@ def generate_cmd(
         conflict_cleaner.execute(conflict_plan)
     generator.execute(plan)
     console.print("\n[bold green]Generation complete.[/]")
+
+
+if __name__ == "__main__":
+    app()

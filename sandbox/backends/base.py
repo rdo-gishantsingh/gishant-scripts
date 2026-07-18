@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
-    from gishant_scripts.sandbox.config import ProjectConfig
+    from sandbox.config import ProjectConfig
 
 _RDO_ENV_PATH = Path.home() / ".rdo" / ".env"
 

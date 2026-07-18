@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from rich.panel import Panel
 from rich.table import Table
 
-from gishant_scripts.sandbox.backends import (
+from sandbox.backends import (
     AyonBackend,
     BackendUnavailableError,
     Environment,
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
     from rich.console import Console
 
-    from gishant_scripts.sandbox.config import ProjectConfig
+    from sandbox.config import ProjectConfig
 
 _log = logging.getLogger(__name__)
 _DISPLAY_HEAD = 25

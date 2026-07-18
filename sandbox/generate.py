@@ -8,19 +8,19 @@ from typing import TYPE_CHECKING
 
 from rich.tree import Tree
 
-from gishant_scripts.sandbox.backends import (
+from sandbox.backends import (
     AyonBackend,
     BackendUnavailableError,
     Environment,
     KitsuBackend,
     ShotGridBackend,
 )
-from gishant_scripts.sandbox.selection import SelectionScope
+from sandbox.selection import SelectionScope
 
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from gishant_scripts.sandbox.config import ProjectConfig
+    from sandbox.config import ProjectConfig
 
 _log = logging.getLogger(__name__)
 
