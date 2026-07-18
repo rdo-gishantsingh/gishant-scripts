@@ -15,3 +15,9 @@ shotgrid = "WEDRO"
 kitsu = "Wed Wabbit"
 ayon = "Wed_Wabbit"
 storage = "Wed_Wabbit"
+
+[projects.HITRO]
+shotgrid = "HITRO"
+kitsu = "Hitro"
+ayon = "Hitro"
+storage = "HITRO"
