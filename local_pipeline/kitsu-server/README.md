@@ -42,7 +42,7 @@ This setup is based on the [official Zou documentation](https://zou.cg-wire.com/
 ### 1. Start Services
 
 ```bash
-cd /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/kitsu/kitsu-server
+cd /home/gisi/dev/repos/gishant-scripts/local_pipeline/kitsu-server
 docker compose up --build -d
 ```
 

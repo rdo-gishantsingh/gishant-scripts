@@ -20,14 +20,17 @@ The processor reads the Kitsu URL and token from AYON add-on settings at startup
 raises if they are unset, so it must come up **last**:
 
 ```bash
-sudo ~/dev/repos/gishant-scripts/scripts/sync-and-restore-databases.sh   # 1. restore DBs
-python -m gishant_scripts.ayon.localize_kitsu_addon --apply              # 2. point addon at local Kitsu
+sudo ~/dev/repos/gishant-scripts/local_pipeline/scripts/sync-and-restore-databases.sh   # 1. restore DBs
+../.venv/bin/python ../scripts/localize_kitsu_addon.py --apply           # 2. point addon at local Kitsu
 ./up-local-stack.sh                                                      # 3. start processor
 ```
 
+Step 2 needs `ayon_api`, which lives in `local_pipeline/.venv` (`cd local_pipeline
+&& uv sync`). `scripts/restore-local-stack.sh` runs all three steps in order.
+
 ## Secrets
 
-`AYON_API_KEY` is read at runtime from `src/gishant_scripts/ayon/ayon-server/.env` and
+`AYON_API_KEY` is read at runtime from `local_pipeline/ayon-server/.env` and
 written into `.env.local` (mode 0600). No key is ever committed. `up-local-stack.sh`
 refuses to start if `AYON_SERVER_URL` does not look local.
 

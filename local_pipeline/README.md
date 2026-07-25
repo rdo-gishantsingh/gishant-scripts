@@ -5,6 +5,15 @@ add-on: the AYON server, the Kitsu (zou) server, and the sync processor, all res
 from the latest production database backups and pointed **only** at this machine
 (`10.1.69.24`).
 
+## Setup
+
+This directory owns its venv — `ayon_api`, `requests` and `rich` for the scripts
+the orchestrator shells out to. Create it once:
+
+```bash
+cd local_pipeline && uv sync
+```
+
 ## One command (hands-off)
 
 ```bash
@@ -44,5 +53,5 @@ It runs, in order:
   phases; see `scripts/zou_upgrade_1057.py`.
 - The processor's base compose lives in the external `rdo-ayon-kitsu` repo
   (overridable via `PROCESSOR_COMPOSE`).
-- Requires: root (for the backup mount), the `gisi` credentials in `~/.rdo/.env`, the
-  repo `.venv`, and the external `rdo-ayon-kitsu` checkout.
+- Requires: root (for the backup mount), the `gisi` credentials in `~/.rdo/.env`, this
+  directory's own venv, and the external `rdo-ayon-kitsu` checkout.
