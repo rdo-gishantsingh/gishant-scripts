@@ -34,7 +34,7 @@ OVERRIDE_COMPOSE="$PROCESSOR_DIR/docker-compose.local.yml"
 AYON_ENV="$PIPELINE/ayon-server/.env"
 RDO_ENV="${RDO_ENV:-/home/gisi/.rdo/.env}"
 KITSU_COMPOSE_DIR="$PIPELINE/kitsu-server"
-VENV_PY="$GS_ROOT/.venv/bin/python"
+VENV_PY="$PIPELINE/.venv/bin/python"          # local_pipeline owns its venv: (cd local_pipeline && uv sync)
 PROCESSOR_COMPOSE="${PROCESSOR_COMPOSE:-$REPOS_DIR/rdo-ayon-kitsu/services/processor/docker-compose.yml}"
 
 COMPOSE_PROJECT="rdo-kitsu-processor-local"
@@ -195,7 +195,9 @@ header "Phase 0: Preconditions"
 # and --dry-run do not touch it, so they may run as the normal user.
 [[ $DRY_RUN -eq 1 || $SKIP_RESTORE -eq 1 || "$EUID" -eq 0 ]] || die "Must run as root for the restore (reads /tech/backups). Use: sudo $0  (or --skip-restore to skip it)."
 
-for f in "$RESTORE_SCRIPT" "$UP_SCRIPT" "$INSTALL_SCRIPT" "$LOCALIZE_SCRIPT" "$OVERRIDE_COMPOSE" "$AYON_ENV" "$RDO_ENV" "$VENV_PY" "$PROCESSOR_COMPOSE"; do
+[[ -x "$VENV_PY" ]] || die "local_pipeline venv missing. Create it: (cd $PIPELINE && uv sync)"
+
+for f in "$RESTORE_SCRIPT" "$UP_SCRIPT" "$INSTALL_SCRIPT" "$LOCALIZE_SCRIPT" "$OVERRIDE_COMPOSE" "$AYON_ENV" "$RDO_ENV" "$PROCESSOR_COMPOSE"; do
     [[ -e "$f" ]] || die "Required file missing: $f"
 done
 success "All required files present"

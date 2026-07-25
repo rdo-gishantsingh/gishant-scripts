@@ -1,0 +1,10 @@
+[project]
+name = "local-pipeline"
+version = "0.1.0"
+description = "Local AYON/Kitsu/processor stack — restore, migrate, localize, verify"
+requires-python = ">=3.11"
+dependencies = ["ayon-python-api>=1.0.0", "requests>=2.31.0", "rich>=13.0.0"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

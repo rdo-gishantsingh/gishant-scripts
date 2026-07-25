@@ -6,7 +6,7 @@
 # the Kitsu URL/token from AYON settings at startup and raises if they are unset.
 #
 #   1. sudo scripts/sync-and-restore-databases.sh
-#   2. python -m gishant_scripts.ayon.localize_kitsu_addon --apply
+#   2. ../.venv/bin/python ../scripts/localize_kitsu_addon.py --apply
 #   3. ./up-local-stack.sh            <-- this script
 #
 # Regenerates .env.local from ayon-server/.env on every run, so the API key is never
