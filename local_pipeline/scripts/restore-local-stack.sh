@@ -13,6 +13,10 @@
 #
 # Phase order matters. The add-on version check (runbook §0) runs AFTER the restore,
 # because the restored production dump is what decides which add-on versions exist.
+#
+# Cron (12:30 AM daily):
+#   30 0 * * * /home/gisi/dev/repos/gishant-scripts/local_pipeline/scripts/restore-local-stack.sh >> /home/gisi/dev/backups/restore-local-stack.log 2>&1
+# Install: sudo crontab -e
 
 set -euo pipefail
 

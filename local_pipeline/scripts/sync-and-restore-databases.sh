@@ -7,9 +7,8 @@
 #
 # Must run as root (to read the Kitsu hourly backup directory).
 #
-# Cron (12:30 AM daily):
-#   30 0 * * * /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/scripts/sync-and-restore-databases.sh >> /home/gisi/dev/backups/sync-restore.log 2>&1
-# Install: sudo crontab -e
+# Invoked as Phase 1 of restore-local-stack.sh, which is what cron runs
+# nightly (see the cron comment at the top of that script).
 
 set -e
 

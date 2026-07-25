@@ -31,7 +31,7 @@ services:
       - "${PGADMIN_PORT:-9080}:80"
     volumes:
       - ayon-pgadmin-data:/var/lib/pgadmin
-      - /home/gisi/dev/repos/gishant-scripts/src/gishant_scripts/local_pipeline/ayon-server/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - /home/gisi/dev/repos/gishant-scripts/local_pipeline/ayon-server/pgadmin/servers.json:/pgadmin4/servers.json:ro
 
   redis:
     image: redis:alpine

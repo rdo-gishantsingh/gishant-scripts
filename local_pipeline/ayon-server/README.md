@@ -44,11 +44,9 @@ and stops the `server`/`worker` services while the restore runs.
 
 - **`.env` is gitignored and its history was purged.** `.env.example` is the
   committed reference; the real key lives only on this box.
-- **The pgAdmin `servers.json` bind mount is stale.** `docker-compose.yml` still
-  mounts `src/gishant_scripts/local_pipeline/ayon-server/pgadmin/servers.json`,
-  a path that no longer exists after the repo restructure — docker will create
-  an empty directory there and pgAdmin starts with no pre-registered server.
-  The file itself is here at `pgadmin/servers.json`.
+- The pgAdmin `servers.json` bind mount now points at `local_pipeline/ayon-server/pgadmin/servers.json`
+  (fixed after the repo restructure — it previously referenced a stale
+  `src/gishant_scripts/local_pipeline/...` path).
 - **`AYON_POSTGRES_URL` must point straight at Postgres, not PgBouncer** —
   asyncpg does not work through it.
 - Most compose variables have inline defaults (`${VAR:-default}`), so a missing
